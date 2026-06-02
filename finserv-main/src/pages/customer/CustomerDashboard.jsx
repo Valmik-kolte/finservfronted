@@ -745,6 +745,10 @@ const [residentialType, setResidentialType] =
 
 
 
+        const assignedBank = localStorage.getItem(`bank_assignment_${app.applicationNumber}`) || "";
+        if (assignedBank && !["BANK_REVIEW", "APPROVED", "REJECTED"].includes(app.status)) {
+          displayStatus = "Sent To Bank";
+        }
         setUserData((prev) => {
           if (isInitializedRef.current && !forceReset) {
             // Only update non-form-wizard dynamic fields
@@ -753,6 +757,7 @@ const [residentialType, setResidentialType] =
               applicationId: app.applicationNumber || "",
               loanAmount: (app.loanAmount != null && app.loanAmount > 0) ? `₹${Number(app.loanAmount).toLocaleString('en-IN')}` : (prev.loanAmount && prev.loanAmount !== "₹0" ? prev.loanAmount : null),
               rawLoanAmount: app.loanAmount || 0,
+              bank: assignedBank || prev.bank || "Yet to assign",
               status: displayStatus,
               documentsUploaded: docs.length,
             };
@@ -764,8 +769,7 @@ const [residentialType, setResidentialType] =
             applicationId: app.applicationNumber || "",
             loanAmount: (app.loanAmount != null && app.loanAmount > 0) ? `₹${Number(app.loanAmount).toLocaleString('en-IN')}` : null,
             rawLoanAmount: app.loanAmount || 0,
-            bank: "Yet to assign",
-            car: "Mahindra Scorpio N",
+            bank: assignedBank || "Yet to assign",
             status: displayStatus,
             documentsUploaded: docs.length,
             totalDocuments: 8,
@@ -985,8 +989,6 @@ const [finalSubmitting, setFinalSubmitting] =
       loanAmount: "₹0",
 
       bank: "Yet to assign",
-
-      car: "Mahindra Scorpio N",
 
       status: "Documents yet to submit",
 
@@ -1543,7 +1545,7 @@ const [uploadedDocuments, setUploadedDocuments] =
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-gray-500">Documents Uploaded</p>
-                      <h2 className="text-2xl font-bold text-[#0B2A4A] mt-2">{userData.documentsUploaded} / {userData.totalDocuments}</h2>
+                      <h2 className="text-2xl font-bold text-[#0B2A4A] mt-2">{userData.documentsUploaded}</h2>
                     </div>
                     <div className="w-12 h-12 rounded-2xl bg-[#EEF6FF] flex items-center justify-center text-xl">📄</div>
                   </div>
@@ -1559,15 +1561,7 @@ const [uploadedDocuments, setUploadedDocuments] =
                   </div>
                 </div>
 
-                <div className="bg-white rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500">Vehicle</p>
-                      <h2 className="text-sm font-bold text-[#0B2A4A] mt-2">Scorpio N</h2>
-                    </div>
-                    <div className="w-12 h-12 rounded-2xl bg-[#EAFBF8] flex items-center justify-center text-xl">🚗</div>
-                  </div>
-                </div>
+                
 
               </div>
 
@@ -1640,10 +1634,13 @@ const [uploadedDocuments, setUploadedDocuments] =
                           ODOMETER_READING: "Odometer Reading",
                         };
                         const label = docLabels[doc.documentType] || (doc.documentType || "").replace(/_/g, " ");
-                        const statusColor = doc.status === "APPROVED" ? "bg-green-100 text-green-700"
-                          : doc.status === "REJECTED" ? "bg-red-100 text-red-700"
-                          : doc.status === "VERIFIED" ? "bg-blue-100 text-blue-700"
-                          : "bg-yellow-100 text-yellow-700";
+                        const statusColor = doc.status === "APPROVED"
+  ? "bg-green-100 text-green-700"
+  : doc.status === "REJECTED"
+  ? "bg-red-100 text-red-700"
+  : doc.status === "VERIFIED"
+  ? "bg-blue-100 text-blue-700"
+  : "bg-yellow-100 text-yellow-700";
                         return (
                           <div key={doc.documentId || index} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm">
                             <div className="flex items-start justify-between mb-3">
@@ -3728,7 +3725,7 @@ const [uploadedDocuments, setUploadedDocuments] =
 
 
 
-                  {completed ? "âœ“" : index + 1}
+                  {completed ? "✓" : index + 1}
 
 
 
@@ -4136,7 +4133,7 @@ const [uploadedDocuments, setUploadedDocuments] =
 
         >
 
-          ðŸ‘¤
+          👤
 
         </div>
 
@@ -4264,7 +4261,7 @@ const [uploadedDocuments, setUploadedDocuments] =
 
             >
 
-              âœï¸
+              ✏️
 
             </button>
 
@@ -4332,7 +4329,7 @@ const [uploadedDocuments, setUploadedDocuments] =
 
             >
 
-              âœï¸
+              ✏️
 
             </button>
 
