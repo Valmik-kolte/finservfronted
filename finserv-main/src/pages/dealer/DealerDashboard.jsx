@@ -16,6 +16,8 @@ const [dealerUserData, setDealerUserData] = useState({
   loanAmount: "",
 });
 
+
+
   /* Documents States */
 
   const [showAddCustomerModal, setShowAddCustomerModal] =
@@ -94,10 +96,15 @@ const [emailForm, setEmailForm] =
     useState(null);
 
   
-
+const [showEditModal, setShowEditModal] = useState(false);
+  const [showEditUserModal, setShowEditUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [detailsEditMode, setDetailsEditMode] = useState(false);
+  const [documentsEditMode, setDocumentsEditMode] = useState(false);
   const [showStatusModal, setShowStatusModal] =
     useState(false);
-
+const [editMode, setEditMode] = useState(false);
+const [documentMode, setDocumentMode] = useState(false);
   const [showDetailsModal, setShowDetailsModal] =
     useState(false);
 
@@ -132,6 +139,7 @@ const [selectedRemark, setSelectedRemark] =
     }
   };
 
+  
   const fetchApplications = async (dealerId) => {
     try {
       const res = await api.get(`/loan-applications/dealer/${dealerId}`);
@@ -169,6 +177,7 @@ const [selectedRemark, setSelectedRemark] =
     }
   };
 
+  
   const handleDocumentUpload = async (file, documentType) => {
     if (!file) {
       alert("Please select a file");
@@ -403,34 +412,106 @@ const [selectedRemark, setSelectedRemark] =
     }
   };
 
-    const handleEditUser = async (user) => {
-    setCurrentApplicationNumber(user.applicationNumber);
-    setCurrentCustomerUserId(user.userId);
-    setUploadedDocuments([]);
+  const handleEditUser = async (user) => {
+    setSelectedUser(user);
+    setEditingUser(user);
+    setDetailsEditMode(false);
+    setDocumentsEditMode(false);
+    setShowEditUserModal(true);
+
     try {
       const [appRes, docRes] = await Promise.all([
         api.get(`/loan-applications/user/${user.userId}`),
-        api.get(`/documents/user/${user.userId}`)
+        api.get(`/documents/user/${user.userId}`),
       ]);
-      const appList = appRes.data || [];
-      const app = appList.find(a => a.applicationNumber === user.applicationNumber) || appList[0];
+
+      const appData = appRes.data;
+      const app = Array.isArray(appData)
+        ? appData.find((a) => a.applicationNumber === user.applicationNumber) || appData[0]
+        : appData;
+
       if (app) {
-        setDealerUserData({ name: app.fullName||'', mobile: app.mobileNumber||'', email: app.email||'', dob: '', loanAmount: app.loanAmount||'', address: app.address||'', city: app.city||'', state: app.state||'', pincode: app.pincode||'', employmentType: app.employmentType==='SALARIED'?'Salaried':app.employmentType==='BUSINESS'?'Self Employed':'', chassisNumber: app.chassisNumber||'', odometerReading: app.odometerReading||'' });
-        const submittedStatuses = ['DOCUMENTS_SUBMITTED','DOCUMENTS_VERIFIED','SENT_TO_BANK','BANK_REVIEW','APPROVED','REJECTED'];
-        const submitted = submittedStatuses.includes(app.status);
-        setIsEditMode(submitted);
-        const stepMap = { PERSONAL_INFORMATION:1, KYC:2, RESIDENTIAL:3, INCOME:4, VEHICLE:5, VERIFY:6 };
-        setDealerCurrentStep(submitted ? 6 : (app.currentStep && stepMap[app.currentStep] ? stepMap[app.currentStep] : 1));
+        setEditingUser((prev) => ({
+          ...prev,
+          name: app.fullName || prev?.name || "",
+          mobile: app.mobileNumber || prev?.mobile || "",
+          email: app.email || prev?.email || "",
+          loan: app.loanAmount ? `₹${app.loanAmount.toLocaleString("en-IN")}` : prev?.loan || "",
+        }));
       }
-      setUploadedDocuments(docRes.data.data || []);
+
+      setUploadedDocuments(docRes.data?.data || []);
     } catch (err) {
-      console.error('Error fetching application details:', err);
-      setDealerCurrentStep(1);
+      console.error("Error fetching application details:", err);
     }
-    setShowAddCustomerModal(true);
   };
 
-    const handleSaveProfile = async () => {
+  const handleSaveEditUser = async () => {
+    if (!editingUser) return;
+
+    const applicationNumber = editingUser.applicationNumber || editingUser.applicationNo || editingUser.applicationNumber;
+    if (!applicationNumber) {
+      alert("Unable to identify application for update.");
+      return;
+    }
+
+    const loanAmountValue = Number(
+      String(editingUser.loan || "")
+        .replace(/[^0-9.]/g, "")
+    );
+
+    try {
+      const payload = {
+        fullName: editingUser.name,
+        email: editingUser.email,
+        mobileNumber: editingUser.mobile,
+        loanAmount: isNaN(loanAmountValue) ? 0 : loanAmountValue,
+      };
+
+      await api.put(`/loan-applications/personal/${applicationNumber}`, payload);
+
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.applicationNumber === applicationNumber || user.userId === editingUser.userId
+            ? {
+                ...user,
+                name: editingUser.name,
+                mobile: editingUser.mobile,
+                email: editingUser.email,
+                loan: editingUser.loan || user.loan,
+              }
+            : user
+        )
+      );
+      setStatusData((prev) =>
+        prev.map((user) =>
+          user.applicationNumber === applicationNumber || user.userId === editingUser.userId
+            ? {
+                ...user,
+                name: editingUser.name,
+                mobile: editingUser.mobile,
+                email: editingUser.email,
+                loan: editingUser.loan || user.loan,
+              }
+            : user
+        )
+      );
+
+      setSelectedUser((prev) =>
+        prev && (prev.applicationNumber === applicationNumber || prev.userId === editingUser.userId)
+          ? { ...prev, ...editingUser }
+          : prev
+      );
+
+      setShowEditUserModal(false);
+      alert("User updates saved successfully.");
+    } catch (err) {
+      console.error("Update user error:", err);
+      alert(err?.response?.data?.message || "Failed to save user updates");
+    }
+  };
+
+  const handleSaveProfile = async () => {
     try {
       const storedDealer = JSON.parse(localStorage.getItem("dealerData"));
       const dealerId = storedDealer?.dealerId || storedDealer?.id;
@@ -1934,7 +2015,32 @@ const weekLabels = [
       </div>
 
       <button
-  onClick={() => { resetNewUserForm(); setShowAddCustomerModal(true); }}
+  type="button"
+  onClick={() => {
+    resetNewUserForm();
+
+    setDealerCurrentStep(1);
+    setUploadedDocuments([]);
+    setIsEditMode(false);
+
+    setDealerUserData({
+      name: "",
+      mobile: "",
+      email: "",
+      loanAmount: "",
+      dob: "",
+      city: "",
+      state: "",
+      pincode: "",
+      employmentType: "",
+    });
+
+    setActiveMenu("Dashboard"); // switch to Dashboard
+
+    setTimeout(() => {
+      setShowAddCustomerModal(true);
+    }, 0);
+  }}
   className="bg-[#27D3C3] hover:bg-[#1fb5a7] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold transition-all duration-200 hover:scale-[1.02]"
 >
   + Add User
@@ -2070,7 +2176,11 @@ const weekLabels = [
 
         {user.editable && (
           <button
-            onClick={() => handleEditUser(user)}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditUser(user);
+            }}
             className="bg-yellow-100
             text-yellow-700 px-5 py-3
             rounded-2xl text-sm font-semibold"
@@ -2134,6 +2244,221 @@ const weekLabels = [
           cannot be edited by dealer.
         </p>
       </div>
+    </div>
+  </div>
+)}
+
+{showEditUserModal && editingUser && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-auto">
+    <div className="bg-white rounded-3xl w-full max-w-5xl p-8 max-h-[90vh] overflow-y-auto">
+
+      {/* HEADER */}
+
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-[#0B2A4A]">
+            Edit User Application
+          </h2>
+
+          <p className="text-gray-500 text-sm mt-1">
+            View submitted details and uploaded documents
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShowEditUserModal(false)}
+          className="text-3xl text-gray-500"
+        >
+          ×
+        </button>
+      </div>
+
+      {/* PERSONAL DETAILS */}
+
+      <div className="bg-[#F8FAFC] rounded-3xl p-6 mb-6">
+        <div className="flex justify-between items-center mb-5">
+          <h3 className="font-bold text-lg text-[#0B2A4A]">
+            Personal Details
+          </h3>
+
+          <button
+            onClick={() =>
+              setDetailsEditMode(!detailsEditMode)
+            }
+            className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl"
+          >
+            ✏️ Edit Details
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          <div>
+            <label className="text-xs text-gray-500">
+              Full Name
+            </label>
+
+            <input
+              value={editingUser.name || ""}
+              disabled={!detailsEditMode}
+              onChange={(e) =>
+                setEditingUser({
+                  ...editingUser,
+                  name: e.target.value,
+                })
+              }
+              className="w-full mt-1 border rounded-xl p-3"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500">
+              Mobile Number
+            </label>
+
+            <input
+              value={editingUser.mobile || ""}
+              disabled={!detailsEditMode}
+              onChange={(e) =>
+                setEditingUser({
+                  ...editingUser,
+                  mobile: e.target.value,
+                })
+              }
+              className="w-full mt-1 border rounded-xl p-3"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500">
+              Email
+            </label>
+
+            <input
+              value={editingUser.email || ""}
+              disabled={!detailsEditMode}
+              onChange={(e) =>
+                setEditingUser({
+                  ...editingUser,
+                  email: e.target.value,
+                })
+              }
+              className="w-full mt-1 border rounded-xl p-3"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500">
+              Loan Amount
+            </label>
+
+            <input
+              value={editingUser.loan || ""}
+              disabled={!detailsEditMode}
+              onChange={(e) =>
+                setEditingUser({
+                  ...editingUser,
+                  loan: e.target.value,
+                })
+              }
+              className="w-full mt-1 border rounded-xl p-3"
+            />
+          </div>
+
+        </div>
+      </div>
+
+      {/* DOCUMENTS */}
+
+      <div className="bg-[#F8FAFC] rounded-3xl p-6">
+        <div className="flex justify-between items-center mb-5">
+          <h3 className="font-bold text-lg text-[#0B2A4A]">
+            Uploaded Documents
+          </h3>
+
+          <button
+            onClick={() =>
+              setDocumentsEditMode(!documentsEditMode)
+            }
+            className="bg-green-100 text-green-700 px-4 py-2 rounded-xl"
+          >
+            🔄 Re-upload Documents
+          </button>
+        </div>
+
+        <div className="space-y-5">
+
+          <div className="flex justify-between items-center border rounded-2xl p-4 bg-white">
+            <div>
+              <h4 className="font-semibold">
+                Aadhaar Card
+              </h4>
+            </div>
+
+            {documentsEditMode ? (
+              <input type="file" />
+            ) : (
+              <button className="text-blue-600 font-medium">
+                View
+              </button>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center border rounded-2xl p-4 bg-white">
+            <div>
+              <h4 className="font-semibold">
+                PAN Card
+              </h4>
+            </div>
+
+            {documentsEditMode ? (
+              <input type="file" />
+            ) : (
+              <button className="text-blue-600 font-medium">
+                View
+              </button>
+            )}
+          </div>
+
+          <div className="flex justify-between items-center border rounded-2xl p-4 bg-white">
+            <div>
+              <h4 className="font-semibold">
+                Bank Statement
+              </h4>
+            </div>
+
+            {documentsEditMode ? (
+              <input type="file" />
+            ) : (
+              <button className="text-blue-600 font-medium">
+                View
+              </button>
+            )}
+          </div>
+
+        </div>
+      </div>
+
+      {/* FOOTER */}
+
+      <div className="flex justify-end gap-4 mt-8">
+        <button
+          onClick={() =>
+            setShowEditUserModal(false)
+          }
+          className="px-6 py-3 rounded-2xl border"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={handleSaveEditUser}
+          className="bg-[#27D3C3] hover:bg-[#1fb5a7] text-[#0B2A4A] px-8 py-3 rounded-2xl font-bold"
+        >
+          Save Changes
+        </button>
+      </div>
+
     </div>
   </div>
 )}
