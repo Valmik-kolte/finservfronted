@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { FaEnvelope, FaLock, FaEye, FaEyeSlash } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { loginUser } from "../../services/authService.js";
+import { loginUser, loginDealer } from "../../services/authService.js";
 import { jwtDecode } from "jwt-decode";
 
 
@@ -18,152 +18,78 @@ const Login = () => {
   };
 
  const handleSubmit = async (e) => {
-
   e.preventDefault();
-
   setLoading(true);
-
   try {
+    let res = null;
+    let usedEndpoint = "/auth/login";
 
-    const res = await loginUser(form);
-
-    console.log("[LOGIN] full response:", res);
-
-    const token =
-      res?.token ||
-      res?.data?.token ||
-      res?.data?.data?.token;
-
-    if (!token) {
-
-      toast.error("Token not found");
-
+    // Single login attempt – the backend returns role (DEALER, ADMIN, USER)
+    try {
+      res = await loginUser(form);
+      console.log("[LOGIN] /auth/login SUCCESS:", JSON.stringify(res, null, 2));
+    } catch (e) {
+      console.log("[LOGIN] /auth/login FAILED status:", e?.response?.status);
+      console.log("[LOGIN] /auth/login FAILED data:", JSON.stringify(e?.response?.data, null, 2));
+      const msg = e?.response?.data?.message || "Login failed";
+      toast.error(msg);
       return;
     }
 
-    /* SAVE TOKEN */
+    console.log("[LOGIN] used endpoint:", usedEndpoint);
+
+    const token = res?.token || res?.data?.token || res?.data?.data?.token;
+    console.log("[LOGIN] token found:", !!token, "| value:", token?.substring(0, 30));
+
+    if (!token) {
+      toast.error("Token not found in response");
+      return;
+    }
 
     localStorage.setItem("token", token);
 
-    /* DECODE TOKEN */
-
     const decoded = jwtDecode(token);
-
-    console.log("[LOGIN] decoded JWT:", decoded);
-
+    console.log("[LOGIN] decoded JWT:", JSON.stringify(decoded, null, 2));
     const role = decoded?.role || "USER";
 
-    /* COMMON USER OBJECT */
+    const body = res?.data?.data || res?.data || res || {};
+    console.log("[LOGIN] body extracted:", JSON.stringify(body, null, 2));
 
     const userObject = {
-
-      id:
-        decoded?.id || null,
-
-      name:
-        decoded?.name || "",
-
-      email:
-        decoded?.sub || "",
-
-      role:
-        decoded?.role || "",
-
-      dealerId:
-        decoded?.dealerId || null,
-
-      dealerCode:
-        decoded?.dealerCode || null,
-
+      id:         decoded?.id         || body?.id         || body?.userId     || null,
+      name:       decoded?.name       || body?.fullName   || "",
+      email:      decoded?.sub        || body?.email      || "",
+      role:       decoded?.role       || body?.role       || "",
+      dealerId:   decoded?.dealerId   || body?.dealerId   || body?.id         || null,
+      dealerCode: decoded?.dealerCode || body?.dealerCode || null,
       token,
-
-      loginTime:
-        new Date().toISOString(),
+      loginTime: new Date().toISOString(),
     };
-
-    /* SAVE ROLE */
+    console.log("[LOGIN] userObject saved:", JSON.stringify(userObject, null, 2));
 
     localStorage.setItem("role", role);
-
-    /* REMOVE OLD DATA */
-
     localStorage.removeItem("userData");
     localStorage.removeItem("dealerData");
     localStorage.removeItem("adminData");
 
-    /* ROLE BASED STORAGE */
-
     if (role === "ADMIN") {
-
-      localStorage.setItem(
-        "adminData",
-        JSON.stringify(userObject)
-      );
-
+      localStorage.setItem("adminData", JSON.stringify(userObject));
       toast.success("Admin Login Successful");
-
       navigate("/admin/dashboard");
-    }
-
-    else if (role === "DEALER") {
-
-      localStorage.setItem(
-        "dealerData",
-        JSON.stringify(userObject)
-      );
-
-      // Save dealerCode separately for easy access
-      if (userObject.dealerCode) {
-        localStorage.setItem("dealerCode", userObject.dealerCode);
-      }
-
-      // Save dealer code to ID mapping in localStorage for customer lookup
-      if (userObject.dealerCode && (userObject.dealerId || userObject.id)) {
-        const codeMap = JSON.parse(localStorage.getItem("dealerCodeMap") || "{}");
-        codeMap[userObject.dealerCode] = userObject.dealerId || userObject.id;
-        localStorage.setItem("dealerCodeMap", JSON.stringify(codeMap));
-      }
-
+    } else if (role === "DEALER") {
+      localStorage.setItem("dealerData", JSON.stringify(userObject));
+      if (userObject.dealerCode) localStorage.setItem("dealerCode", userObject.dealerCode);
       toast.success("Dealer Login Successful");
-
       navigate("/dealer/dashboard");
-    }
-
-    else {
-
-      localStorage.setItem(
-        "userData",
-        JSON.stringify(userObject)
-      );
-
-      // Save user mobile from registration fallback if present
-      if (userObject.email && userObject.id) {
-        const savedMobile = localStorage.getItem("user_mobile_" + userObject.email.toLowerCase().trim());
-        if (savedMobile) {
-          localStorage.setItem("user_mobile_" + userObject.id, savedMobile);
-        }
-      }
-
+    } else {
+      localStorage.setItem("userData", JSON.stringify(userObject));
       toast.success("Login Successful");
-
       navigate("/customer/dashboard");
     }
-
-  }
-
-  catch (error) {
-
-    console.log(error);
-
-    toast.error(
-      error?.response?.data?.message ||
-      "Login failed"
-    );
-
-  }
-
-  finally {
-
+  } catch (error) {
+    console.log("[LOGIN] unexpected error:", error?.message, JSON.stringify(error?.response?.data, null, 2));
+    toast.error(error?.response?.data?.message || error?.message || "Login failed");
+  } finally {
     setLoading(false);
   }
 };

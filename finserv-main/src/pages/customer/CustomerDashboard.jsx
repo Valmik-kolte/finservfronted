@@ -1,4936 +1,1425 @@
-import React, { useState, useEffect, useRef } from "react";
-
-
-
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-
-
+import { toast } from "react-toastify";
+import {
+  FaBell,
+  FaCheckCircle,
+  FaCloudUploadAlt,
+  FaEye,
+  FaFileAlt,
+  FaLock,
+  FaPaperPlane,
+  FaRedo,
+  FaRupeeSign,
+  FaTimes,
+  FaUniversity,
+} from "react-icons/fa";
+import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
 
-
-
-import Sidebar from "../../components/customer/Sidebar";
-
-
-
-import {
-
-  uploadDocument,
-
-} from "../../services/documentService";
-
-
-
-const Dashboard = () => {
-
-
-
-
-
-/* SETTINGS */
-
-
-
-const [showPasswordForm, setShowPasswordForm] =
-
-  useState(false);
-
-
-
-const [showPhoneModal, setShowPhoneModal] =
-
-  useState(false);
-
-
-
-const [showEmailModal, setShowEmailModal] =
-
-  useState(false);
-
-
-
-const storedUser = localStorage.getItem("userData");
-
-const loggedInUser = storedUser ? JSON.parse(storedUser) : null;
-
-const currentUserId = loggedInUser?.id || 1;
-
-
-
-const [profileData, setProfileData] =
-
-  useState({
-
-    name: loggedInUser?.name || "Rahul Sharma",
-
-    phone: "9876543210",
-
-    email: loggedInUser?.email || "rahul@gmail.com",
-
-  });
-
-
-
-const [phoneForm, setPhoneForm] =
-
-  useState({
-
-    currentPhone: "9876543210",
-
-    newPhone: "",
-
-    otp: "",
-
-  });
-
-
-
-const [emailForm, setEmailForm] =
-
-  useState({
-
-    currentEmail: loggedInUser?.email || "rahul@gmail.com",
-
-    newEmail: "",
-
-    otp: "",
-
-  });
-
-
-
-const [passwordForm, setPasswordForm] =
-
-  useState({
-
-    currentPassword: "",
-
-    newPassword: "",
-
-    confirmPassword: "",
-
-  });
-
-
-
-
-
-/* REMARKS MODAL */
-
-
-
-const [showRemarksModal, setShowRemarksModal] =
-
-  useState(false);
-
-
-
-const [selectedRemark, setSelectedRemark] =
-
-  useState("");
-
-
-
-/* ACTION ALERT MODAL */
-
-
-
-const [showActionModal, setShowActionModal] = useState(false);
-
-
-
-/* USER REMARK */
-
-
-
-const [userRemarkData, setUserRemarkData] = useState({
-
-  hasRemark: false,
-
-  remark: "No remarks added by admin.",
-
-});
-
+const DOCUMENT_LABELS = {
+  AADHAAR: "Aadhaar",
+  PAN: "PAN",
+  PASSPORT: "Passport",
+  VOTER_ID: "Voter ID",
+  DRIVING_LICENSE: "Driving License",
+  LIGHT_BILL: "Light Bill",
+  RENTAL_AGREEMENT: "Rental Agreement",
+  SALARY_SLIP: "Salary Slip",
+  BANK_STATEMENT: "Bank Statement",
+  ITR_RETURN: "ITR Return",
+  APPOINTMENT_LETTER: "Appointment Letter",
+  RC: "RC",
+  INSURANCE: "Insurance",
+  VEHICLE_INVOICE: "Vehicle Invoice",
+  VEHICLE_PHOTO: "Vehicle Photo",
+  ODOMETER_READING: "Odometer Reading",
+  CHASSIS_NUMBER: "Chassis Number",
+  CAR_FRONT_SIDE_PHOTO: "Car Front Side Photo",
+  CAR_BACK_SIDE_PHOTO: "Car Back Side Photo",
+  PASSPORT_SIZE_PHOTO: "Passport Size Photo",
+};
+
+const STATUS_STYLES = {
+  PENDING: "bg-amber-100 text-amber-700",
+  APPROVED: "bg-emerald-100 text-emerald-700",
+  VERIFIED: "bg-sky-100 text-sky-700",
+  REJECTED: "bg-red-100 text-red-700",
+};
+
+const OPTIONAL_DOCUMENT_TYPES = new Set([
+  "CAR_FRONT_SIDE_PHOTO",
+  "CAR_BACK_SIDE_PHOTO",
+  "CHASSIS_NUMBER",
+  "ODOMETER_READING",
+]);
+
+const STEPS = [
+  { id: 1, title: "Personal Information" },
+  { id: 2, title: "KYC Documents", types: ["PAN", "AADHAAR"] },
+  { id: 3, title: "Residential", types: ["LIGHT_BILL", "RENTAL_AGREEMENT"] },
+  { id: 4, title: "Income", types: [] },
+  {
+    id: 5,
+    title: "Vehicle Documents",
+    types: [
+      "RC",
+      "INSURANCE",
+      "CAR_FRONT_SIDE_PHOTO",
+      "CAR_BACK_SIDE_PHOTO",
+      "CHASSIS_NUMBER",
+      "ODOMETER_READING",
+    ],
+  },
+  { id: 6, title: "Verify & Submit" },
+];
+
+const getUserSession = () => {
+  try {
+    return JSON.parse(localStorage.getItem("userData") || "{}");
+  } catch {
+    return {};
+  }
+};
+
+const unwrap = (response) => response?.data?.data ?? response?.data ?? null;
+
+const emptyProfile = {
+  userId: "",
+  fullName: "",
+  email: "",
+  mobileNumber: "",
+  registrationType: "INDIVIDUAL",
+  dealerCode: "",
+  role: "USER",
+};
+
+const emptyPersonalInfo = {
+  fullName: "",
+  email: "",
+  mobileNumber: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+  loanAmount: "",
+};
+
+const getPersonalInfoDraft = (userId, session) => {
+  try {
+    const draft = JSON.parse(localStorage.getItem(`personal_info_draft_${userId}`) || "{}");
+    return {
+      ...emptyPersonalInfo,
+      fullName: session?.name || "",
+      email: session?.email || "",
+      ...draft,
+    };
+  } catch {
+    return {
+      ...emptyPersonalInfo,
+      fullName: session?.name || "",
+      email: session?.email || "",
+    };
+  }
+};
+
+const hasSavedPersonalInfoDraft = (userId) => {
+  try {
+    if (localStorage.getItem(`personal_info_saved_${userId}`) === "true") return true;
+    const draft = JSON.parse(localStorage.getItem(`personal_info_draft_${userId}`) || "{}");
+    return !!(
+      draft.mobileNumber ||
+      draft.address ||
+      draft.city ||
+      draft.state ||
+      draft.pincode ||
+      draft.loanAmount
+    );
+  } catch {
+    return false;
+  }
+};
+
+const hasUsableDocument = (docsByType, type) => {
+  const doc = docsByType[type];
+  return !!doc && doc.status !== "REJECTED";
+};
+
+const missingLabel = (type) =>
+  type === "RESIDENTIAL_PROOF"
+    ? "Light Bill or Rental Agreement"
+    : DOCUMENT_LABELS[type] || type;
+
+const CustomerDashboard = () => {
   const navigate = useNavigate();
+  const session = useMemo(getUserSession, []);
+  const userId = session?.id;
 
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeMenu, setActiveMenu] = useState("Dashboard");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploadingType, setUploadingType] = useState("");
+  const [preview, setPreview] = useState(null);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [employmentType, setEmploymentType] = useState("Salaried");
+  const [applicationNumber, setApplicationNumber] = useState("");
+  const [applicationSubmitted, setApplicationSubmitted] = useState(false);
+  const [profile, setProfile] = useState({
+    ...emptyProfile,
+    userId,
+    fullName: session?.name || "",
+    email: session?.email || "",
+    dealerCode: session?.dealerCode || "",
+  });
+  const [personalInfo, setPersonalInfo] = useState(() =>
+    getPersonalInfoDraft(userId, session)
+  );
+  const [hasPersonalInfo, setHasPersonalInfo] = useState(() =>
+    hasSavedPersonalInfoDraft(userId)
+  );
+  const [documents, setDocuments] = useState([]);
+  const [counts, setCounts] = useState({
+    pendingCount: 0,
+    verifiedCount: 0,
+    approvedCount: 0,
+    rejectedCount: 0,
+  });
+  const [notifications, setNotifications] = useState([]);
+  const [assignedBank, setAssignedBank] = useState(null);
+  const [settingsForm, setSettingsForm] = useState({
+    fullName: session?.name || "",
+    email: session?.email || "",
+    mobileNumber: "",
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    newPassword: "",
+    confirmPassword: "",
+  });
 
+  const rejectedDocuments = useMemo(
+    () => documents.filter((doc) => doc.status === "REJECTED"),
+    [documents]
+  );
 
-  const [sidebarOpen, setSidebarOpen] =
+  const docsByType = useMemo(() => {
+    return documents.reduce((acc, doc) => {
+      const type = doc.documentType || doc.type;
+      if (!acc[type] || doc.status === "REJECTED") acc[type] = doc;
+      return acc;
+    }, {});
+  }, [documents]);
 
-    useState(true);
-
-
-
-  const [activeMenu, setActiveMenu] =
-
-    useState("Dashboard");
-
-
-
-  /* DOCUMENT STEP */
-
-
-
-  const [currentStep, setCurrentStep] =
-
-    useState(1);
-
-
-
-const [residentialType, setResidentialType] =
-
-  useState("");
-
-
-
-  const [employmentType, setEmploymentType] =
-
-    useState("");
-
-
-
-  const [documentsSubmitted, setDocumentsSubmitted] =
-
-    useState(false);
-
-  const isInitializedRef = useRef(false);
-
-
-
-  const handleSaveProfile = async () => {
-
-    try {
-
-      const payload = {
-
-        fullName: profileData.name,
-
-        email: profileData.email,
-
-        mobileNumber: profileData.phone,
-
-        registrationType: loggedInUser?.registrationType || "INDIVIDUAL",
-
-        role: "USER"
-
-      };
-
-      await api.put(`/user/update/${currentUserId}`, payload);
-
-
-
-      // Sync updated data back to localStorage
-
-      const stored = localStorage.getItem("userData");
-
-      if (stored) {
-
-        const parsed = JSON.parse(stored);
-
-        parsed.name = profileData.name;
-
-        parsed.email = profileData.email;
-
-        localStorage.setItem("userData", JSON.stringify(parsed));
-
+  const fetchDashboardData = useCallback(
+    async (showSpinner = false) => {
+      if (!userId) {
+        setLoading(false);
+        toast.error("User session not found. Please login again.");
+        return;
       }
 
-      localStorage.setItem("user_mobile_" + currentUserId, profileData.phone);
-
-      localStorage.setItem("user_mobile_" + profileData.email.toLowerCase().trim(), profileData.phone);
-
-
-
-      alert("Profile updated successfully!");
-
-    } catch (err) {
-
-      console.error(err);
-
-      alert(err?.response?.data?.message || "Failed to update profile");
-
-    }
-
-  };
-
-
-
-  const handleSavePassword = async () => {
-
-    if (!passwordForm.newPassword) {
-
-      alert("Please enter a new password");
-
-      return;
-
-    }
-
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-
-      alert("New passwords do not match");
-
-      return;
-
-    }
-
-    try {
-
-      const payload = {
-
-        email: profileData.email,
-
-        newPassword: passwordForm.newPassword
-
-      };
-
-      await api.post("/user/reset-password", payload);
-
-      alert("Password changed successfully!");
-
-      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
-
-      setShowPasswordForm(false);
-
-    } catch (err) {
-
-      console.error(err);
-
-      alert(err?.response?.data?.message || "Failed to change password");
-
-    }
-
-  };
-
-
-
-  const handleNextStep = async () => {
-
-    let currentAppId = userData.applicationId;
-
-
-
-    if (currentStep === 1 && (!currentAppId || currentAppId === "Pending Initiation")) {
-
+      if (showSpinner) setLoading(true);
       try {
+        const [userRes, docsRes, countsRes, notificationsRes] =
+          await Promise.allSettled([
+            api.get(`/user/${userId}`),
+            api.get(`/documents/user/${userId}`),
+            api.get(`/documents/count/${userId}`),
+            api.get(`/notifications/${userId}`),
+          ]);
 
-        // Resolve dealer ID
-
-        let resolvedDealerId = null;
-
-        const codeMap = JSON.parse(localStorage.getItem("dealerCodeMap") || "{}");
-
-        const userDealerCode = userData.dealerCode || profileData.dealerCode || loggedInUser?.dealerCode;
-
-        if (userDealerCode && codeMap[userDealerCode]) {
-
-          resolvedDealerId = codeMap[userDealerCode];
-
-        } else {
-
-          resolvedDealerId = localStorage.getItem("dealerId") || 1;
-
-        }
-
-
-
-        // Auto-create loan application first
-
-        const initPayload = {
-
-          fullName: userData.name || profileData.name || loggedInUser?.name,
-
-          email: userData.email || profileData.email || loggedInUser?.email,
-
-          mobileNumber: userData.mobile || profileData.phone || "9876543210",
-
-          loanAmount: typeof userData.loanAmount === "string" 
-
-            ? parseFloat(userData.loanAmount.replace(/[^0-9.]/g, '')) || 0
-
-            : (userData.loanAmount || 0),
-
-          address: userData.address || "Default Address",
-
-          city: userData.city || "Default City",
-
-          state: userData.state || "Default State",
-
-          pincode: userData.pincode || "411014"
-
-        };
-
-
-
-        const initRes = await api.post(`/loan-applications/apply-by-dealer/${resolvedDealerId}`, initPayload);
-
-        const savedApp = initRes.data;
-
-        if (savedApp && savedApp.applicationNumber) {
-
-          currentAppId = savedApp.applicationNumber;
-
-          // Sync application number to state
-
-          setUserData((prev) => ({
-
-            ...prev,
-
-            applicationId: savedApp.applicationNumber,
-
-          }));
-
-        } else {
-
-          throw new Error("Failed to get application number");
-
-        }
-
-      } catch (initErr) {
-
-        console.error("Auto-initiation failed, trying fallback to dealer ID 3:", initErr);
-
-        try {
-
-          const initPayload = {
-
-            fullName: userData.name || profileData.name || loggedInUser?.name,
-
-            email: userData.email || profileData.email || loggedInUser?.email,
-
-            mobileNumber: userData.mobile || profileData.phone || "9876543210",
-
-            loanAmount: typeof userData.loanAmount === "string" 
-
-              ? parseFloat(userData.loanAmount.replace(/[^0-9.]/g, '')) || 0
-
-              : (userData.loanAmount || 0),
-
-            address: userData.address || "Default Address",
-
-            city: userData.city || "Default City",
-
-            state: userData.state || "Default State",
-
-            pincode: userData.pincode || "411014"
-
+        if (userRes.status === "fulfilled") {
+          const user = unwrap(userRes.value) || {};
+          const nextProfile = {
+            ...emptyProfile,
+            ...user,
+            userId: user.userId || userId,
+            fullName: user.fullName || session?.name || "",
+            email: user.email || session?.email || "",
+            dealerCode: user.dealerCode || session?.dealerCode || "",
+            role: user.role || "USER",
           };
-
-          const initRes = await api.post(`/loan-applications/apply-by-dealer/3`, initPayload);
-
-          const savedApp = initRes.data;
-
-          if (savedApp && savedApp.applicationNumber) {
-
-            currentAppId = savedApp.applicationNumber;
-
-            setUserData((prev) => ({
-
-              ...prev,
-
-              applicationId: savedApp.applicationNumber,
-
-            }));
-
-          } else {
-
-            throw new Error("Failed to get application number");
-
-          }
-
-        } catch (fallbackErr) {
-
-          alert("No active loan application found and auto-initiation failed. Please ask your dealer to initiate the application.");
-
-          return;
-
-        }
-
-      }
-
-    }
-
-
-
-    if (!currentAppId || currentAppId === "Pending Initiation") {
-
-      alert("No active loan application found to update. Please ask your dealer to initiate the application.");
-
-      return;
-
-    }
-
-
-
-    try {
-
-      if (currentStep === 1) {
-
-        // Step 1: Save Personal Info
-
-        const payload = {
-
-          fullName: userData.name,
-
-          email: userData.email,
-
-          mobileNumber: userData.mobile,
-
-          address: userData.address || "",
-
-          city: userData.city || "",
-
-          state: userData.state || "",
-
-          pincode: userData.pincode || "",
-
-          loanAmount: typeof userData.loanAmount === "string" 
-
-            ? parseFloat(userData.loanAmount.replace(/[^0-9.]/g, '')) 
-
-            : (userData.loanAmount || 0)
-
-        };
-
-        await api.post(`/loan-applications/personal/${currentAppId}`, payload);
-
-      } else if (currentStep === 2) {
-
-        // Step 2: Save KYC
-
-        const panDoc = uploadedDocuments.find(d => d.documentType === "PAN" || d.type === "PAN");
-
-        const aadhaarDoc = uploadedDocuments.find(d => d.documentType === "AADHAAR" || d.type === "AADHAAR");
-
-        if (!panDoc || !aadhaarDoc) {
-
-          alert("Please upload both PAN Card and Aadhaar Card before proceeding.");
-
-          return;
-
-        }
-
-        const payload = {
-
-          panDocumentId: panDoc.documentId,
-
-          aadhaarFrontDocumentId: aadhaarDoc.documentId,
-
-          aadhaarBackDocumentId: aadhaarDoc.documentId
-
-        };
-
-        await api.post(`/loan-applications/kyc/${currentAppId}`, payload);
-
-      } else if (currentStep === 3) {
-
-        // Step 3: Save Residential Details
-
-        const lightBillDoc = uploadedDocuments.find(d => d.documentType === "LIGHT_BILL" || d.type === "LIGHT_BILL");
-
-        const rentalDoc = uploadedDocuments.find(d => d.documentType === "RENTAL_AGREEMENT" || d.type === "RENTAL_AGREEMENT");
-
-        const docId = lightBillDoc?.documentId || rentalDoc?.documentId;
-
-        if (!docId) {
-
-          alert("Please upload at least one residential proof (Light Bill or Rent Agreement).");
-
-          return;
-
-        }
-
-        const payload = {
-
-          residentialProofDocumentId: docId
-
-        };
-
-        await api.post(`/loan-applications/residential/${currentAppId}`, payload);
-
-      } else if (currentStep === 4) {
-
-        // Step 4: Save Income Details
-
-        if (!userData.employmentType) {
-
-          alert("Please select Employment Type.");
-
-          return;
-
-        }
-
-        const bankStatementDoc = uploadedDocuments.find(d => d.documentType === "BANK_STATEMENT" || d.type === "BANK_STATEMENT");
-
-        if (!bankStatementDoc) {
-
-          alert("Bank Statement is required.");
-
-          return;
-
-        }
-
-        const payload = {
-
-          employmentType: userData.employmentType === "Salaried" ? "SALARIED" : "BUSINESS",
-
-          bankStatementDocumentId: bankStatementDoc.documentId,
-
-        };
-
-        if (userData.employmentType === "Salaried") {
-
-          const salarySlipDoc = uploadedDocuments.find(d => d.documentType === "SALARY_SLIP" || d.type === "SALARY_SLIP");
-
-          const appLetterDoc = uploadedDocuments.find(d => d.documentType === "APPOINTMENT_LETTER" || d.type === "APPOINTMENT_LETTER");
-
-          payload.salarySlipDocumentId = salarySlipDoc?.documentId || null;
-
-          payload.appointmentLetterDocumentId = appLetterDoc?.documentId || null;
-
-        } else {
-
-          const itrDoc = uploadedDocuments.find(d => d.documentType === "ITR_RETURN" || d.type === "ITR_RETURN");
-
-          payload.itrDocumentId = itrDoc?.documentId || null;
-
-        }
-
-        await api.post(`/loan-applications/income/${currentAppId}`, payload);
-
-      } else if (currentStep === 5) {
-
-        // Step 5: Save Vehicle Details
-
-        const rcDoc = uploadedDocuments.find(d => d.documentType === "RC" || d.type === "RC");
-
-        const insDoc = uploadedDocuments.find(d => d.documentType === "INSURANCE" || d.type === "INSURANCE");
-
-        const carFrontDoc = uploadedDocuments.find(d => d.documentType === "CAR_FRONT_SIDE_PHOTO" || d.type === "CAR_FRONT_SIDE_PHOTO");
-
-        const carBackDoc = uploadedDocuments.find(d => d.documentType === "CAR_BACK_SIDE_PHOTO" || d.type === "CAR_BACK_SIDE_PHOTO");
-
-        
-
-        if (!rcDoc || !insDoc) {
-
-          alert("RC Copy and Insurance Copy are required.");
-
-          return;
-
-        }
-
-        const payload = {
-
-          rcDocumentId: rcDoc.documentId,
-
-          insuranceDocumentId: insDoc.documentId,
-
-          carFrontDocumentId: carFrontDoc?.documentId || null,
-
-          carBackDocumentId: carBackDoc?.documentId || null,
-
-        };
-
-        await api.post(`/loan-applications/vehicle/${currentAppId}`, payload);
-
-      }
-
-
-
-      setCurrentStep((prev) => prev + 1);
-      // Refresh data from API without full page reload
-      await fetchData(false);
-
-
-    } catch (err) {
-
-      console.error("Step save error:", err);
-
-      alert(err?.response?.data || err?.response?.data?.message || `Failed to save step ${currentStep}`);
-
-    } finally {
-
-      setDocumentLoading(false);
-
-    }
-
-  };
-
-
-  const fetchData = async (forceReset = false) => {
-    try {
-      const docRes = await api.get(`/documents/user/${currentUserId}`);
-      const docs = docRes.data.data || [];
-      setUploadedDocuments(docs);
-
-      let registrationUserObj = null;
-      let userMobile = "9876543210";
-
-      try {
-
-        const userRes = await api.get(`/user/${currentUserId}`);
-
-        const userObj = userRes.data.data;
-
-        if (userObj) {
-
-          registrationUserObj = userObj;
-
-          userMobile = localStorage.getItem("user_mobile_" + currentUserId) || 
-
-                       localStorage.getItem("user_mobile_" + userObj.email.toLowerCase().trim()) || 
-
-                       userObj.mobileNumber || 
-
-                       "9876543210";
-
-          setProfileData({
-
-            name: userObj.fullName || "",
-
-            phone: userMobile,
-
-            email: userObj.email || "",
-
-            dealerCode: userObj.dealerCode || "",
-
+          setProfile(nextProfile);
+          setSettingsForm({
+            fullName: nextProfile.fullName,
+            email: nextProfile.email,
+            mobileNumber: nextProfile.mobileNumber || "",
           });
-
-          setPhoneForm((prev) => ({ ...prev, currentPhone: userMobile }));
-
-          setEmailForm((prev) => ({ ...prev, currentEmail: userObj.email || "" }));
-
-          
-
-          localStorage.setItem("user_mobile_" + currentUserId, userMobile);
-
-        }
-
-      } catch (err) {
-
-        console.error("Failed to fetch user profile:", err);
-
-      }
-
-
-
-      // 3. Fetch loan application status
-
-      const loanAppRes = await api.get(`/loan-applications/user/${currentUserId}`);
-
-      const appList = loanAppRes.data || [];
-
-      
-
-      if (appList.length > 0) {
-
-        const app = appList[0];
-
-        
-
-        let displayStatus = "Documents yet to submit";
-
-        if (app.status === "DOCUMENTS_SUBMITTED") displayStatus = "Documents Submitted";
-
-        else if (app.status === "DOCUMENTS_VERIFIED") displayStatus = "Documents Verified";
-
-        else if (app.status === "SENT_TO_BANK") displayStatus = "Sent To Bank";
-
-        else if (app.status === "BANK_REVIEW") displayStatus = "Bank Review";
-
-        else if (app.status === "APPROVED") displayStatus = "Loan Approved";
-
-        else if (app.status === "REJECTED") displayStatus = "Rejected";
-
-
-
-        const assignedBank = localStorage.getItem(`bank_assignment_${app.applicationNumber}`) || "";
-        if (assignedBank && !["BANK_REVIEW", "APPROVED", "REJECTED"].includes(app.status)) {
-          displayStatus = "Sent To Bank";
-        }
-        setUserData((prev) => {
-          if (isInitializedRef.current && !forceReset) {
-            // Only update non-form-wizard dynamic fields
-            return {
-              ...prev,
-              applicationId: app.applicationNumber || "",
-              loanAmount: (app.loanAmount != null && app.loanAmount > 0) ? `₹${Number(app.loanAmount).toLocaleString('en-IN')}` : (prev.loanAmount && prev.loanAmount !== "₹0" ? prev.loanAmount : null),
-              rawLoanAmount: app.loanAmount || 0,
-              bank: assignedBank || prev.bank || "Yet to assign",
-              status: displayStatus,
-              documentsUploaded: docs.length,
-            };
+          setPersonalInfo((prev) => ({
+            ...prev,
+            fullName: nextProfile.fullName,
+            email: nextProfile.email,
+            mobileNumber: prev.mobileNumber || nextProfile.mobileNumber || "",
+          }));
+          if (user.applicationId) {
+            setApplicationNumber(user.applicationId);
           }
-          return {
-            name: app.fullName || registrationUserObj?.fullName || "",
-            mobile: app.mobileNumber || userMobile || "",
-            email: app.email || registrationUserObj?.email || "",
-            applicationId: app.applicationNumber || "",
-            loanAmount: (app.loanAmount != null && app.loanAmount > 0) ? `₹${Number(app.loanAmount).toLocaleString('en-IN')}` : null,
-            rawLoanAmount: app.loanAmount || 0,
-            bank: assignedBank || "Yet to assign",
-            status: displayStatus,
-            documentsUploaded: docs.length,
-            totalDocuments: 8,
-            address: app.address || "",
-            city: app.city || "",
-            state: app.state || "",
-            pincode: app.pincode || "",
-            employmentType: app.employmentType === "SALARIED" ? "Salaried" : (app.employmentType === "BUSINESS" ? "Self Employed" : ""),
-            pan: "",
-            aadhaar: "",
-            chassisNumber: app.chassisNumber || "",
-            odometerReading: app.odometerReading || "",
-            dealerCode: registrationUserObj?.dealerCode || "",
-          };
-        });
-
-        // Initialize currentStep and mark as initialized
-        if (!isInitializedRef.current || forceReset) {
-          const stepMap = {
-            "PERSONAL_INFORMATION": 1,
-            "KYC": 2,
-            "RESIDENTIAL": 3,
-            "INCOME": 4,
-            "VEHICLE": 5,
-            "VERIFY": 6
-          };
-          if (app.currentStep && stepMap[app.currentStep]) {
-            setCurrentStep(stepMap[app.currentStep]);
+          const bankId = user.bankId || user.assignedBankId;
+          if (bankId) {
+            try {
+              const banksRes = await api.get("/admin/banks");
+              const bankList = Array.isArray(banksRes.data) ? banksRes.data : banksRes.data?.data || [];
+              const bank = bankList.find((b) => String(b.bankId) === String(bankId));
+              setAssignedBank(bank || { bankId, bankName: "Assigned" });
+            } catch {
+              setAssignedBank({ bankId, bankName: "Assigned" });
+            }
+          } else {
+            setAssignedBank(null);
           }
-          isInitializedRef.current = true;
         }
 
+        if (docsRes.status === "fulfilled") {
+          setDocuments(unwrap(docsRes.value) || []);
+        }
 
+        if (countsRes.status === "fulfilled") {
+          setCounts({
+            pendingCount: 0,
+            verifiedCount: 0,
+            approvedCount: 0,
+            rejectedCount: 0,
+            ...(unwrap(countsRes.value) || {}),
+          });
+        }
 
-        setUserRemarkData({
-
-          hasRemark: !!app.remark,
-
-          remark: app.remark || "No remarks added by admin.",
-
-        });
-
-
-
-        setDocumentsSubmitted(
-          app.status === "DOCUMENTS_SUBMITTED" ||
-          app.status === "DOCUMENTS_VERIFIED" ||
-          app.status === "SENT_TO_BANK" ||
-          app.status === "BANK_REVIEW" ||
-          app.status === "APPROVED" ||
-          app.status === "REJECTED"
-        );
-
-      } else {
-
-        setUserData((prev) => ({
-
-          ...prev,
-
-          name: registrationUserObj?.fullName || loggedInUser?.name || prev.name,
-
-          email: registrationUserObj?.email || loggedInUser?.email || prev.email,
-
-          mobile: userMobile,
-
-          applicationId: "",
-
-          status: "Documents yet to submit",
-
-          documentsUploaded: docs.length,
-
-          bank: "Yet to assign",
-
-          loanAmount: "₹0",
-
-          dealerCode: registrationUserObj?.dealerCode || "",
-
-        }));
-
+        if (notificationsRes.status === "fulfilled") {
+          setNotifications(unwrap(notificationsRes.value) || []);
+        }
+      } catch (error) {
+        toast.error(error?.response?.data?.message || "Failed to load dashboard.");
+      } finally {
+        setLoading(false);
       }
-
-    } catch (err) {
-
-      console.error("Init load failed", err);
-
-    }
-
-  };
-
-
-
-useEffect(() => {
-
-  isInitializedRef.current = false;
-  fetchData(true);
-
-}, []);
-
-
-
-// Re-fetch documents & remarks when user navigates to Dashboard tab
-useEffect(() => {
-
-  if (activeMenu === "Dashboard") {
-
-    fetchData(false);
-
-  }
-
-}, [activeMenu]);
-
-
-
-// Poll every 20 seconds so admin remarks/status appear without manual refresh
-useEffect(() => {
-
-  const interval = setInterval(() => {
-
-    fetchData(false);
-
-  }, 20000);
-
-  return () => clearInterval(interval);
-
-}, []);
-
-
-
-
-
-  /* VEHICLE DOCS */
-
-
-
-  const [vehicleDocs, setVehicleDocs] =
-
-    useState({
-
-      rc: null,
-
-      insurance: null,
-
-    });
-
-
-
-    const [showPreviewModal, setShowPreviewModal] =
-
-  useState(false);
-
-
-
-const [selectedDocument, setSelectedDocument] =
-
-  useState(null);
-
-
-
-  const [previewUrl, setPreviewUrl] = useState(null);
-
-
-
-const [finalSubmitting, setFinalSubmitting] =
-
-  useState(false);
-
-
-
-  const openPreview = async (doc) => {
-
-  try {
-
-    const res = await fetch(
-
-      `${api.defaults.baseURL}/documents/preview/${doc.documentId}`
-
-    );
-
-
-
-    const blob = await res.blob();
-
-    const url = URL.createObjectURL(blob);
-
-
-
-    setPreviewUrl(url);
-
-    setSelectedDocument(doc);
-
-    setShowPreviewModal(true);
-
-  } catch (err) {
-
-    console.error("Preview Error:", err);
-
-  }
-
-};
-
-
-
-
-
-  /* USER DATA */
-
-
-
-  const [userData, setUserData] =
-
-    useState({
-
-      name: "",
-
-      applicationId: "",
-
-      loanAmount: "₹0",
-
-      bank: "Yet to assign",
-
-      status: "Documents yet to submit",
-
-      documentsUploaded: 0,
-
-      totalDocuments: 8,
-
-      dealerCode: "",
-
-    });
-
-
-
-    const [documentLoading, setDocumentLoading] =
-
-  useState(false);
-
-
-
-const [uploadedDocuments, setUploadedDocuments] =
-
-  useState([]);
-
-
-
-  const handleDocumentUpload = async (
-
-  file,
-
-  documentType
-
-) => {
-
-
-
-  if (!file) {
-
-    alert("Please Select File");
-
-    return;
-
-  }
-
-
-
-  try {
-
-
-
-    setDocumentLoading(true);
-
-
-
-    const formData = new FormData();
-
-
-
-    formData.append("userId", currentUserId); // logged in user id
-
-    formData.append("type", documentType);
-
-    formData.append("file", file);
-
-
-
-    console.log("UPLOAD PAYLOAD");
-
-
-
-    const res =
-
-      await uploadDocument(formData);
-
-
-
-    console.log(
-
-      "DOCUMENT UPLOAD RESPONSE :",
-
-      res.data
-
-    );
-
-
-
-    alert(
-
-      `${documentType} Uploaded Successfully`
-
-    );
-
-
-
-    setUploadedDocuments((prev) => [...prev, res.data.data]);
-
-
-
-  } catch (error) {
-
-
-
-    console.error(
-
-      "DOCUMENT UPLOAD ERROR :",
-
-      error
-
-    );
-
-
-
-    alert(
-
-      error?.response?.data?.message ||
-
-      "Document Upload Failed"
-
-    );
-
-
-
-  } finally {
-
-
-
-    setDocumentLoading(false);
-
-
-
-  }
-
-};
-
-
-
-  const handleReuploadDocument = async (documentId, documentType, file) => {
-
-    if (!file) return;
-
-    try {
-
-      setDocumentLoading(true);
-
-      // 1. Delete old rejected doc
-
-      await api.delete(`/documents/${documentId}`);
-
-      
-
-      // 2. Upload new doc
-
-      const formData = new FormData();
-
-      formData.append("userId", currentUserId);
-
-      formData.append("type", documentType);
-
-      formData.append("file", file);
-
-      
-
-      const res = await api.post("/documents/upload", formData, {
-
-        headers: {
-
-          "Content-Type": "multipart/form-data"
-
-        }
-
-      });
-
-      
-
-      alert("Document re-uploaded successfully!");
-
-      
-
-      // 3. Fetch latest docs
-
-      const docRes = await api.get(`/documents/user/${currentUserId}`);
-
-      setUploadedDocuments(docRes.data.data || []);
-
-    } catch (error) {
-
-      console.error("Re-upload error:", error);
-
-      alert(error?.response?.data?.message || "Failed to re-upload document");
-
-    } finally {
-
-      setDocumentLoading(false);
-
-    }
-
-  };
-
-
-
-  /* STATUS STEPS */
-
-
-
-  const steps = [
-
-    "Documents Submitted",
-
-    "Documents Verified",
-
-    "Sent To Bank",
-
-    "Bank Review",
-
-    "Loan Approved",
-
-    "Amount Disbursed",
-
-  ];
-
-
-
-  const currentStatusStep =
-
-    steps.indexOf(userData.status);
-
-
-
-  /* LOGOUT */
-
-
+    },
+    [session?.dealerCode, session?.email, session?.name, userId]
+  );
+
+  useEffect(() => {
+    fetchDashboardData(true);
+  }, [fetchDashboardData]);
+
+  useEffect(() => {
+    const interval = setInterval(() => fetchDashboardData(false), 30000);
+    return () => clearInterval(interval);
+  }, [fetchDashboardData]);
+
+  useEffect(() => {
+    if (!userId) return;
+    localStorage.setItem(`personal_info_draft_${userId}`, JSON.stringify(personalInfo));
+  }, [personalInfo, userId]);
 
   const handleLogout = () => {
-
-
-
     localStorage.removeItem("role");
-
-
-
+    localStorage.removeItem("token");
+    localStorage.removeItem("userData");
     navigate("/");
-
   };
 
-
-
-  return (
-
-
-
-    <div className="flex min-h-screen bg-[#F4F6F9]">
-
-
-
-      {/* SIDEBAR */}
-
-
-
-      <Sidebar
-
-        sidebarOpen={sidebarOpen}
-
-        setSidebarOpen={setSidebarOpen}
-
-        activeMenu={activeMenu}
-
-        setActiveMenu={setActiveMenu}
-
-        handleLogout={handleLogout}
-
-      />
-
-
-
-      {/* MAIN */}
-
-
-
-      <div className="flex-1 overflow-y-auto">
-
-
-
-        {/* TOPBAR */}
-
-
-
-        <div className="bg-white px-8 py-6 shadow-sm flex items-center justify-between">
-
-
-
-          <div>
-
-
-
-            <h1 className="text-3xl font-bold text-[#0B2A4A]">
-
-              {activeMenu}
-
-            </h1>
-
-
-
-            <p className="text-sm text-gray-500 mt-1">
-
-              Welcome back 👋, {userData?.name || loggedInUser?.name || "User"}
-
-            </p>
-
-
-
-          </div>
-
-
-
-          <div className="bg-[#EAFBF8] px-5 py-3 rounded-2xl border border-[#27D3C3]/20">
-
-
-
-            <p className="text-xs text-gray-500">
-
-              Application ID
-
-            </p>
-
-
-
-            <h3 className="text-lg font-bold text-[#0B2A4A] mt-1">
-
-              {documentsSubmitted ? userData.applicationId : ""}
-
-            </h3>
-
-
-
-          </div>
-
-
-
-        </div>
-
-
-
-        {/* CONTENT */}
-
-
-
-        <div className="p-8">
-
-
-
-          {/* DASHBOARD */}
-
-
-
-          {activeMenu === "Dashboard" && (
-
-
-
-            <div className="space-y-6">
-
-
-
-              {/* HEADER */}
-
-
-
-              <div className="bg-white rounded-3xl p-6 shadow-sm flex items-center justify-between flex-wrap gap-4">
-
-                <div>
-
-                  <h1 className="text-2xl font-bold text-[#0B2A4A]">
-                    Welcome Back 👋
-                  </h1>
-
-                  <p className="text-sm text-gray-500 mt-1">
-                    Track your loan application progress
-                  </p>
-
-                </div>
-
-                <div className="bg-[#EAFBF8] px-5 py-3 rounded-2xl border border-[#27D3C3]/20">
-
-                  <p className="text-xs text-gray-500">
-                    Current Status
-                  </p>
-
-                  <h3 className="text-sm font-bold text-[#27D3C3] mt-1">
-                    {userData.status}
-                  </h3>
-
-                </div>
-
-              </div>
-
-              {/* ACTION REQUIRED: REJECTED DOCUMENTS */}
-              {uploadedDocuments.filter(d => d.status === "REJECTED").length > 0 && (
-                <div className="bg-white rounded-3xl shadow-sm overflow-hidden border-2 border-red-200">
-                  <div className="bg-gradient-to-r from-red-600 to-red-500 px-7 py-5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl">
-                        ⚠️
-                      </div>
-                      <div>
-                        <h2 className="text-xl font-bold text-white">Action Required — Updates</h2>
-                        <p className="text-red-100 text-sm mt-0.5">
-                          {uploadedDocuments.filter(d => d.status === "REJECTED").length} document(s) rejected — please re-upload
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-white/20 px-3 py-1 rounded-xl text-xs text-white font-semibold">
-                      URGENT
-                    </div>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    {uploadedDocuments.filter(d => d.status === "REJECTED").map((doc, idx) => {
-                      const docNames = {
-                        PAN: "PAN Card",
-                        AADHAAR: "Aadhar Card",
-                        AADHAAR_FRONT: "Aadhaar Front",
-                        AADHAAR_BACK: "Aadhaar Back",
-                        LIGHT_BILL: "Light Bill",
-                        RENTAL_AGREEMENT: "Rental Agreement",
-                        RC: "RC Book",
-                        INSURANCE: "Vehicle Insurance",
-                        SALARY_SLIP: "Salary Slip",
-                        APPOINTMENT_LETTER: "Appointment Letter",
-                        ITR_RETURN: "ITR Copy",
-                        BANK_STATEMENT: "Bank Statement",
-                        CAR_FRONT_SIDE_PHOTO: "Car Front Photo",
-                        CAR_BACK_SIDE_PHOTO: "Car Back Photo",
-                      };
-                      const docName = docNames[doc.documentType] || doc.documentType;
-                      return (
-                        <div key={doc.documentId || idx} className="flex flex-col md:flex-row md:items-center gap-4 bg-[#FFF5F5] border border-red-100 rounded-2xl p-5">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-base font-bold text-[#0B2A4A]">{docName}</span>
-                              <span className="bg-red-100 text-red-600 text-xs font-bold px-2 py-0.5 rounded-lg">REJECTED</span>
-                            </div>
-                            <div className="flex items-start gap-2 bg-white rounded-xl p-3 border border-red-100">
-                              <span className="text-red-500 mt-0.5">💬</span>
-                              <div>
-                                <p className="text-xs text-gray-500 font-semibold mb-0.5">Admin Remark:</p>
-                                <p className="text-sm text-gray-700">{doc.remarks ? doc.remarks : <span className="text-gray-400 italic">No remark added.</span>}</p>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-start md:items-end gap-2 min-w-[180px]">
-                            <input
-                              type="file"
-                              accept=".jpg,.jpeg,.png,.pdf"
-                              id={`reupload-dash-${doc.documentId}`}
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files[0];
-                                if (file) await handleReuploadDocument(doc.documentId, doc.documentType, file);
-                              }}
-                            />
-                            <button
-                              onClick={() => document.getElementById(`reupload-dash-${doc.documentId}`).click()}
-                              disabled={documentLoading}
-                              className="bg-[#0B2A4A] hover:bg-[#123E68] disabled:opacity-60 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition flex items-center gap-2"
-                            >
-                              <span>📤</span> Re-upload Document
-                            </button>
-                            <p className="text-xs text-gray-400">PDF, JPG or PNG · max 5MB</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* APPROVED DOCUMENTS */}
-              {uploadedDocuments.filter(d => d.status === "APPROVED").length > 0 && (
-                <div className="bg-white rounded-3xl shadow-sm overflow-hidden border-2 border-green-200 mb-6">
-                  <div className="bg-gradient-to-r from-green-600 to-green-500 px-7 py-5 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl">
-                        ✅
-                      </div>
-                      <div>
-                        <h2 className="text-xl font-bold text-white">Approved Documents</h2>
-                        <p className="text-green-100 text-sm mt-0.5">
-                          {uploadedDocuments.filter(d => d.status === "APPROVED").length} document(s) approved successfully
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-white/20 px-3 py-1 rounded-xl text-xs text-white font-semibold">
-                      VERIFIED
-                    </div>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    {uploadedDocuments.filter(d => d.status === "APPROVED").map((doc, idx) => {
-                      const docNames = {
-                        PAN: "PAN Card",
-                        AADHAAR: "Aadhar Card",
-                        AADHAAR_FRONT: "Aadhaar Front",
-                        AADHAAR_BACK: "Aadhaar Back",
-                        LIGHT_BILL: "Light Bill",
-                        RENTAL_AGREEMENT: "Rental Agreement",
-                        RC: "RC Book",
-                        INSURANCE: "Vehicle Insurance",
-                        SALARY_SLIP: "Salary Slip",
-                        APPOINTMENT_LETTER: "Appointment Letter",
-                        ITR_RETURN: "ITR Copy",
-                        BANK_STATEMENT: "Bank Statement",
-                        CAR_FRONT_SIDE_PHOTO: "Car Front Photo",
-                        CAR_BACK_SIDE_PHOTO: "Car Back Photo",
-                      };
-                      const docName = docNames[doc.documentType] || doc.documentType;
-                      return (
-                        <div key={doc.documentId || idx} className="flex flex-col md:flex-row md:items-center gap-4 bg-[#F2FDF5] border border-green-100 rounded-2xl p-5">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="text-base font-bold text-[#0B2A4A]">{docName}</span>
-                              <span className="bg-green-100 text-green-600 text-xs font-bold px-2 py-0.5 rounded-lg">APPROVED</span>
-                            </div>
-                            <div className="flex items-start gap-2 bg-white rounded-xl p-3 border border-green-100">
-                              <span className="text-green-500 mt-0.5">💬</span>
-                              <div>
-                                <p className="text-xs text-gray-500 font-semibold mb-0.5">Admin Remark:</p>
-                                <p className="text-sm text-gray-700">{doc.remarks ? doc.remarks : <span className="text-gray-400 italic">No remark added.</span>}</p>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* STATS */}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-
-                <div className="bg-white rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500">Loan Amount</p>
-                      <h2 className="text-2xl font-bold text-[#0B2A4A] mt-2">
-                        {userData.loanAmount
-                          ? userData.loanAmount
-                          : <span className="text-sm text-gray-400 font-normal">Not set yet</span>
-                        }
-                      </h2>
-                    </div>
-                    <div className="w-12 h-12 rounded-2xl bg-[#EAFBF8] flex items-center justify-center text-xl">💰</div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500">Documents Uploaded</p>
-                      <h2 className="text-2xl font-bold text-[#0B2A4A] mt-2">{userData.documentsUploaded}</h2>
-                    </div>
-                    <div className="w-12 h-12 rounded-2xl bg-[#EEF6FF] flex items-center justify-center text-xl">📄</div>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500">Assigned Bank</p>
-                      <h2 className="text-sm text-[#0B2A4A] mt-2">{userData.bank}</h2>
-                    </div>
-                    <div className="w-12 h-12 rounded-2xl bg-[#FFF4E5] flex items-center justify-center text-xl">🏦</div>
-                  </div>
-                </div>
-
-                
-
-              </div>
-
-              {!documentsSubmitted ? (
-                <div className="bg-gradient-to-r from-[#0B2A4A] to-[#123E68] rounded-3xl p-6 text-white shadow-sm">
-                  <div className="flex items-center justify-between flex-wrap gap-5">
-                    <div>
-                      <h2 className="text-xl font-bold">Upload Pending Documents</h2>
-                      <p className="text-gray-300 mt-2 text-sm">Complete your KYC and vehicle verification process.</p>
-                    </div>
-                    <button
-                      onClick={() => setActiveMenu("Documents")}
-                      className="bg-[#27D3C3] hover:bg-[#1fb5a7] text-[#0B2A4A] px-5 py-3 rounded-2xl text-sm font-bold transition"
-                    >
-                      Upload Documents
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-gradient-to-r from-green-600 to-green-500 rounded-3xl p-6 text-white shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-2xl">✅</div>
-                    <div>
-                      <h2 className="text-xl font-bold">Documents Submitted Successfully</h2>
-                      <p className="text-green-100 mt-1 text-sm">Your application is under review. Track progress in the Status tab.</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-
-
-            </div>
-
-
-
-          )}
-
-
-
-          {/* DOCUMENTS */}
-
-
-
-          {activeMenu === "Documents" && (
-
-
-
-            <div className="max-w-5xl mx-auto">
-
-              {/* IF SUBMITTED — show uploaded docs list instead of upload form */}
-              {documentsSubmitted ? (
-                <div className="space-y-6">
-                  <div className="bg-white rounded-3xl p-6 shadow-sm">
-                    <h1 className="text-2xl font-bold text-[#0B2A4A]">Your Documents</h1>
-                    <p className="text-sm text-gray-500 mt-1">Documents submitted for your loan application</p>
-                  </div>
-                  {uploadedDocuments.length === 0 ? (
-                    <div className="bg-white rounded-3xl p-8 shadow-sm text-center text-gray-400">No documents found.</div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                      {uploadedDocuments.map((doc, index) => {
-                        const docLabels = {
-                          PAN: "PAN Card", AADHAAR: "Aadhaar Card", AADHAAR_FRONT: "Aadhaar Front",
-                          AADHAAR_BACK: "Aadhaar Back", LIGHT_BILL: "Light Bill", RENTAL_AGREEMENT: "Rental Agreement",
-                          RC: "RC Copy", INSURANCE: "Insurance Copy", SALARY_SLIP: "Salary Slip",
-                          APPOINTMENT_LETTER: "Appointment Letter", ITR_RETURN: "ITR Copy",
-                          BANK_STATEMENT: "Bank Statement", CAR_FRONT_SIDE_PHOTO: "Car Front Photo",
-                          CAR_BACK_SIDE_PHOTO: "Car Back Photo", CHASSIS_NUMBER: "Chassis Number",
-                          ODOMETER_READING: "Odometer Reading",
-                        };
-                        const label = docLabels[doc.documentType] || (doc.documentType || "").replace(/_/g, " ");
-                        const statusColor = doc.status === "APPROVED"
-  ? "bg-green-100 text-green-700"
-  : doc.status === "REJECTED"
-  ? "bg-red-100 text-red-700"
-  : doc.status === "VERIFIED"
-  ? "bg-blue-100 text-blue-700"
-  : "bg-yellow-100 text-yellow-700";
-                        return (
-                          <div key={doc.documentId || index} className="bg-white border border-gray-200 rounded-3xl p-5 shadow-sm">
-                            <div className="flex items-start justify-between mb-3">
-                              <div>
-                                <h4 className="font-bold text-[#0B2A4A]">{label}</h4>
-                                <p className="text-xs text-gray-400 mt-1">{doc.fileName || "Uploaded"}</p>
-                              </div>
-                              <span className={`text-xs font-bold px-3 py-1 rounded-full ${statusColor}`}>{doc.status || "PENDING"}</span>
-                            </div>
-                            {doc.remarks && (
-                              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 mb-3">
-                                <p className="text-xs text-amber-700 font-semibold">Admin Remark:</p>
-                                <p className="text-xs text-gray-700 mt-0.5">{doc.remarks}</p>
-                              </div>
-                            )}
-                            <button
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch(`${api.defaults.baseURL}/documents/preview/${doc.documentId}`, {
-                                    headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-                                  });
-                                  const blob = await res.blob();
-                                  const url = URL.createObjectURL(blob);
-                                  setPreviewUrl(url);
-                                  setSelectedDocument(doc);
-                                  setShowPreviewModal(true);
-                                } catch (e) { alert("Failed to load preview"); }
-                              }}
-                              className="w-full bg-[#0B2A4A] hover:bg-[#081f36] text-white py-2.5 rounded-2xl text-sm font-semibold transition"
-                            >
-                              View {label}
-                            </button>
-                            {doc.status === "REJECTED" && (
-                              <div className="mt-2">
-                                <input type="file" accept=".jpg,.jpeg,.png,.pdf" id={`reup-${doc.documentId}`} className="hidden"
-                                  onChange={async (e) => {
-                                    const file = e.target.files[0];
-                                    if (file) await handleReuploadDocument(doc.documentId, doc.documentType, file);
-                                  }}
-                                />
-                                <button onClick={() => document.getElementById(`reup-${doc.documentId}`).click()}
-                                  disabled={documentLoading}
-                                  className="w-full bg-red-600 hover:bg-red-700 text-white py-2.5 rounded-2xl text-sm font-semibold transition disabled:opacity-50"
-                                >
-                                  📤 Re-upload {label}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ) : (
-              <div>
-
-              {/* HEADER */}
-
-
-
-              <div className="bg-white rounded-3xl p-6 shadow-sm mb-6">
-
-
-
-                <h1 className="text-2xl font-bold text-[#0B2A4A]">
-
-                  Upload Documents
-
-                </h1>
-
-
-
-                <p className="text-sm text-gray-500 mt-2">
-
-                  Complete your KYC and verification process
-
-                </p>
-
-
-
-                {/* STEPS */}
-
-
-
-                <div className="flex items-center gap-3 mt-6 overflow-x-auto">
-
-
-
-                  {[
-
-                    "Personal information",
-
-                    "KYC",
-
-                    "Residential",
-
-                    "Income",
-
-                    "Vehicle",
-
-                    "Verify",
-
-                  ].map((step, index) => (
-
-
-
-                    <div
-
-                      key={index}
-
-                      className={`px-5 py-2 rounded-2xl text-sm font-semibold whitespace-nowrap
-
-
-
-                      ${
-
-                        currentStep === index + 1
-
-                          ? "bg-[#27D3C3] text-[#0B2A4A]"
-
-                          : "bg-[#F4F6F9] text-gray-500"
-
-                      }`}
-
-                    >
-
-                      {index + 1}. {step}
-
-                    </div>
-
-
-
-                  ))}
-
-
-
-                </div>
-
-
-
-              </div>
-
-
-
-              {/* FORM */}
-
-
-
-              {/* BUTTONS */}
-
-
-
-<div className="bg-white rounded-3xl p-6 shadow-sm">
-
-
-
-  {/* STEP 1 â€” PERSONAL INFORMATION */}
-
-
-
-  {currentStep === 1 && (
-
-
-
-    <div>
-
-
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-
-        Personal Information
-
-      </h2>
-
-
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-
-        Enter customer personal details
-
-      </p>
-
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Full Name
-
-          </label>
-
-
-
-          <input
-
-            type="text"
-
-            placeholder="Enter Full Name"
-
-            value={userData?.name || ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                name: e.target.value,
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Mobile Number
-
-          </label>
-
-
-
-          <input
-
-            type="text"
-
-            placeholder="Enter Mobile Number"
-
-            value={userData?.mobile || ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                mobile: e.target.value,
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Email Address
-
-          </label>
-
-
-
-          <input
-
-            type="email"
-
-            placeholder="Enter Email"
-
-            value={userData?.email || ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                email: e.target.value,
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Loan Amount
-
-          </label>
-
-
-
-          <input
-
-            type="text"
-
-            placeholder="Enter Loan Amount"
-
-            value={userData?.loanAmount ? String(userData.loanAmount).replace(/[^0-9.]/g, '') : ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                loanAmount: e.target.value,
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Date Of Birth
-
-          </label>
-
-
-
-          <input
-
-            type="date"
-
-            value={userData?.dob || ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                dob: e.target.value,
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            City <span className="text-red-500">*</span>
-
-          </label>
-
-          <input
-
-            type="text"
-
-            placeholder="Enter City"
-
-            value={userData?.city || ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                city: e.target.value,
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            State <span className="text-red-500">*</span>
-
-          </label>
-
-          <input
-
-            type="text"
-
-            placeholder="Enter State"
-
-            value={userData?.state || ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                state: e.target.value,
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Pincode <span className="text-red-500">*</span>
-
-          </label>
-
-          <input
-
-            type="text"
-
-            maxLength={6}
-
-            placeholder="Enter Pincode"
-
-            value={userData?.pincode || ""}
-
-            onChange={(e) =>
-
-              setUserData((prev) => ({
-
-                ...prev,
-
-                pincode: e.target.value.replace(/\D/g, ""),
-
-              }))
-
-            }
-
-            className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5"
-
-          />
-
-        </div>
-
-
-
-        
-
-
-
-      </div>
-
-
-
-    </div>
-
-
-
-  )}
-
-
-
-  {/* STEP 2 â€” KYC */}
-
-
-
-  {currentStep === 2 && (
-
-
-
-    <div>
-
-
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-
-        KYC Documents
-
-      </h2>
-
-
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-
-        Upload PAN Card and Aadhaar Card
-
-      </p>
-
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
-
-        {/* PAN */}
-
-
-
-        <div className="border border-gray-200 rounded-3xl p-5 bg-[#F8FAFC]">
-
-
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Upload PAN Card
-
-          </label>
-
-
-
-          <input
-
-            type="file"
-
-            accept=".jpg,.jpeg,.png,.pdf"
-
-            onChange={async (e) => {
-
-
-
-  const file = e.target.files[0];
-
-
-
-  setUserData((prev) => ({
-
-    ...prev,
-
-    panFile: file,
-
-  }));
-
-
-
-  await handleDocumentUpload(
-
-    file,
-
-    "PAN"
-
-  );
-
-}}
-
-            className="w-full text-sm
-
-            file:mr-4 file:px-4 file:py-2
-
-            file:rounded-xl file:border-0
-
-            file:bg-[#0B2A4A]
-
-            file:text-white"
-
-          />
-
-
-
-        </div>
-
-
-
-        {/* AADHAAR */}
-
-
-
-        {/* AADHAAR */}
-
-
-
-<div className="border border-gray-200 rounded-3xl p-5 bg-[#F8FAFC]">
-
-
-
-  <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-    Upload Aadhaar Card
-
-  </label>
-
-
-
-  <input
-
-    type="file"
-
-    accept=".jpg,.jpeg,.png,.pdf"
-
-    onChange={async (e) => {
-
-
-
-      const file = e.target.files[0];
-
-
-
-      if (!file) return;
-
-
-
-      setUserData((prev) => ({
-
-        ...prev,
-
-        aadhaarFile: file,
-
-      }));
-
-
-
-      await handleDocumentUpload(
-
-        file,
-
-        "AADHAAR"
-
-      );
-
-    }}
-
-    className="w-full text-sm
-
-    file:mr-4 file:px-4 file:py-2
-
-    file:rounded-xl file:border-0
-
-    file:bg-[#0B2A4A]
-
-    file:text-white"
-
-  />
-
-
-
-</div>
-
-
-
-      </div>
-
-
-
-    </div>
-
-
-
-  )}
-
-
-
-  {/* STEP 3 â€” RESIDENTIAL */}
-
-
-
-  {currentStep === 3 && (
-
-
-
-    <div>
-
-
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-
-        Residential Details
-
-      </h2>
-
-
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-
-        Upload Light Bill or Rental Agreement
-
-      </p>
-
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-
-
-
-        {/* LIGHT BILL */}
-
-
-
-        <div className="border border-gray-200 rounded-3xl p-5 bg-[#F8FAFC]">
-
-
-
-          <h3 className="font-semibold text-[#0B2A4A]">
-
-            Light Bill
-
-          </h3>
-
-
-
-          <p className="text-xs text-gray-500 mt-1">
-
-            Upload latest electricity bill
-
-          </p>
-
-
-
-          <input
-
-            type="file"
-
-            accept=".jpg,.jpeg,.png,.pdf"
-
-            onChange={async (e) => {
-
-
-
-  const file = e.target.files[0];
-
-
-
-  setUserData((prev) => ({
-
-    ...prev,
-
-    lightBill: file,
-
-  }));
-
-
-
-  await handleDocumentUpload(
-
-    file,
-
-    "LIGHT_BILL"
-
-  );
-
-}}
-
-            className="mt-4 w-full text-sm
-
-            file:mr-4 file:px-4 file:py-2
-
-            file:rounded-xl file:border-0
-
-            file:bg-[#0B2A4A]
-
-            file:text-white"
-
-          />
-
-
-
-        </div>
-
-
-
-        {/* RENT AGREEMENT */}
-
-
-
-        <div className="border border-gray-200 rounded-3xl p-5 bg-[#F8FAFC]">
-
-
-
-          <h3 className="font-semibold text-[#0B2A4A]">
-
-            Rent Agreement
-
-          </h3>
-
-
-
-          <p className="text-xs text-gray-500 mt-1">
-
-            Upload rental agreement copy
-
-          </p>
-
-
-
-          <input
-
-            type="file"
-
-            accept=".jpg,.jpeg,.png,.pdf"
-
-            onChange={async (e) => {
-
-
-
-  const file = e.target.files[0];
-
-
-
-  setUserData((prev) => ({
-
-    ...prev,
-
-    rentAgreement: file,
-
-  }));
-
-
-
-  await handleDocumentUpload(
-
-    file,
-
-    "RENTAL_AGREEMENT"
-
-  );
-
-}}
-
-            className="mt-4 w-full text-sm
-
-            file:mr-4 file:px-4 file:py-2
-
-            file:rounded-xl file:border-0
-
-            file:bg-[#0B2A4A]
-
-            file:text-white"
-
-          />
-
-
-
-        </div>
-
-
-
-      </div>
-
-
-
-    </div>
-
-
-
-  )}
-
-
-
-  {/* STEP 4 â€” INCOME */}
-
-
-
-  {currentStep === 4 && (
-
-
-
-    <div>
-
-
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-
-        Income Proof
-
-      </h2>
-
-
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-
-        Upload employment and income documents
-
-      </p>
-
-
-
-      <select
-
-        value={userData?.employmentType || ""}
-
-        onChange={(e) =>
-
-          setUserData((prev) => ({
-
-            ...prev,
-
-            employmentType: e.target.value,
-
-          }))
-
+  const persistPersonalInfo = async (payload) => {
+    if (hasPersonalInfo) {
+      try {
+        await api.put(`/personal-info/update/${userId}`, payload);
+        return;
+      } catch (error) {
+        if (![404, 409, 500].includes(error?.response?.status)) {
+          throw error;
         }
-
-        className="w-full h-14 rounded-2xl border border-gray-200 bg-[#F8FAFC] px-5 mb-8"
-
-      >
-
-        <option value="">Select Employment Type</option>
-
-        <option value="Salaried">Salaried</option>
-
-        <option value="Self Employed">Self Employed</option>
-
-      </select>
-
-
-
-      {/* SALARIED */}
-
-
-
-      {userData?.employmentType === "Salaried" && (
-
-
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
-
-          {[
-
-  {
-
-    label: "Appointment Letter",
-
-    type: "APPOINTMENT_LETTER",
-
-  },
-
-  {
-
-    label: "3 Months Salary Slips",
-
-    type: "SALARY_SLIP",
-
-  },
-
-  {
-
-    label: "6 Months Bank Statement",
-
-    type: "BANK_STATEMENT",
-
-  },
-
-].map((doc, index) => (
-
-
-
-            <div
-
-              key={index}
-
-              className="border border-gray-200 rounded-3xl p-5 bg-[#F8FAFC]"
-
-            >
-
-
-
-              <h3 className="font-semibold text-[#0B2A4A]">
-
-                {doc.label}
-
-              </h3>
-
-
-
-              <input
-
-  type="file"
-
-  accept=".jpg,.jpeg,.png,.pdf"
-
-  onChange={async (e) => {
-
-
-
-    const file = e.target.files[0];
-
-
-
-    await handleDocumentUpload(
-
-      file,
-
-      doc.type
-
-    );
-
-  }}
-
-                accept=".jpg,.jpeg,.png,.pdf"
-
-                className="mt-4 w-full text-sm
-
-                file:mr-4 file:px-4 file:py-2
-
-                file:rounded-xl file:border-0
-
-                file:bg-[#0B2A4A]
-
-                file:text-white"
-
-              />
-
-
-
-            </div>
-
-
-
-          ))}
-
-
-
-        </div>
-
-
-
-      )}
-
-
-
-      {/* SELF EMPLOYED */}
-
-
-
-      {userData?.employmentType === "Self Employed" && (
-
-
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
-
-          {[
-
-  {
-
-    label: "ITR Copy",
-
-    type: "ITR_RETURN",
-
-  },
-
-  {
-
-    label: "6 Months Bank Statement",
-
-    type: "BANK_STATEMENT",
-
-  },
-
-].map((doc, index) => (
-
-
-
-            <div
-
-              key={index}
-
-              className="border border-gray-200 rounded-3xl p-5 bg-[#F8FAFC]"
-
-            >
-
-
-
-              <h3 className="font-semibold text-[#0B2A4A]">
-
-                {doc.label}
-
-              </h3>
-
-
-
-              <input
-
-  type="file"
-
-  accept=".jpg,.jpeg,.png,.pdf"
-
-  onChange={async (e) => {
-
-
-
-    const file = e.target.files[0];
-
-
-
-    await handleDocumentUpload(
-
-      file,
-
-      doc.type
-
-    );
-
-  }}
-
-                accept=".jpg,.jpeg,.png,.pdf"
-
-                className="mt-4 w-full text-sm
-
-                file:mr-4 file:px-4 file:py-2
-
-                file:rounded-xl file:border-0
-
-                file:bg-[#0B2A4A]
-
-                file:text-white"
-
-              />
-
-
-
-            </div>
-
-
-
-          ))}
-
-
-
-        </div>
-
-
-
-      )}
-
-
-
-    </div>
-
-
-
-  )}
-
-
-
-  {/* STEP 5 â€” VEHICLE */}
-
-
-
-  {currentStep === 5 && (
-
-
-
-    <div>
-
-
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-
-        Vehicle Documents
-
-      </h2>
-
-
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-
-        Upload vehicle related documents and enter vehicle details
-
-      </p>
-
-
-
-
-
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
-
-        {[
-
-  {
-
-    label: "RC Copy",
-
-    type: "RC",
-
-  },
-
-  {
-
-    label: "Insurance Copy",
-
-    type: "INSURANCE",
-
-  },
-
-  {
-
-    label: "Front Car Image",
-
-    type: "CAR_FRONT_SIDE_PHOTO",
-
-  },
-
-  {
-
-    label: "Rear Car Image",
-
-    type: "CAR_BACK_SIDE_PHOTO",
-
-  },
-
-  {
-
-    label: "Chassis Number Image",
-
-    type: "CHASSIS_NUMBER",
-
-  },
-
-  {
-
-    label: "Odometer Image (KM Visible)",
-
-    type: "ODOMETER_READING",
-
-  },
-
-].map((doc, index) => (
-
-
-
-          <div
-
-            key={index}
-
-            className="border border-gray-200 rounded-3xl p-5 bg-[#F8FAFC]"
-
-          >
-
-
-
-            <h3 className="font-semibold text-[#0B2A4A]">
-
-              {doc.label}
-
-            </h3>
-
-
-
-            <input
-
-  type="file"
-
-  accept=".jpg,.jpeg,.png,.pdf"
-
-  onChange={async (e) => {
-
-
-
-    const file = e.target.files[0];
-
-
-
-    await handleDocumentUpload(
-
-      file,
-
-      doc.type
-
-    );
-
-  }}
-
-              accept=".jpg,.jpeg,.png,.pdf"
-
-              className="mt-4 w-full text-sm
-
-              file:mr-4 file:px-4 file:py-2
-
-              file:rounded-xl file:border-0
-
-              file:bg-[#0B2A4A]
-
-              file:text-white"
-
-            />
-
-
-
-          </div>
-
-
-
-        ))}
-
-
-
-      </div>
-
-
-
-    </div>
-
-
-
-  )}
-
-
-
-  {/* STEP 6 â€” VERIFY */}
-
-
-
-  {/* STEP 6 — VERIFY */}
-
-
-
-{currentStep === 6 && (
-
-
-
-  <div>
-
-
-
-    <div className="text-center mb-8">
-
-
-
-      <div
-
-        className="w-24 h-24 mx-auto rounded-full
-
-        bg-[#EAFBF8]
-
-        flex items-center justify-center text-5xl"
-
-      >
-
-        ✅
-
-      </div>
-
-
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A] mt-6">
-
-        Verify Details
-
-      </h2>
-
-
-
-      <p className="text-gray-500 mt-3">
-
-        Please verify all uploaded documents before final submit
-
-      </p>
-
-
-
-    </div>
-
-
-
-    {/* USER DETAILS */}
-
-
-
-    <div
-
-      className="bg-[#F8FAFC]
-
-      rounded-3xl p-6 space-y-4 mb-8"
-
-    >
-
-
-
-      <div>
-
-        <span className="font-semibold text-[#0B2A4A]">
-
-          Name:
-
-        </span>{" "}
-
-        {userData?.name}
-
-      </div>
-
-
-
-      <div>
-
-        <span className="font-semibold text-[#0B2A4A]">
-
-          Mobile:
-
-        </span>{" "}
-
-        {userData?.mobile}
-
-      </div>
-
-
-
-      <div>
-
-        <span className="font-semibold text-[#0B2A4A]">
-
-          PAN:
-
-        </span>{" "}
-
-        {userData?.pan}
-
-      </div>
-
-
-
-      <div>
-
-        <span className="font-semibold text-[#0B2A4A]">
-
-          Aadhaar:
-
-        </span>{" "}
-
-        {userData?.aadhaar}
-
-      </div>
-
-
-
-      <div>
-
-        <span className="font-semibold text-[#0B2A4A]">
-
-          Employment:
-
-        </span>{" "}
-
-        {userData?.employmentType}
-
-      </div>
-
-
-
-      
-
-
-
-    </div>
-
-
-
-    {/* DOCUMENT PREVIEW GRID */}
-
-
-
-    <div>
-
-
-
-      <h3 className="text-xl font-bold text-[#0B2A4A] mb-5">
-
-        Uploaded Documents
-
-      </h3>
-
-
-
-      {uploadedDocuments.length === 0 ? (
-
-
-
-        <div
-
-          className="bg-[#FFF4F4]
-
-          border border-red-200
-
-          text-red-500
-
-          rounded-2xl p-5"
-
-        >
-
-          No documents uploaded yet.
-
-        </div>
-
-
-
-      ) : (
-
-
-
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-
-
-
-          {uploadedDocuments.map((doc, index) => (
-
-
-
-            <div
-
-              key={index}
-
-              className="bg-white border border-gray-200
-
-              rounded-3xl p-5 shadow-sm"
-
-            >
-
-
-
-              <div className="flex items-center justify-between">
-
-
-
-                <div>
-
-
-
-                  <h4 className="font-bold text-[#0B2A4A]">
-
-                    {doc.documenttype}
-
-                  </h4>
-
-
-
-                  <p className="text-xs text-gray-500 mt-1">
-
-                    Uploaded Successfully
-
-                  </p>
-
-
-
-                </div>
-
-
-
-                <div
-
-                  className="w-12 h-12 rounded-2xl
-
-                  bg-[#EAFBF8]
-
-                  flex items-center justify-center text-2xl"
-
-                >
-
-                  📄
-
-                </div>
-
-
-
-              </div>
-
-
-
-              <button
-
-                onClick={() => openPreview(doc)}
-
-                className="mt-5 w-full
-
-                bg-[#0B2A4A]
-
-                hover:bg-[#081f36]
-
-                text-white py-3 rounded-2xl
-
-                text-sm font-semibold"
-
-              >
-
-                View Document
-
-              </button>
-
-
-
-            </div>
-
-
-
-          ))}
-
-
-
-        </div>
-
-
-
-      )}
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-
-)}
-
-
-
-  {/* BUTTONS */}
-
-
-
-  <div className="flex items-center justify-between mt-10">
-
-
-
-    <button
-
-      disabled={currentStep === 1}
-
-      onClick={() =>
-
-        setCurrentStep((prev) => prev - 1)
-
       }
-
-      className={`px-6 py-3 rounded-2xl text-sm font-semibold
-
-      ${
-
-        currentStep === 1
-
-          ? "bg-gray-200 text-gray-400 cursor-not-allowed"
-
-          : "bg-[#F4F6F9] hover:bg-gray-200 text-[#0B2A4A]"
-
-      }`}
-
-    >
-
-      â† Previous
-
-    </button>
-
-
-
-    {currentStep !== 6 ? (
-
-
-
-      <button
-
-        onClick={handleNextStep}
-
-        className="bg-[#0B2A4A] hover:bg-[#081f36]
-
-        text-white px-6 py-3 rounded-2xl
-
-        text-sm font-semibold"
-
-      >
-
-        Next →
-
-      </button>
-
-
-
-    ) : (
-
-
-
-      <button
-
-  disabled={finalSubmitting}
-
-  onClick={async () => {
-
-
-
-    try {
-
-
-
-      setFinalSubmitting(true);
-
-
-
-      await api.post(`/loan-applications/submit/${userData.applicationId}`);
-
-
-
-      alert(
-
-        "Documents Submitted Successfully"
-
-      );
-
-
-
-      setDocumentsSubmitted(true);
-
-
-
-      setUserData((prev) => ({
-
-        ...prev,
-
-        status: "Documents Submitted",
-
-      }));
-
-
-
-      setCurrentStep(1);
-
-
-
-      setActiveMenu("Status");
-      // Refresh data to reflect submitted status
-      await fetchData(true);
-
-
-
-
-    } catch (error) {
-
-
-
-      console.error(error);
-
-
-
-      alert(error?.response?.data?.message || "Submission Failed");
-
-
-
-    } finally {
-
-
-
-      setFinalSubmitting(false);
-
-
-
     }
 
-
-
-  }}
-
-  className="bg-[#27D3C3] hover:bg-[#1fb5a7]
-
-  text-[#0B2A4A] px-8 py-3 rounded-2xl
-
-  text-sm font-bold disabled:opacity-50"
-
->
-
-
-
-  {finalSubmitting
-
-    ? "Submitting..."
-
-    : "Final Submit"}
-
-
-
-</button>
-
-
-
-    )}
-
-
-
-  </div>
-
-
-
-</div>
-
-
-
-
-            </div>
-            )}
-
-            </div>
-
-          )}
-
-{/* DOCUMENT PREVIEW MODAL */}
-
-{showPreviewModal && selectedDocument && (
-
-  <div
-    className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-    onClick={() => setShowPreviewModal(false)}
-  >
-    <div className="bg-white w-full max-w-lg rounded-3xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h2 className="text-xl font-bold text-[#0B2A4A]">
-            {({
-              PAN: "PAN Card", AADHAAR: "Aadhaar Card", LIGHT_BILL: "Light Bill",
-              RENTAL_AGREEMENT: "Rental Agreement", RC: "RC Copy", INSURANCE: "Insurance Copy",
-              SALARY_SLIP: "Salary Slip", APPOINTMENT_LETTER: "Appointment Letter",
-              ITR_RETURN: "ITR Copy", BANK_STATEMENT: "Bank Statement",
-              CAR_FRONT_SIDE_PHOTO: "Car Front Photo", CAR_BACK_SIDE_PHOTO: "Car Back Photo",
-            })[selectedDocument.documentType] || (selectedDocument.documentType || "Document").replace(/_/g, " ")}
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">Document Preview</p>
-        </div>
-        <button onClick={() => setShowPreviewModal(false)} className="w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-gray-200 flex items-center justify-center">✕</button>
-      </div>
-      <div className="border border-gray-200 rounded-2xl overflow-hidden flex items-center justify-center bg-[#F8FAFC] min-h-[300px]">
-        {previewUrl && (
-          selectedDocument.fileType?.includes("pdf") ? (
-            <iframe src={previewUrl} className="w-full h-[400px]" title="Document Preview" />
-          ) : (
-            <img src={previewUrl} alt="Document Preview" className="max-w-full max-h-[400px] object-contain" />
-          )
-        )}
-      </div>
-    </div>
-  </div>
-)}
-
-          {/* STATUS */}
-
-
-
-{activeMenu === "Status" && (
-
-
-
-  <div className="max-w-5xl mx-auto">
-
-
-
-    {/* STATUS PROGRESS */}
-
-
-
-    <div className="bg-white rounded-[32px] p-7 shadow-sm border border-gray-100">
-
-
-
-      {/* HEADER */}
-
-
-
-      <div className="flex items-center justify-between flex-wrap gap-4 mb-8">
-
-
-
-  <div>
-
-
-
-    <h2 className="text-2xl font-bold text-[#0B2A4A]">
-
-      Loan Journey
-
-    </h2>
-
-
-
-    <p className="text-sm text-gray-500 mt-1">
-
-      Your application is moving smoothly through verification
-
-    </p>
-
-
-
-  </div>
-
-
-
-  {/* RIGHT SIDE */}
-
-
-
-  <div className="flex items-center gap-3">
-
-
-
-    {/* STATUS PILL */}
-
-
-
-    <div
-
-      className="bg-gradient-to-r from-[#EAFBF8] to-[#F4FFFD]
-
-      border border-[#27D3C3]/20
-
-      px-5 py-3 rounded-2xl"
-
-    >
-
-
-
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">
-
-        Current Stage
-
-      </p>
-
-
-
-      <h3 className="text-sm font-bold text-[#0B2A4A] mt-1">
-
-        {userData.status}
-
-      </h3>
-
-
-
-    </div>
-  </div>
-
-
-
-</div>
-
-
-
-      {/* TIMELINE */}
-
-
-
-      <div className="relative">
-
-
-
-        {/* MAIN LINE */}
-
-
-
-        <div
-
-          className="absolute left-5 top-2 bottom-2
-
-          w-[3px] bg-gray-200 rounded-full"
-
-        ></div>
-
-
-
-        {/* ACTIVE LINE */}
-
-
-
-        <div
-
-          className="absolute left-5 top-2
-
-          w-[3px] bg-[#27D3C3] rounded-full transition-all duration-500"
-
-          style={{
-
-            height: `${currentStatusStep * 112}px`,
-
-          }}
-
-        ></div>
-
-
-
-        <div className="space-y-6">
-
-
-
-          {steps.map((step, index) => {
-
-
-
-            const completed =
-
-              index < currentStatusStep;
-
-
-
-            const active =
-
-              index === currentStatusStep;
-
-
-
-            return (
-
-
-
-              <div
-
-                key={index}
-
-                className="relative flex items-start gap-5"
-
-              >
-
-
-
-                {/* STEP ICON */}
-
-
-
-                <div
-
-                  className={`relative z-10 min-w-[42px] h-[42px]
-
-                  rounded-full flex items-center justify-center
-
-                  text-sm font-bold transition-all duration-300
-
-
-
-                  ${
-
-                    completed
-
-                      ? "bg-[#27D3C3] text-[#0B2A4A]"
-
-                      : active
-
-                      ? "bg-[#0B2A4A] text-white ring-4 ring-[#27D3C3]/20"
-
-                      : "bg-white border-2 border-gray-300 text-gray-400"
-
-                  }`}
-
-                >
-
-
-
-                  {completed ? "✓" : index + 1}
-
-
-
-                </div>
-
-
-
-                {/* CARD */}
-
-
-
-                <div
-
-                  className={`flex-1 rounded-3xl border p-5 transition-all duration-300
-
-
-
-                  ${
-
-                    active
-
-                      ? "bg-[#0B2A4A] border-[#0B2A4A] shadow-lg"
-
-                      : completed
-
-                      ? "bg-[#F2FFFC] border-[#27D3C3]/20"
-
-                      : "bg-[#FAFAFA] border-gray-200"
-
-                  }`}
-
-                >
-
-
-
-                  <div className="flex items-start justify-between gap-4 flex-wrap">
-
-
-
-                    {/* LEFT */}
-
-
-
-                    <div>
-
-
-
-                      <div className="flex items-center gap-3">
-
-
-
-                        <h3
-
-                          className={`text-base font-bold
-
-
-
-                          ${
-
-                            active
-
-                              ? "text-white"
-
-                              : completed
-
-                              ? "text-[#0B2A4A]"
-
-                              : "text-gray-500"
-
-                          }`}
-
-                        >
-
-
-
-                          {step}
-
-
-
-                        </h3>
-
-
-
-                        {/* Smart Status Dot */}
-                        {(() => {
-                          const hasActionNeeded = active && (
-                            uploadedDocuments.filter(d => d.status === "REJECTED" || d.remarks).length > 0 ||
-                            userRemarkData.hasRemark
-                          );
-
-                          const rejectedDocs = uploadedDocuments.filter(d => d.status === "REJECTED");
-                          const remarkDocs = uploadedDocuments.filter(d => d.remarks && d.status !== "REJECTED");
-                          const docNames = {
-                            PAN: "PAN Card", AADHAAR: "Aadhaar Card", AADHAAR_FRONT: "Aadhaar Front",
-                            AADHAAR_BACK: "Aadhaar Back", LIGHT_BILL: "Light Bill", RENTAL_AGREEMENT: "Rental Agreement",
-                            RC: "RC Book", INSURANCE: "Vehicle Insurance", SALARY_SLIP: "Salary Slip",
-                            APPOINTMENT_LETTER: "Appointment Letter", ITR_RETURN: "ITR Copy",
-                            BANK_STATEMENT: "Bank Statement", CAR_FRONT_SIDE_PHOTO: "Car Front Photo",
-                            CAR_BACK_SIDE_PHOTO: "Car Back Photo",
-                          };
-
-                          if (hasActionNeeded) {
-                            return (
-                              <div className="relative group ml-1">
-                                {/* Ping animation */}
-                                <span className="absolute inset-0 w-3 h-3 bg-red-500 rounded-full animate-ping opacity-75" />
-                                {/* Solid red dot */}
-                                <span className="relative block w-3 h-3 bg-red-500 rounded-full cursor-pointer" />
-
-                                {/* Hover Tooltip */}
-                                <div className="absolute left-5 top-1/2 -translate-y-1/2 z-50 hidden group-hover:block w-72 pointer-events-none">
-                                  <div className="bg-[#0B2A4A] text-white rounded-2xl shadow-2xl p-4 text-left border border-red-400/30">
-                                    <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/10">
-                                      <span className="text-base">⚠️</span>
-                                      <p className="text-sm font-bold text-red-300">Action Required</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                      {userRemarkData.hasRemark && (
-                                        <div className="flex items-start gap-2">
-                                          <span className="text-amber-400 text-xs mt-0.5">💬</span>
-                                          <p className="text-xs text-gray-300 leading-relaxed">
-                                            <span className="font-semibold text-white">Admin Remark:</span> {userRemarkData.remark}
-                                          </p>
-                                        </div>
-                                      )}
-                                      {rejectedDocs.map((doc, i) => (
-                                        <div key={i} className="flex items-start gap-2">
-                                          <span className="text-red-400 text-xs mt-0.5">❌</span>
-                                          <p className="text-xs text-gray-300 leading-relaxed">
-                                            <span className="font-semibold text-white">{docNames[doc.documentType] || doc.documentType}</span> rejected
-                                            {doc.remarks && <span className="text-gray-400"> — {doc.remarks}</span>}
-                                          </p>
-                                        </div>
-                                      ))}
-                                      {remarkDocs.map((doc, i) => (
-                                        <div key={i} className="flex items-start gap-2">
-                                          <span className="text-amber-400 text-xs mt-0.5">💬</span>
-                                          <p className="text-xs text-gray-300 leading-relaxed">
-                                            <span className="font-semibold text-white">{docNames[doc.documentType] || doc.documentType}:</span> {doc.remarks}
-                                          </p>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                  {/* Arrow */}
-                                  <div className="absolute left-[-6px] top-1/2 -translate-y-1/2 w-3 h-3 bg-[#0B2A4A] rotate-45 border-l border-b border-red-400/30" />
-                                </div>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div
-                              className={`w-2.5 h-2.5 rounded-full ${
-                                completed
-                                  ? "bg-[#27D3C3]"
-                                  : active
-                                  ? "bg-[#27D3C3] animate-pulse"
-                                  : "bg-gray-300"
-                              }`}
-                            />
-                          );
-                        })()}
-
-
-                      </div>
-
-
-
-                      <p
-
-                        className={`text-sm mt-2 leading-relaxed
-
-
-
-                        ${
-
-                          active
-
-                            ? "text-gray-300"
-
-                            : completed
-
-                            ? "text-gray-500"
-
-                            : "text-gray-400"
-
-                        }`}
-
-                      >
-
-
-
-                        {active
-
-                          ? "Your application is currently being processed at this stage."
-
-                          : completed
-
-                          ? "This stage has been completed successfully."
-
-                          : "This stage will begin automatically once previous verification is completed."}
-
-
-
-                      </p>
-
-
-
-                    </div>
-
-
-
-                    {/* STATUS BADGE */}
-
-
-
-                    <div>
-
-
-
-                      {active ? (
-
-
-
-                        <span
-
-                          className="bg-[#27D3C3]
-
-                          text-[#0B2A4A]
-
-                          text-[11px] font-bold
-
-                          px-4 py-2 rounded-full
-
-                          tracking-wide"
-
-                        >
-
-                          IN PROGRESS
-
-                        </span>
-
-
-
-                      ) : completed ? (
-
-
-
-                        <span
-
-                          className="bg-[#27D3C3]/15
-
-                          text-[#0B2A4A]
-
-                          text-[11px] font-bold
-
-                          px-4 py-2 rounded-full
-
-                          tracking-wide"
-
-                        >
-
-                          COMPLETED
-
-                        </span>
-
-
-
-                      ) : (
-
-
-
-                        <span
-
-                          className="bg-gray-200
-
-                          text-gray-500
-
-                          text-[11px] font-semibold
-
-                          px-4 py-2 rounded-full
-
-                          tracking-wide"
-
-                        >
-
-                          UPCOMING
-
-                        </span>
-
-
-
-                      )}
-
-
-
-                    </div>
-
-
-
-                  </div>
-
-
-
-                </div>
-
-
-
-              </div>
-
-
-
-            );
-
-          })}
-
-
-
-        </div>
-
-
-
-      </div>
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-
-)}
-
-
-
-{/* SETTINGS */}
-
-
-
-{activeMenu === "Settings" && (
-
-
-
-  <div className="max-w-4xl mx-auto space-y-6">
-
-
-
-    {/* HEADER */}
-
-
-
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
-
-
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-
-        User Settings
-
-      </h2>
-
-
-
-      <p className="text-sm text-gray-500 mt-1">
-
-        Manage profile and security settings
-
-      </p>
-
-
-
-    </div>
-
-
-
-    {/* PROFILE CARD */}
-
-
-
-    <div className="bg-white rounded-3xl p-8 shadow-sm">
-
-
-
-      {/* TOP */}
-
-
-
-      <div className="flex items-center gap-5 mb-8">
-
-
-
-        <div
-
-          className="w-20 h-20 rounded-full
-
-          bg-[#EAFBF8]
-
-          flex items-center justify-center
-
-          text-3xl"
-
-        >
-
-          👤
-
-        </div>
-
-
-
-        <div>
-
-
-
-          <h3 className="text-2xl font-bold text-[#0B2A4A]">
-
-            {profileData.name}
-
-          </h3>
-
-
-
-          <p className="text-sm text-gray-500 mt-1">
-
-            {profileData.email}
-
-          </p>
-
-
-
-        </div>
-
-
-
-      </div>
-
-
-
-      {/* FORM */}
-
-
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
-
-        {/* NAME */}
-
-
-
-        <div>
-
-
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-
-            Full Name
-
-          </label>
-
-
-
-          <input
-
-            type="text"
-
-            value={profileData.name}
-
-            onChange={(e) =>
-
-              setProfileData({
-
-                ...profileData,
-
-                name: e.target.value,
-
-              })
-
-            }
-
-            className="w-full bg-[#F8FAFC]
-
-            border border-gray-200
-
-            rounded-2xl px-5 py-4
-
-            outline-none"
-
-          />
-
-
-
-        </div>
-
-
-
-        {/* PHONE */}
-
-
-
-        <div>
-
-
-
-          <div className="flex items-center justify-between mb-2">
-
-
-
-            <label className="text-sm font-semibold text-[#0B2A4A]">
-
-              Phone Number
-
-            </label>
-
-
-
-            <button
-
-              onClick={() =>
-
-                setShowPhoneModal(true)
-
-              }
-
-              className="w-8 h-8 rounded-full
-
-              bg-[#EAFBF8]
-
-              flex items-center justify-center"
-
-            >
-
-              ✏️
-
-            </button>
-
-
-
-          </div>
-
-
-
-          <input
-
-            type="text"
-
-            value={profileData.phone}
-
-            readOnly
-
-            className="w-full bg-[#F8FAFC]
-
-            border border-gray-200
-
-            rounded-2xl px-5 py-4"
-
-          />
-
-
-
-        </div>
-
-
-
-        {/* EMAIL */}
-
-
-
-        <div className="md:col-span-2">
-
-
-
-          <div className="flex items-center justify-between mb-2">
-
-
-
-            <label className="text-sm font-semibold text-[#0B2A4A]">
-
-              Email Address
-
-            </label>
-
-
-
-            <button
-
-              onClick={() =>
-
-                setShowEmailModal(true)
-
-              }
-
-              className="w-8 h-8 rounded-full
-
-              bg-[#EAFBF8]
-
-              flex items-center justify-center"
-
-            >
-
-              ✏️
-
-            </button>
-
-
-
-          </div>
-
-
-
-          <input
-
-            type="email"
-
-            value={profileData.email}
-
-            readOnly
-
-            className="w-full bg-[#F8FAFC]
-
-            border border-gray-200
-
-            rounded-2xl px-5 py-4"
-
-          />
-
-
-
-        </div>
-
-
-
-      </div>
-
-
-
-      {/* BUTTONS */}
-
-
-
-      <div className="flex gap-4 mt-8">
-
-
-
-        <button
-
-          onClick={handleSaveProfile}
-
-          className="bg-[#0B2A4A]
-
-          text-white px-6 py-3
-
-          rounded-2xl font-semibold"
-
-        >
-
-          Save Changes
-
-        </button>
-
-
-
-        <button
-
-          onClick={() =>
-
-            setShowPasswordForm(
-
-              !showPasswordForm
-
-            )
-
-          }
-
-          className="bg-[#EAFBF8]
-
-          text-[#0B2A4A]
-
-          px-6 py-3 rounded-2xl
-
-          font-semibold"
-
-        >
-
-          Update Password
-
-        </button>
-
-
-
-      </div>
-
-
-
-      {/* PASSWORD FORM */}
-
-
-
-      {showPasswordForm && (
-
-
-
-        <div className="mt-8 border-t pt-8">
-
-
-
-          <h3 className="text-lg font-bold text-[#0B2A4A] mb-5">
-
-            Change Password
-
-          </h3>
-
-
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-
-
-
-            <input
-
-              type="password"
-
-              placeholder="Current Password"
-
-              value={passwordForm.currentPassword}
-
-              onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-
-              className="bg-[#F8FAFC]
-
-              border border-gray-200
-
-              rounded-2xl px-5 py-4"
-
-            />
-
-
-
-            <input
-
-              type="password"
-
-              placeholder="New Password"
-
-              value={passwordForm.newPassword}
-
-              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-
-              className="bg-[#F8FAFC]
-
-              border border-gray-200
-
-              rounded-2xl px-5 py-4"
-
-            />
-
-
-
-            <input
-
-              type="password"
-
-              placeholder="Confirm Password"
-
-              value={passwordForm.confirmPassword}
-
-              onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-
-              className="bg-[#F8FAFC]
-
-              border border-gray-200
-
-              rounded-2xl px-5 py-4"
-
-            />
-
-
-
-          </div>
-
-
-
-          <button
-
-            onClick={handleSavePassword}
-
-            className="mt-5 bg-[#27D3C3]
-
-            text-[#0B2A4A]
-
-            px-6 py-3 rounded-2xl
-
-            font-bold"
-
-          >
-
-            Save Password
-
-          </button>
-
-
-
-        </div>
-
-
-
-      )}
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-
-)}
-
-{/* PHONE MODAL */}
-
-
-
-{showPhoneModal && (
-
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-
-    <div className="bg-white rounded-3xl p-8 w-full max-w-md">
-
-      <div className="flex items-center justify-between mb-6">
-
-        <div>
-
-          <h2 className="text-2xl font-bold text-[#0B2A4A]">Update Phone Number</h2>
-
-          <p className="text-sm text-gray-500 mt-1">Enter new phone number</p>
-
-        </div>
-
-        <button onClick={() => setShowPhoneModal(false)} className="w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-gray-200 flex items-center justify-center text-lg">x</button>
-
-      </div>
-
-      <div className="space-y-5">
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">Current Number</label>
-
-          <input type="text" value={profileData.phone} readOnly className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4" />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">New Number</label>
-
-          <input type="text" value={phoneForm.newPhone} onChange={(e) => setPhoneForm({ ...phoneForm, newPhone: e.target.value })} className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4 outline-none" />
-
-        </div>
-
-        <button onClick={() => { setProfileData({ ...profileData, phone: phoneForm.newPhone }); setPhoneForm({ ...phoneForm, newPhone: "" }); setShowPhoneModal(false); }} className="w-full bg-[#0B2A4A] text-white py-4 rounded-2xl font-semibold">Submit</button>
-
-      </div>
-
-    </div>
-
-  </div>
-
-)}
-
-
-
-{showEmailModal && (
-
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-
-    <div className="bg-white rounded-3xl p-8 w-full max-w-md">
-
-      <div className="flex items-center justify-between mb-6">
-
-        <div>
-
-          <h2 className="text-2xl font-bold text-[#0B2A4A]">Update Email Address</h2>
-
-          <p className="text-sm text-gray-500 mt-1">Enter new email address</p>
-
-        </div>
-
-        <button onClick={() => setShowEmailModal(false)} className="w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-gray-200 flex items-center justify-center text-lg">x</button>
-
-      </div>
-
-      <div className="space-y-5">
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">Current Email</label>
-
-          <input type="email" value={profileData.email} readOnly className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4" />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">New Email</label>
-
-          <input type="email" value={emailForm.newEmail} onChange={(e) => setEmailForm({ ...emailForm, newEmail: e.target.value })} className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4 outline-none" />
-
-        </div>
-
-        <button onClick={() => { setProfileData({ ...profileData, email: emailForm.newEmail }); setEmailForm({ ...emailForm, newEmail: "" }); setShowEmailModal(false); }} className="w-full bg-[#0B2A4A] text-white py-4 rounded-2xl font-semibold">Submit</button>
-
-      </div>
-
-    </div>
-
-  </div>
-
-)}
-
-{showRemarksModal && (
-
-
-
-  <div
-
-    className="fixed inset-0 z-50
-
-    bg-black/40 backdrop-blur-sm
-
-    flex items-center justify-center p-4"
-
-  >
-
-
-
-    <div
-
-      className="bg-white w-full max-w-md
-
-      rounded-3xl p-6 shadow-2xl
-
-      animate-in fade-in zoom-in duration-200"
-
-    >
-
-
-
-      {/* HEADER */}
-
-
-
-      <div className="flex items-center justify-between mb-5">
-
-
-
-        <div>
-
-
-
-          <h2 className="text-xl font-bold text-[#0B2A4A]">
-
-            Admin Remarks
-
-          </h2>
-
-
-
-          <p className="text-xs text-gray-500 mt-1">
-
-            Read only updates from admin
-
-          </p>
-
-
-
-        </div>
-
-
-
-        <button
-
-          onClick={() =>
-
-            setShowRemarksModal(false)
-
-          }
-
-          className="w-9 h-9 rounded-full
-
-          bg-[#F4F6F9]
-
-          hover:bg-gray-200
-
-          flex items-center justify-center"
-
-        >
-
-          âœ•
-
-        </button>
-
-
-
-      </div>
-
-
-
-      {/* REMARK BOX */}
-
-
-
-      <div
-
-        className="min-h-[170px]
-
-        bg-[#F8FAFC]
-
-        border border-gray-200
-
-        rounded-2xl p-5"
-
-      >
-
-
-
-        <p className="text-sm leading-7 text-gray-700 whitespace-pre-line">
-
-          {selectedRemark}
-
-        </p>
-
-
-
-      </div>
-
-
-
-    </div>
-
-
-
-  </div>
-
-
-
-)}
-
-{/* ACTION REQUIRED POPUP MODAL */}
-{showActionModal && (
-  <div
-    className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-    onClick={() => setShowActionModal(false)}
-  >
-    <div
-      className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200"
-      onClick={(e) => e.stopPropagation()}
-    >
-      {/* HEADER */}
-      <div className="bg-gradient-to-r from-red-600 to-red-500 px-7 py-5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-xl">⚠️</div>
-          <div>
-            <h2 className="text-xl font-bold text-white">Action Required</h2>
-            <p className="text-red-100 text-sm mt-0.5">Please resolve the following issues</p>
-          </div>
-        </div>
-        <button
-          onClick={() => setShowActionModal(false)}
-          className="w-9 h-9 rounded-full bg-white/20 hover:bg-white/40 flex items-center justify-center text-white font-bold transition"
-        >
-          ✕
-        </button>
-      </div>
-
-      {/* BODY */}
-      <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-
-        {/* Application-level remark */}
-        {userRemarkData.hasRemark && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-            <div className="flex items-start gap-3">
-              <span className="text-amber-500 text-lg mt-0.5">💬</span>
-              <div>
-                <p className="text-sm font-bold text-[#0B2A4A] mb-1">Admin Remark on Application</p>
-                <p className="text-sm text-gray-700 leading-relaxed">{userRemarkData.remark}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Rejected documents */}
-        {uploadedDocuments.filter(d => d.status === "REJECTED").length > 0 && (
-          <div>
-            <p className="text-sm font-bold text-red-600 mb-3 flex items-center gap-2">
-              <span>❌</span> Documents Rejected — Re-upload Required
-            </p>
-            <div className="space-y-3">
-              {uploadedDocuments.filter(d => d.status === "REJECTED").map((doc, idx) => {
-                const docNames = {
-                  PAN: "PAN Card", AADHAAR: "Aadhaar Card", AADHAAR_FRONT: "Aadhaar Front",
-                  AADHAAR_BACK: "Aadhaar Back", LIGHT_BILL: "Light Bill", RENTAL_AGREEMENT: "Rental Agreement",
-                  RC: "RC Book", INSURANCE: "Vehicle Insurance", SALARY_SLIP: "Salary Slip",
-                  APPOINTMENT_LETTER: "Appointment Letter", ITR_RETURN: "ITR Copy",
-                  BANK_STATEMENT: "Bank Statement", CAR_FRONT_SIDE_PHOTO: "Car Front Photo",
-                  CAR_BACK_SIDE_PHOTO: "Car Back Photo",
-                };
-                const name = docNames[doc.documentType] || doc.documentType;
-                return (
-                  <div key={idx} className="bg-red-50 border border-red-100 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-bold text-[#0B2A4A] text-sm">{name}</span>
-                      <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">REJECTED</span>
-                    </div>
-                    {doc.remarks && (
-                      <p className="text-xs text-gray-600 flex items-start gap-1.5">
-                        <span className="text-red-400 mt-0.5">💬</span>
-                        <span><span className="font-semibold">Reason: </span>{doc.remarks}</span>
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Documents with remarks (not rejected) */}
-        {uploadedDocuments.filter(d => d.remarks && d.status !== "REJECTED").length > 0 && (
-          <div>
-            <p className="text-sm font-bold text-amber-600 mb-3 flex items-center gap-2">
-              <span>💬</span> Documents with Admin Remarks
-            </p>
-            <div className="space-y-3">
-              {uploadedDocuments.filter(d => d.remarks && d.status !== "REJECTED").map((doc, idx) => {
-                const docNames = {
-                  PAN: "PAN Card", AADHAAR: "Aadhaar Card", AADHAAR_FRONT: "Aadhaar Front",
-                  AADHAAR_BACK: "Aadhaar Back", LIGHT_BILL: "Light Bill", RENTAL_AGREEMENT: "Rental Agreement",
-                  RC: "RC Book", INSURANCE: "Vehicle Insurance", SALARY_SLIP: "Salary Slip",
-                  APPOINTMENT_LETTER: "Appointment Letter", ITR_RETURN: "ITR Copy",
-                  BANK_STATEMENT: "Bank Statement", CAR_FRONT_SIDE_PHOTO: "Car Front Photo",
-                  CAR_BACK_SIDE_PHOTO: "Car Back Photo",
-                };
-                const name = docNames[doc.documentType] || doc.documentType;
-                return (
-                  <div key={idx} className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-bold text-[#0B2A4A] text-sm">{name}</span>
-                      <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-2 py-0.5 rounded-full">{doc.status}</span>
-                    </div>
-                    <p className="text-xs text-gray-600 flex items-start gap-1.5">
-                      <span className="text-amber-400 mt-0.5">💬</span>
-                      <span><span className="font-semibold">Remark: </span>{doc.remarks}</span>
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* No issues */}
-        {!userRemarkData.hasRemark &&
-          uploadedDocuments.filter(d => d.status === "REJECTED" || d.remarks).length === 0 && (
-          <div className="text-center py-6 text-gray-400">
-            <p className="text-4xl mb-3">✅</p>
-            <p className="font-semibold">No pending actions</p>
-            <p className="text-sm mt-1">Your application is progressing smoothly.</p>
-          </div>
-        )}
-
-        {/* Go to Documents CTA */}
-        {uploadedDocuments.filter(d => d.status === "REJECTED").length > 0 && (
-          <button
-            onClick={() => { setShowActionModal(false); setActiveMenu("Documents"); }}
-            className="w-full bg-[#0B2A4A] hover:bg-[#123E68] text-white py-3.5 rounded-2xl font-semibold transition mt-2 flex items-center justify-center gap-2"
-          >
-            <span>📤</span> Go to Documents to Re-upload
-          </button>
-        )}
-      </div>
-    </div>
-  </div>
-)}
-
-        </div>
-
-
-
-      </div>
-
-
-
-    </div>
-
+    try {
+      await api.post("/personal-info/save", payload);
+    } catch (error) {
+      if ([400, 409, 500].includes(error?.response?.status)) {
+        await api.put(`/personal-info/update/${userId}`, payload);
+        return;
+      }
+      throw error;
+    }
+  };
+
+  const savePersonalInfo = async () => {
+    const payload = {
+      userId,
+      address: personalInfo.address,
+      mobileNumber: personalInfo.mobileNumber,
+      city: personalInfo.city,
+      state: personalInfo.state,
+      pincode: personalInfo.pincode,
+      loanAmount: Number(personalInfo.loanAmount) || 0,
+    };
+
+    setSaving(true);
+    try {
+      await persistPersonalInfo(payload);
+      toast.success("Personal information saved.");
+      localStorage.setItem(`personal_info_draft_${userId}`, JSON.stringify(personalInfo));
+      localStorage.setItem(`personal_info_saved_${userId}`, "true");
+      setHasPersonalInfo(true);
+      setCurrentStep(2);
+      await fetchDashboardData(false);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to save personal information.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const uploadForType = async (type, file) => {
+    if (!file) return;
+    if (assignedBank) {
+      toast.info("Your application is already assigned to a bank. Documents are locked.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File must be 5MB or smaller.");
+      return;
+    }
+
+    const existing = docsByType[type];
+    const formData = new FormData();
+    formData.append("userId", userId);
+    formData.append("type", type);
+    formData.append("file", file);
+
+    setUploadingType(type);
+    try {
+      if (existing?.status === "REJECTED") {
+        await api.delete(`/documents/${existing.documentId}`);
+      }
+      await api.post("/documents/upload", formData);
+      toast.success(`${DOCUMENT_LABELS[type]} uploaded.`);
+      await fetchDashboardData(false);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Upload failed.");
+    } finally {
+      setUploadingType("");
+    }
+  };
+
+  const openPreview = async (documentId) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(
+        `http://localhost:8081/api/documents/preview/${documentId}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+      if (!response.ok) throw new Error("Preview failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setPreview({ url, type: blob.type });
+    } catch {
+      toast.error("Unable to preview this document.");
+    }
+  };
+
+  const closePreview = () => {
+    if (preview?.url) URL.revokeObjectURL(preview.url);
+    setPreview(null);
+  };
+
+  const markNotificationRead = async (notificationId) => {
+    try {
+      await api.put(`/notifications/read/${notificationId}`);
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === notificationId ? { ...item, read: true } : item
+        )
+      );
+    } catch {
+      toast.error("Failed to update notification.");
+    }
+  };
+
+  const saveSettings = async () => {
+    setSaving(true);
+    try {
+      const payload = {
+        fullName: settingsForm.fullName,
+        email: settingsForm.email,
+        mobileNumber: settingsForm.mobileNumber,
+        registrationType: profile.registrationType || "INDIVIDUAL",
+        role: profile.role || "USER",
+      };
+      await api.put(`/user/update/${userId}`, payload);
+      const stored = getUserSession();
+      localStorage.setItem(
+        "userData",
+        JSON.stringify({ ...stored, name: settingsForm.fullName })
+      );
+      toast.success("Profile updated.");
+      await fetchDashboardData(false);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to update profile.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (!passwordForm.newPassword) {
+      toast.error("Please enter a new password.");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("Passwords do not match.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.post("/user/reset-password", {
+        email: settingsForm.email,
+        newPassword: passwordForm.newPassword,
+      });
+      setPasswordForm({ newPassword: "", confirmPassword: "" });
+      toast.success("Password changed.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to change password.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const incomeTypes =
+    employmentType === "Salaried"
+      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      : ["ITR_RETURN", "BANK_STATEMENT"];
+
+  const missingRequiredTypes = useMemo(
+    () => {
+      const missing = ["PAN", "AADHAAR", ...incomeTypes, "RC", "INSURANCE"].filter(
+        (type) => !hasUsableDocument(docsByType, type)
+      );
+
+      const hasResidentialProof =
+        hasUsableDocument(docsByType, "LIGHT_BILL") ||
+        hasUsableDocument(docsByType, "RENTAL_AGREEMENT");
+
+      return hasResidentialProof ? missing : [...missing, "RESIDENTIAL_PROOF"];
+    },
+    [docsByType, incomeTypes]
   );
 
+  const submitForApproval = async () => {
+    if (!hasPersonalInfo) {
+      toast.error("Please save personal information before final submit.");
+      setCurrentStep(1);
+      return;
+    }
+
+    if (missingRequiredTypes.length > 0) {
+      toast.error("Please upload all required documents before final submit.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const personalPayload = {
+        userId,
+        address: personalInfo.address,
+        mobileNumber: personalInfo.mobileNumber,
+        city: personalInfo.city,
+        state: personalInfo.state,
+        pincode: personalInfo.pincode,
+        loanAmount: Number(personalInfo.loanAmount) || 0,
+      };
+
+      await persistPersonalInfo(personalPayload);
+      toast.success("Documents and details submitted to admin for approval.");
+      setApplicationSubmitted(true);
+      setActiveMenu("Status");
+      await fetchDashboardData(false);
+    } catch (error) {
+      toast.error(
+        error?.response?.data?.message ||
+          error?.response?.data ||
+          "Failed to submit application for approval."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const currentDocumentTypes =
+    currentStep === 4 ? incomeTypes : STEPS.find((step) => step.id === currentStep)?.types || [];
+
+  return (
+    <div className="min-h-screen bg-[#F4F6F9] flex text-slate-800">
+      <Sidebar
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        activeMenu={activeMenu}
+        setActiveMenu={setActiveMenu}
+        handleLogout={handleLogout}
+      />
+
+      <main className="flex-1 overflow-y-auto">
+        <div className="p-5 md:p-8 max-w-7xl mx-auto">
+          <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-[#27D3C3]">{activeMenu}</p>
+              <h1 className="text-3xl font-bold text-[#0B2A4A]">
+                Welcome, {profile.fullName || "Customer"}
+              </h1>
+            </div>
+            <button
+              onClick={() => fetchDashboardData(true)}
+              className="self-start md:self-auto bg-white px-5 py-3 rounded-2xl text-sm font-semibold text-[#0B2A4A] shadow-sm"
+            >
+              Refresh
+            </button>
+          </header>
+
+          {loading ? (
+            <div className="bg-white rounded-3xl p-8 text-[#0B2A4A] font-semibold">
+              Loading dashboard...
+            </div>
+          ) : (
+            <>
+              {activeMenu === "Dashboard" && (
+                <DashboardTab
+                  counts={counts}
+                  documents={documents}
+                  hasPersonalInfo={hasPersonalInfo}
+                  notifications={notifications}
+                  personalInfo={personalInfo}
+                  rejectedDocuments={rejectedDocuments}
+                  assignedBank={assignedBank}
+                  setActiveMenu={setActiveMenu}
+                  markNotificationRead={markNotificationRead}
+                />
+              )}
+
+              {activeMenu === "Documents" && (
+                <DocumentsTab
+                  currentDocumentTypes={currentDocumentTypes}
+                  currentStep={currentStep}
+                  docsByType={docsByType}
+                  employmentType={employmentType}
+                  applicationNumber={applicationNumber}
+                  applicationSubmitted={applicationSubmitted}
+                  documents={documents}
+                  missingRequiredTypes={missingRequiredTypes}
+                  personalInfo={personalInfo}
+                  assignedBank={assignedBank}
+                  saving={saving}
+                  setCurrentStep={setCurrentStep}
+                  setEmploymentType={setEmploymentType}
+                  setPersonalInfo={setPersonalInfo}
+                  uploadForType={uploadForType}
+                  uploadingType={uploadingType}
+                  savePersonalInfo={savePersonalInfo}
+                  submitForApproval={submitForApproval}
+                  openPreview={openPreview}
+                />
+              )}
+
+              {activeMenu === "Status" && (
+              <StatusTab
+                  counts={counts}
+                  documents={documents}
+                  docsByType={docsByType}
+                  assignedBank={assignedBank}
+                  openPreview={openPreview}
+                  uploadForType={uploadForType}
+                  uploadingType={uploadingType}
+                />
+              )}
+
+              {activeMenu === "Settings" && (
+                <SettingsTab
+                  passwordForm={passwordForm}
+                  saving={saving}
+                  settingsForm={settingsForm}
+                  setPasswordForm={setPasswordForm}
+                  setSettingsForm={setSettingsForm}
+                  saveSettings={saveSettings}
+                  changePassword={changePassword}
+                  assignedBank={assignedBank}
+                />
+              )}
+            </>
+          )}
+        </div>
+      </main>
+
+      {preview && (
+        <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
+          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] p-4 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-[#0B2A4A]">Document Preview</h2>
+              <button
+                onClick={closePreview}
+                className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center"
+                aria-label="Close preview"
+              >
+                <FaTimes />
+              </button>
+            </div>
+            {preview.type?.startsWith("image/") ? (
+              <img
+                src={preview.url}
+                alt="Document preview"
+                className="flex-1 min-h-0 object-contain bg-slate-50 rounded-2xl"
+              />
+            ) : (
+              <iframe
+                src={preview.url}
+                title="Document preview"
+                className="flex-1 min-h-0 rounded-2xl bg-slate-50"
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
- 
+const DashboardTab = ({
+  counts,
+  documents,
+  hasPersonalInfo,
+  notifications,
+  personalInfo,
+  rejectedDocuments,
+  assignedBank,
+  setActiveMenu,
+  markNotificationRead,
+}) => {
+  const cards = [
+    {
+      label: "Loan Amount",
+      value: personalInfo.loanAmount
+        ? `Rs ${Number(personalInfo.loanAmount).toLocaleString("en-IN")}`
+        : "Not set",
+      icon: <FaRupeeSign />,
+    },
+    { label: "Documents Uploaded", value: documents.length, icon: <FaFileAlt /> },
+    { label: "Pending", value: counts.pendingCount || 0, icon: <FaBell /> },
+    { label: "Approved", value: counts.approvedCount || 0, icon: <FaCheckCircle /> },
+    {
+      label: "Assigned Bank",
+      value: assignedBank ? assignedBank.bankName : "Yet to assign",
+      icon: <FaUniversity />,
+      highlight: !!assignedBank,
+    },
+  ];
 
-export default Dashboard;
+  return (
+    <div className="space-y-6">
+      {!hasPersonalInfo && (
+        <div className="bg-[#0B2A4A] text-white rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold">Complete your profile to get started</h2>
+            <p className="text-white/70 text-sm mt-1">
+              Add personal and loan details before uploading documents.
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveMenu("Documents")}
+            className="bg-[#27D3C3] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold"
+          >
+            Complete Profile
+          </button>
+        </div>
+      )}
 
+      {rejectedDocuments.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-red-700">Documents need re-upload</h2>
+            <p className="text-sm text-red-600 mt-1">
+              {rejectedDocuments.length} document(s) were rejected by admin.
+            </p>
+          </div>
+          <button
+            onClick={() => setActiveMenu("Documents")}
+            className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold"
+          >
+            Re-upload
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
+        {cards.map((card) => (
+          <div key={card.label} className={`rounded-3xl p-6 shadow-sm ${card.highlight ? "bg-[#EAFBF8] border border-[#27D3C3]/40" : "bg-white"}`}>
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-5 ${card.highlight ? "bg-[#27D3C3]/20 text-[#0B2A4A]" : "bg-[#EAFBF8] text-[#0B2A4A]"}`}>
+              {card.icon}
+            </div>
+            <p className="text-sm text-slate-500">{card.label}</p>
+            <p className={`text-xl font-bold mt-2 break-words ${card.highlight ? "text-[#0B2A4A]" : "text-[#0B2A4A]"}`}>{card.value}</p>
+            {card.label === "Assigned Bank" && (
+              <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs font-bold ${assignedBank ? "bg-[#27D3C3] text-[#0B2A4A]" : "bg-slate-200 text-slate-500"}`}>
+                {assignedBank ? "ASSIGNED" : "PENDING"}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-white rounded-3xl p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Notifications</h2>
+        {notifications.length === 0 ? (
+          <p className="text-sm text-slate-500">No notifications yet.</p>
+        ) : (
+          <div className="space-y-3">
+            {notifications.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => !item.read && markNotificationRead(item.id)}
+                className={`w-full text-left p-4 rounded-2xl border ${
+                  item.read ? "bg-slate-50 border-slate-100" : "bg-[#EAFBF8] border-[#27D3C3]/30"
+                }`}
+              >
+                <p className="text-sm font-semibold text-[#0B2A4A]">{item.message}</p>
+                <p className="text-xs text-slate-500 mt-1">{item.createdAt || ""}</p>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const DocumentsTab = ({
+  applicationNumber,
+  applicationSubmitted,
+  currentDocumentTypes,
+  currentStep,
+  documents,
+  docsByType,
+  employmentType,
+  missingRequiredTypes,
+  personalInfo,
+  assignedBank,
+  saving,
+  setCurrentStep,
+  setEmploymentType,
+  setPersonalInfo,
+  uploadForType,
+  uploadingType,
+  savePersonalInfo,
+  submitForApproval,
+  openPreview,
+}) => (
+  <div className="space-y-6">
+    {assignedBank && (
+      <div className="bg-[#EAFBF8] border border-[#27D3C3]/40 rounded-3xl p-5 text-sm font-semibold text-[#0B2A4A]">
+        This application has been forwarded to {assignedBank.bankName}. Documents and application details are locked.
+      </div>
+    )}
+    <div className="bg-white rounded-3xl p-5 shadow-sm overflow-x-auto">
+      <div className="flex gap-3 min-w-max">
+        {STEPS.map((step) => (
+          <button
+            key={step.id}
+            onClick={() => setCurrentStep(step.id)}
+            className={`px-5 py-3 rounded-2xl text-sm font-bold ${
+              currentStep === step.id
+                ? "bg-[#0B2A4A] text-white"
+                : "bg-[#F4F6F9] text-[#0B2A4A]"
+            }`}
+          >
+            {step.id}. {step.title}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {currentStep === 1 ? (
+      <div className="bg-white rounded-3xl p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Personal Information</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <Field label="Full Name" value={personalInfo.fullName} readOnly />
+          <Field label="Email" value={personalInfo.email} readOnly />
+          {[
+            ["mobileNumber", "Mobile Number"],
+            ["address", "Address"],
+            ["city", "City"],
+            ["state", "State"],
+            ["pincode", "Pincode"],
+            ["loanAmount", "Loan Amount"],
+          ].map(([key, label]) => (
+            <Field
+              key={key}
+              label={label}
+              value={personalInfo[key]}
+              readOnly={!!assignedBank}
+              onChange={(value) => setPersonalInfo({ ...personalInfo, [key]: value })}
+            />
+          ))}
+        </div>
+        {!assignedBank && (
+          <button
+            onClick={savePersonalInfo}
+            disabled={saving}
+            className="mt-6 bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
+          >
+            {saving ? "Saving..." : "Next"}
+          </button>
+        )}
+      </div>
+    ) : currentStep === 6 ? (
+      <VerifySubmitStep
+        applicationNumber={applicationNumber}
+        applicationSubmitted={applicationSubmitted}
+        documents={documents}
+        missingRequiredTypes={missingRequiredTypes}
+        personalInfo={personalInfo}
+        saving={saving}
+        setCurrentStep={setCurrentStep}
+        submitForApproval={submitForApproval}
+        openPreview={openPreview}
+        locked={!!assignedBank}
+      />
+    ) : (
+      <div className="bg-white rounded-3xl p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+          <h2 className="text-xl font-bold text-[#0B2A4A]">
+            {STEPS.find((step) => step.id === currentStep)?.title}
+          </h2>
+          {currentStep === 4 && (
+            <div className="flex rounded-2xl bg-[#F4F6F9] p-1">
+              {["Salaried", "Self Employed"].map((type) => (
+                <button
+                  key={type}
+                  disabled={!!assignedBank}
+                  onClick={() => setEmploymentType(type)}
+                  className={`px-4 py-2 rounded-xl text-sm font-bold ${
+                    employmentType === type ? "bg-white text-[#0B2A4A] shadow-sm" : "text-slate-500"
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <DocumentUploadGrid
+          docsByType={docsByType}
+          openPreview={openPreview}
+          types={currentDocumentTypes}
+          uploadingType={uploadingType}
+          uploadForType={uploadForType}
+          locked={!!assignedBank}
+        />
+        {!assignedBank && (
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => setCurrentStep(Math.min(currentStep + 1, 6))}
+              className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold"
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </div>
+    )}
+  </div>
+);
+
+const VerifySubmitStep = ({
+  applicationNumber,
+  applicationSubmitted,
+  documents,
+  missingRequiredTypes,
+  personalInfo,
+  saving,
+  setCurrentStep,
+  submitForApproval,
+  openPreview,
+  locked,
+}) => (
+  <div className="space-y-6">
+    <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Verify Details Before Submit</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Review your personal details and uploaded documents before sending them to admin.
+          </p>
+        </div>
+        <div className="bg-[#EAFBF8] text-[#0B2A4A] px-4 py-3 rounded-2xl text-sm font-bold">
+          Application: {applicationNumber || "Not generated"}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {[
+          ["Full Name", personalInfo.fullName],
+          ["Email", personalInfo.email],
+          ["Mobile Number", personalInfo.mobileNumber],
+          ["Address", personalInfo.address],
+          ["City", personalInfo.city],
+          ["State", personalInfo.state],
+          ["Pincode", personalInfo.pincode],
+          [
+            "Loan Amount",
+            personalInfo.loanAmount
+              ? `Rs ${Number(personalInfo.loanAmount).toLocaleString("en-IN")}`
+              : "",
+          ],
+        ].map(([label, value]) => (
+          <div key={label} className="bg-[#F4F6F9] rounded-2xl p-4">
+            <p className="text-xs font-bold uppercase text-slate-400">{label}</p>
+            <p className="text-sm font-semibold text-[#0B2A4A] mt-1 break-words">
+              {value || "Not provided"}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {!locked && (
+        <button
+          onClick={() => setCurrentStep(1)}
+          className="mt-5 bg-white border border-slate-200 text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold"
+        >
+          Edit Personal Details
+        </button>
+      )}
+    </div>
+
+    <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Uploaded Documents</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            Preview files and confirm statuses before final submit.
+          </p>
+        </div>
+        {!locked && (
+          <button
+            onClick={() => setCurrentStep(2)}
+            className="bg-[#F4F6F9] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold"
+          >
+            Edit Documents
+          </button>
+        )}
+      </div>
+
+      {missingRequiredTypes.length > 0 && (
+        <div className="mb-5 bg-red-50 border border-red-200 rounded-2xl p-4">
+          <p className="font-bold text-red-700">Required documents missing or rejected</p>
+          <p className="text-sm text-red-600 mt-2">
+            {missingRequiredTypes.map(missingLabel).join(", ")}
+          </p>
+        </div>
+      )}
+
+      {documents.length === 0 ? (
+        <p className="text-sm text-slate-500">No documents uploaded yet.</p>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {documents.map((doc) => {
+            const type = doc.documentType || doc.type;
+            return (
+              <div key={doc.documentId} className="border border-slate-200 rounded-2xl p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-bold text-[#0B2A4A]">{DOCUMENT_LABELS[type] || type}</h3>
+                    <p className="text-xs text-slate-500 mt-1 break-all">{doc.fileName}</p>
+                  </div>
+                  <StatusBadge status={doc.status} />
+                </div>
+                {doc.remarks && (
+                  <p className="mt-3 bg-red-50 text-red-700 rounded-2xl p-3 text-sm">
+                    Admin remarks: {doc.remarks}
+                  </p>
+                )}
+                <button
+                  onClick={() => openPreview(doc.documentId)}
+                  className="mt-4 px-4 py-2 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] text-sm font-bold flex items-center gap-2"
+                >
+                  <FaEye /> Preview
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+
+    <div className="bg-[#0B2A4A] rounded-3xl p-6 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div>
+        <h2 className="text-xl font-bold">
+          {locked ? "Forwarded to bank" : applicationSubmitted ? "Submitted to admin" : "Ready for admin approval"}
+        </h2>
+        <p className="text-sm text-white/70 mt-1">
+          {locked
+            ? "Your application is locked because it has been assigned to a bank."
+            : applicationSubmitted
+            ? "Your application is already in the approval workflow."
+            : "Final submit sends your details and documents to admin for verification."}
+        </p>
+      </div>
+      <button
+        onClick={submitForApproval}
+        disabled={locked || saving || applicationSubmitted || missingRequiredTypes.length > 0}
+        className="bg-[#27D3C3] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold disabled:opacity-50 flex items-center justify-center gap-2"
+      >
+        <FaPaperPlane />
+        {locked ? "Locked" : saving ? "Submitting..." : applicationSubmitted ? "Submitted" : "Submit for Approval"}
+      </button>
+    </div>
+  </div>
+);
+
+const TRACKING_STEPS = [
+  {
+    key: "submitted",
+    label: "Documents Submitted",
+    sub: "Your documents have been uploaded successfully.",
+    icon: <FaCloudUploadAlt />,
+  },
+  {
+    key: "under_review",
+    label: "Under Review",
+    sub: "Admin is verifying your documents.",
+    icon: <FaFileAlt />,
+  },
+  {
+    key: "approved",
+    label: "Documents Approved",
+    sub: "All documents have been approved by admin.",
+    icon: <FaCheckCircle />,
+  },
+  {
+    key: "sent_to_bank",
+    label: "Sent to Bank",
+    sub: "Your application has been forwarded to the bank.",
+    icon: <FaUniversity />,
+  },
+];
+
+const getActiveTrackingStep = (documents, counts, assignedBank) => {
+  if (!documents.length) return -1;
+  if (assignedBank) return 3;
+  if (counts.approvedCount > 0 && counts.pendingCount === 0 && counts.rejectedCount === 0) return 2;
+  if (counts.verifiedCount > 0 || counts.pendingCount > 0) return 1;
+  return 0;
+};
+
+const StatusTab = ({ counts, documents, docsByType, assignedBank, openPreview, uploadForType, uploadingType }) => {
+  const activeStep = getActiveTrackingStep(documents, counts, assignedBank);
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl p-6 shadow-sm">
+        <h2 className="text-lg font-bold text-[#0B2A4A] mb-6">Application Tracking</h2>
+        {documents.length === 0 ? (
+          <p className="text-sm text-slate-500">No documents uploaded yet. Upload documents to start tracking.</p>
+        ) : (
+          <div className="relative">
+            <div className="hidden md:block absolute left-[22px] top-6 bottom-6 w-0.5 bg-slate-200" />
+            <div className="space-y-0">
+              {TRACKING_STEPS.map((step, idx) => {
+                const done = idx < activeStep;
+                const current = idx === activeStep;
+                const pending = idx > activeStep;
+                return (
+                  <div key={step.key} className="relative flex items-start gap-4 md:gap-6 pb-8 last:pb-0">
+                    <div className={`relative z-10 shrink-0 w-11 h-11 rounded-full flex items-center justify-center text-base font-bold border-2 transition-all ${
+                      done ? "bg-[#27D3C3] border-[#27D3C3] text-[#0B2A4A]" :
+                      current ? "bg-[#0B2A4A] border-[#0B2A4A] text-white shadow-lg" :
+                      "bg-white border-slate-200 text-slate-400"
+                    }`}>
+                      {done ? <FaCheckCircle /> : step.icon}
+                    </div>
+                    <div className={`flex-1 pt-2 ${ pending ? "opacity-40" : ""}`}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className={`font-bold text-sm ${ current ? "text-[#0B2A4A]" : done ? "text-[#27D3C3]" : "text-slate-400"}` }>
+                          {step.label}
+                        </p>
+                        {current && (
+                          <span className="bg-[#0B2A4A] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">CURRENT</span>
+                        )}
+                        {done && (
+                          <span className="bg-[#27D3C3]/20 text-[#0B2A4A] text-[10px] font-bold px-2 py-0.5 rounded-full">DONE</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {step.key === "sent_to_bank" && assignedBank
+                          ? `Forwarded to ${assignedBank.bankName}`
+                          : step.sub}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          ["Pending", counts.pendingCount || 0],
+          ["Verified", counts.verifiedCount || 0],
+          ["Approved", counts.approvedCount || 0],
+          ["Rejected", counts.rejectedCount || 0],
+        ].map(([label, value]) => (
+          <div key={label} className="bg-white rounded-3xl p-5 shadow-sm">
+            <p className="text-sm text-slate-500">{label}</p>
+            <p className="text-2xl font-bold text-[#0B2A4A] mt-2">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {documents.length === 0 ? (
+          <div className="bg-white rounded-3xl p-6 text-slate-500">No documents uploaded yet.</div>
+        ) : (
+          documents.map((doc) => (
+            <DocumentCard
+              key={doc.documentId}
+              doc={doc}
+              docsByType={docsByType}
+              openPreview={openPreview}
+              uploadForType={uploadForType}
+              uploadingType={uploadingType}
+              locked={!!assignedBank}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SettingsTab = ({
+  passwordForm,
+  saving,
+  settingsForm,
+  setPasswordForm,
+  setSettingsForm,
+  saveSettings,
+  changePassword,
+  assignedBank,
+}) => (
+  <div className="max-w-4xl space-y-6">
+    <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Profile Settings</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Field
+          label="Full Name"
+          value={settingsForm.fullName}
+          onChange={(value) => setSettingsForm({ ...settingsForm, fullName: value })}
+        />
+        <Field label="Email" value={settingsForm.email} readOnly />
+        <Field label="Mobile" value={settingsForm.mobileNumber} readOnly />
+        <Field
+          label="Assigned Bank"
+          value={assignedBank ? assignedBank.bankName : "Yet to assign"}
+          readOnly
+        />
+      </div>
+      <button
+        onClick={saveSettings}
+        disabled={saving}
+        className="mt-6 bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
+      >
+        Save Changes
+      </button>
+    </div>
+
+    <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-10 h-10 rounded-2xl bg-[#EAFBF8] text-[#0B2A4A] flex items-center justify-center">
+          <FaLock />
+        </div>
+        <h2 className="text-xl font-bold text-[#0B2A4A]">Change Password</h2>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <Field
+          label="New Password"
+          type="password"
+          value={passwordForm.newPassword}
+          onChange={(value) => setPasswordForm({ ...passwordForm, newPassword: value })}
+        />
+        <Field
+          label="Confirm Password"
+          type="password"
+          value={passwordForm.confirmPassword}
+          onChange={(value) => setPasswordForm({ ...passwordForm, confirmPassword: value })}
+        />
+      </div>
+      <button
+        onClick={changePassword}
+        disabled={saving}
+        className="mt-6 bg-[#27D3C3] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
+      >
+        Update Password
+      </button>
+    </div>
+  </div>
+);
+
+const Field = ({ label, value, onChange, readOnly = false, type = "text" }) => (
+  <label className="block">
+    <span className="block text-sm font-semibold text-[#0B2A4A] mb-2">{label}</span>
+    <input
+      type={type}
+      value={value ?? ""}
+      readOnly={readOnly}
+      onChange={(event) => onChange?.(event.target.value)}
+      className={`w-full rounded-2xl px-4 py-3 border border-slate-200 outline-none ${
+        readOnly ? "bg-slate-50 text-slate-500" : "bg-white focus:border-[#27D3C3]"
+      }`}
+    />
+  </label>
+);
+
+const DocumentUploadGrid = ({ docsByType, openPreview, types, uploadingType, uploadForType, locked }) => (
+  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+    {types.map((type) => (
+      <DocumentUploadTile
+        key={type}
+        doc={docsByType[type]}
+        openPreview={openPreview}
+        type={type}
+        uploadingType={uploadingType}
+        uploadForType={uploadForType}
+        locked={locked}
+      />
+    ))}
+  </div>
+);
+
+const DocumentUploadTile = ({ doc, openPreview, type, uploadingType, uploadForType, locked }) => {
+  const inputId = `upload-${type}`;
+  const rejected = doc?.status === "REJECTED";
+  const optional = OPTIONAL_DOCUMENT_TYPES.has(type);
+
+  return (
+    <div className="border border-slate-200 rounded-3xl p-5 bg-white">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-bold text-[#0B2A4A]">{DOCUMENT_LABELS[type] || type}</h3>
+            {optional && (
+              <span className="bg-slate-100 text-slate-500 text-[11px] font-bold px-2 py-1 rounded-full">
+                Optional
+              </span>
+            )}
+          </div>
+          {doc ? (
+            <p className="text-xs text-slate-500 mt-1 break-all">{doc.fileName}</p>
+          ) : (
+            <p className="text-xs text-slate-500 mt-1">
+              {optional ? "Optional upload. " : ""}PDF, JPG or PNG up to 5MB
+            </p>
+          )}
+        </div>
+        {doc && <StatusBadge status={doc.status} />}
+      </div>
+
+      {doc?.remarks && (
+        <p className="mt-4 text-sm text-red-600 bg-red-50 rounded-2xl p-3">{doc.remarks}</p>
+      )}
+
+      <div className="flex flex-wrap gap-3 mt-5">
+        {doc && (
+          <button
+            onClick={() => openPreview(doc.documentId)}
+            className="px-4 py-2 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] text-sm font-bold flex items-center gap-2"
+          >
+            <FaEye /> Preview
+          </button>
+        )}
+        {!locked && (
+          <>
+            <label
+              htmlFor={inputId}
+              className="cursor-pointer px-4 py-2 rounded-2xl bg-[#0B2A4A] text-white text-sm font-bold flex items-center gap-2"
+            >
+              {rejected ? <FaRedo /> : <FaCloudUploadAlt />}
+              {uploadingType === type ? "Uploading..." : rejected ? "Re-upload" : doc ? "Replace" : "Upload"}
+            </label>
+            <input
+              id={inputId}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                uploadForType(type, file);
+                event.target.value = "";
+              }}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const DocumentCard = ({ doc, openPreview, uploadForType, uploadingType, locked }) => {
+  const type = doc.documentType || doc.type;
+  const inputId = `status-reupload-${doc.documentId}`;
+
+  return (
+    <div className="bg-white rounded-3xl p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-bold text-[#0B2A4A]">{DOCUMENT_LABELS[type] || type}</h3>
+          <p className="text-sm text-slate-500 mt-1 break-all">{doc.fileName}</p>
+        </div>
+        <StatusBadge status={doc.status} />
+      </div>
+      {doc.remarks && (
+        <p className="mt-4 bg-red-50 text-red-700 rounded-2xl p-3 text-sm">
+          Admin remarks: {doc.remarks}
+        </p>
+      )}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button
+          onClick={() => openPreview(doc.documentId)}
+          className="px-4 py-2 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] text-sm font-bold flex items-center gap-2"
+        >
+          <FaEye /> Preview
+        </button>
+        {doc.status === "REJECTED" && !locked && (
+          <>
+            <label
+              htmlFor={inputId}
+              className="cursor-pointer px-4 py-2 rounded-2xl bg-red-600 text-white text-sm font-bold flex items-center gap-2"
+            >
+              <FaRedo />
+              {uploadingType === type ? "Uploading..." : "Re-upload"}
+            </label>
+            <input
+              id={inputId}
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                uploadForType(type, file);
+                event.target.value = "";
+              }}
+            />
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const StatusBadge = ({ status }) => (
+  <span
+    className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold ${
+      STATUS_STYLES[status] || "bg-slate-100 text-slate-600"
+    }`}
+  >
+    {status || "PENDING"}
+  </span>
+);
+
+export default CustomerDashboard;

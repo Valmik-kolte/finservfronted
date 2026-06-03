@@ -21,25 +21,20 @@ const DealerRegister = () => {
     setLoading(true);
     try {
       const res = await registerDealer(form);
-
-      // Backend returns DealerResponseDTO inside res.data.data
-      const data = res?.data?.data;
+      // registerDealer returns response.data.data directly
+      const data = res;
       if (data) {
         const { dealerId, dealerCode } = data;
-        if (dealerId) localStorage.setItem("dealerId", dealerId);
+        if (dealerId) localStorage.setItem("dealerId", String(dealerId));
         if (dealerCode) localStorage.setItem("dealerCode", dealerCode);
-        
-        // Save dealer code to ID mapping in localStorage for customer lookup
         if (dealerCode && dealerId) {
           const codeMap = JSON.parse(localStorage.getItem("dealerCodeMap") || "{}");
           codeMap[dealerCode] = dealerId;
           localStorage.setItem("dealerCodeMap", JSON.stringify(codeMap));
         }
       }
-      localStorage.setItem("role", "DEALER");
-
-      toast.success("Registration Successful 🎉");
-      navigate("/dealer/dashboard");
+      toast.success("Registration Successful! Please login.");
+      navigate("/");
     } catch (err) {
       toast.error(err.response?.data?.message || "Registration failed.");
     } finally {

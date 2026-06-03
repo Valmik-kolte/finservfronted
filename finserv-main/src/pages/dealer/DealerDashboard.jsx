@@ -1,3293 +1,1588 @@
-﻿import React, { useEffect, useState } from "react";
-import Sidebar from "../../components/dealer/Sidebar";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
+import {
+  FaBell,
+  FaCheckCircle,
+  FaClipboardList,
+  FaCopy,
+  FaEye,
+  FaFileAlt,
+  FaLock,
+  FaRedo,
+  FaTimes,
+  FaUpload,
+  FaUsers,
+} from "react-icons/fa";
+import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
 
-const Dashboard = () => {
+const DOCUMENT_TYPES = {
+  AADHAAR: "Aadhaar",
+  PAN: "PAN",
+  PASSPORT: "Passport",
+  VOTER_ID: "Voter ID",
+  DRIVING_LICENSE: "Driving License",
+  LIGHT_BILL: "Light Bill",
+  RENTAL_AGREEMENT: "Rental Agreement",
+  SALARY_SLIP: "Salary Slip",
+  BANK_STATEMENT: "Bank Statement",
+  ITR_RETURN: "ITR Return",
+  APPOINTMENT_LETTER: "Appointment Letter",
+  RC: "RC",
+  INSURANCE: "Insurance",
+  VEHICLE_INVOICE: "Vehicle Invoice",
+  VEHICLE_PHOTO: "Vehicle Photo",
+  ODOMETER_READING: "Odometer Reading",
+  CHASSIS_NUMBER: "Chassis Number",
+  CAR_FRONT_SIDE_PHOTO: "Car Front Side Photo",
+  CAR_BACK_SIDE_PHOTO: "Car Back Side Photo",
+  PASSPORT_SIZE_PHOTO: "Passport Size Photo",
+};
 
-const [dealerUserData, setDealerUserData] = useState({
-  name: "",
-  mobile: "",
+const STEP_TYPES = {
+  2: ["PAN", "AADHAAR"],
+  3: ["LIGHT_BILL", "RENTAL_AGREEMENT"],
+  5: [
+    "RC",
+    "INSURANCE",
+    "CAR_FRONT_SIDE_PHOTO",
+    "CAR_BACK_SIDE_PHOTO",
+    "CHASSIS_NUMBER",
+    "ODOMETER_READING",
+  ],
+};
+
+const statusStyles = {
+  PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
+  VERIFIED: "bg-blue-50 text-blue-700 border-blue-200",
+  APPROVED: "bg-green-50 text-green-700 border-green-200",
+  REJECTED: "bg-red-50 text-red-700 border-red-200",
+};
+
+const initialPersonalForm = {
+  fullName: "",
   email: "",
+  mobileNumber: "",
+  password: "",
+  address: "",
   city: "",
   state: "",
   pincode: "",
-  address: "",
   loanAmount: "",
-});
+};
 
-
-
-  /* Documents States */
-
-  const [showAddCustomerModal, setShowAddCustomerModal] =
-  useState(false);
-
-const [dealerCurrentStep, setDealerCurrentStep] =
-  useState(1);
-
-const [dealerEmploymentType, setDealerEmploymentType] =
-  useState("");
-
-const [dealerResidentialType, setDealerResidentialType] =
-  useState("");
-
-const [dealerVehicleDocs, setDealerVehicleDocs] =
-  useState({});
-
-  const [uploadedDocuments, setUploadedDocuments] = useState([]);
-  const [documentLoading, setDocumentLoading] = useState(false);
-  const [currentApplicationNumber, setCurrentApplicationNumber] = useState(null);
-  const [currentCustomerUserId, setCurrentCustomerUserId] = useState(null);
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({
-    currentPassword: "",
-    newPassword: "",
-    confirmPassword: "",
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
   });
+};
 
-  /* SETTINGS STATES */
+const docLabel = (type) => DOCUMENT_TYPES[type] || String(type || "-").replace(/_/g, " ");
 
-const [showPasswordForm, setShowPasswordForm] =
-  useState(false);
+const getMessage = (error, fallback) =>
+  error?.response?.data?.message || error?.response?.data || error?.message || fallback;
 
-const [showPhoneModal, setShowPhoneModal] =
-  useState(false);
+const showError = (error, fallback) => toast.error(getMessage(error, fallback));
 
-const [showEmailModal, setShowEmailModal] =
-  useState(false);
+const readDealerSession = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("dealerData") || "null");
+    return parsed || {};
+  } catch {
+    return {};
+  }
+};
 
-const [phoneOtpStep, setPhoneOtpStep] =
-  useState(false);
+const sameId = (a, b) => String(a || "") === String(b || "");
+const sameCode = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+const isUserAssignedToBank = (user) =>
+  !!(
+    user?.bankId ||
+    user?.assignedBankId ||
+    localStorage.getItem(`user_bank_assignment_${user?.userId}`)
+  );
 
-const [emailOtpStep, setEmailOtpStep] =
-  useState(false);
+const chunk = (items, size) => {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+};
 
-const [profileData, setProfileData] =
-  useState({
-    name: "",
-    phone: "",
-    email: "",
-    dealerCode: localStorage.getItem("dealerCode") || "—",
-  });
+const Badge = ({ status }) => {
+  const value = status || "PENDING";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-bold ${
+        statusStyles[value] || "bg-gray-50 text-gray-700 border-gray-200"
+      }`}
+    >
+      {value}
+    </span>
+  );
+};
 
-const [phoneForm, setPhoneForm] =
-  useState({
-    currentPhone: "9876543210",
-    newPhone: "",
-    otp: "",
-  });
+const EmptyState = ({ text }) => (
+  <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+    {text}
+  </div>
+);
 
-const [emailForm, setEmailForm] =
-  useState({
-    currentEmail: "dealer@gmail.com",
-    newEmail: "",
-    otp: "",
-  });
+const Modal = ({ title, onClose, children, wide = false }) => (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose();
+    }}
+  >
+    <div
+      className={`max-h-[92vh] w-full overflow-hidden rounded-3xl bg-white shadow-2xl ${
+        wide ? "max-w-6xl" : "max-w-3xl"
+      }`}
+    >
+      <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+        <h3 className="text-xl font-bold text-[#0B2A4A]">{title}</h3>
+        <button
+          onClick={onClose}
+          className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F4F6F9] text-[#0B2A4A]"
+          aria-label="Close"
+        >
+          <FaTimes />
+        </button>
+      </div>
+      <div className="max-h-[calc(92vh-74px)] overflow-y-auto p-6">{children}</div>
+    </div>
+  </div>
+);
+
+const DealerDashboard = () => {
   const navigate = useNavigate();
+  const session = useMemo(() => readDealerSession(), []);
+  const dealerId = session.dealerId || session.id;
+  const storedDealerCode = session.dealerCode || localStorage.getItem("dealerCode") || "";
+  const token = localStorage.getItem("token");
 
-  const [sidebarOpen, setSidebarOpen] =
-    useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeMenu, setActiveMenu] = useState("Dashboard");
+  const normalizedMenu = activeMenu === "User" ? "Users" : activeMenu;
 
-  const [activeMenu, setActiveMenu] =
-    useState("Dashboard");
+  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState([]);
+  const [personalInfos, setPersonalInfos] = useState([]);
+  const [docs, setDocs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [profile, setProfile] = useState({
+    dealerId,
+    fullName: session.name || "",
+    email: session.email || "",
+    mobileNumber: "",
+    dealerCode: storedDealerCode,
+    role: session.role || "DEALER",
+  });
 
-  const [selectedUser, setSelectedUser] =
-    useState(null);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedUserDocs, setSelectedUserDocs] = useState([]);
+  const [selectedCounts, setSelectedCounts] = useState(null);
+  const [trackingUser, setTrackingUser] = useState(null);
+  const [trackingDocs, setTrackingDocs] = useState([]);
+  const [trackingCounts, setTrackingCounts] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [personalForm, setPersonalForm] = useState(initialPersonalForm);
+  const [employmentType, setEmploymentType] = useState("");
+  const [files, setFiles] = useState({});
+  const [uploadedDocs, setUploadedDocs] = useState([]);
+  const [savingWizard, setSavingWizard] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
+  const pollRef = useRef(null);
 
-  
-const [showEditModal, setShowEditModal] = useState(false);
-  const [showEditUserModal, setShowEditUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState(null);
-  const [detailsEditMode, setDetailsEditMode] = useState(false);
-  const [documentsEditMode, setDocumentsEditMode] = useState(false);
-  const [showStatusModal, setShowStatusModal] =
-    useState(false);
-const [editMode, setEditMode] = useState(false);
-const [documentMode, setDocumentMode] = useState(false);
-  const [showDetailsModal, setShowDetailsModal] =
-    useState(false);
+  const userIds = useMemo(() => users.map((u) => u.userId), [users]);
+  const docsByUser = useMemo(() => {
+    const grouped = {};
+    docs.forEach((doc) => {
+      grouped[doc.userId] = grouped[doc.userId] || [];
+      grouped[doc.userId].push(doc);
+    });
+    return grouped;
+  }, [docs]);
 
-  const [statusFilter, setStatusFilter] =
-    useState("All");
+  const stats = useMemo(
+    () => ({
+      users: users.length,
+      docs: docs.length,
+      pending: docs.filter((doc) => doc.status === "PENDING").length,
+      approved: docs.filter((doc) => doc.status === "APPROVED").length,
+    }),
+    [docs, users.length]
+  );
 
-    const [activeMonth, setActiveMonth] =
-  useState(0);
+  const rejectedUsers = useMemo(() => {
+    const rejectedIds = new Set(docs.filter((doc) => doc.status === "REJECTED").map((doc) => doc.userId));
+    return users.filter((user) => rejectedIds.has(user.userId));
+  }, [docs, users]);
 
-const [showRemarksModal, setShowRemarksModal] =
-  useState(false);
+  const dealerCode = profile.dealerCode;
+  const notificationDealerId = profile.dealerId || dealerId;
+  const unreadCount = notifications.filter((item) => !item.read).length;
 
-const [selectedRemark, setSelectedRemark] =
-  useState("");
-
-  const mapStatus = (status) => {
-    switch (status) {
-      case "PENDING":
-      case "DOCUMENTS_SUBMITTED":
-        return "Documents Submitted";
-      case "DOCUMENTS_VERIFIED":
-        return "Documents Verified";
-      case "SENT_TO_BANK":
-      case "BANK_REVIEW":
-        return "Bank Review";
-      case "APPROVED":
-        return "Loan Approved";
-      case "REJECTED":
-        return "Rejected";
-      default:
-        return status || "Documents Submitted";
+  const fetchDocsForUsers = useCallback(async (ids) => {
+    if (!ids || ids.length === 0) return []; // No user IDs, return empty docs
+    const allDocs = [];
+    for (const batch of chunk(ids, 5)) {
+      const responses = await Promise.all(
+        batch.map((id) =>
+          api
+            .get(`/documents/user/${id}`)
+            .then((res) => res.data?.data || [])
+            .catch((error) => {
+              showError(error, `Failed to fetch documents for user ${id}`);
+              return [];
+            })
+        )
+      );
+      responses.forEach((list) => allDocs.push(...list));
     }
-  };
+    return allDocs;
+  }, []);
 
-  
-  const fetchApplications = async (dealerId) => {
+  const fetchNotifications = useCallback(async () => {
+    if (!notificationDealerId) return [];
+    const res = await api.get(`/notifications/${notificationDealerId}`);
+    const list = Array.isArray(res.data) ? res.data : [];
+    const sorted = [...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    setNotifications(sorted);
+    return sorted;
+  }, [notificationDealerId]);
+
+  const fetchDealerProfile = useCallback(async () => {
     try {
-      const res = await api.get(`/loan-applications/dealer/${dealerId}`);
-      const rawApps = res.data || [];
-      const mapped = rawApps.map(app => {
-        const documents = [];
-        if (app.panDocumentId) documents.push("PAN Card");
-        if (app.aadhaarFrontDocumentId || app.aadhaarBackDocumentId) documents.push("Aadhaar Card");
-        if (app.residentialProofDocumentId) documents.push("Residential Proof");
-        if (app.bankStatementDocumentId || app.salarySlipDocumentId || app.itrDocumentId) documents.push("Income Proof");
-        if (app.rcDocumentId || app.insuranceDocumentId || app.carFrontDocumentId || app.carBackDocumentId) documents.push("Vehicle Documents");
-
-        return {
-          id: app.loanApplicationId,
-          applicationNumber: app.applicationNumber,
-          userId: app.userId,
-          name: app.fullName || "—",
-          mobile: app.mobileNumber || "—",
-          email: app.email || "",
-          loan: app.loanAmount ? `₹${app.loanAmount.toLocaleString('en-IN')}` : "—",
-          loanAmount: app.loanAmount || 0,
-          status: mapStatus(app.status),
-          rawStatus: app.status,
-          type: app.registrationType === "DEALER" ? "Dealer Added" : "Individual",
-          documents,
-          hasRemark: !!app.remark,
-          remark: app.remark,
-          editable: true
-        };
+      const res = await api.get("/dealer/all");
+      const dealers = res.data?.data || [];
+      const found = dealers.find((d) => {
+        const candidateId = d.dealerId || d.id;
+        return (
+          sameId(candidateId, dealerId) ||
+          sameCode(d.dealerCode, storedDealerCode) ||
+          sameCode(d.email, session.email)
+        );
       });
-      setUsers(mapped);
-      setStatusData(mapped);
-    } catch (err) {
-      console.error("Error fetching applications:", err);
+      return found || null;
+    } catch {
+      return null;
     }
-  };
+  }, [dealerId, session.email, storedDealerCode]);
 
-  
-  const handleDocumentUpload = async (file, documentType) => {
-    if (!file) {
-      alert("Please select a file");
-      return;
-    }
-    if (!currentCustomerUserId) {
-      alert("Please complete step 1 (Personal Information) first before uploading documents.");
-      return;
-    }
-
+  const loadDashboard = useCallback(async (showLoader = true) => {
+    if (showLoader) setLoading(true);
     try {
-      setDocumentLoading(true);
-      const formData = new FormData();
-      formData.append("userId", currentCustomerUserId);
-      formData.append("type", documentType);
-      formData.append("file", file);
+      const dealerProfile = await fetchDealerProfile();
+      console.log("[DEALER] fetchDealerProfile result:", JSON.stringify(dealerProfile, null, 2));
+      const resolvedDealerId = dealerProfile?.dealerId || dealerProfile?.id || dealerId;
+      const resolvedCode = dealerProfile?.dealerCode || storedDealerCode;
+      console.log("[DEALER] resolvedDealerId:", resolvedDealerId, "resolvedCode:", resolvedCode);
 
-      const res = await api.post("/documents/upload", formData);
-      const uploadedDoc = res.data.data;
-      setUploadedDocuments((prev) => {
-        const filtered = prev.filter(d => d.documentType !== documentType && d.type !== documentType);
-        return [...filtered, uploadedDoc];
-      });
-      alert(`${documentType} Uploaded Successfully`);
-    } catch (error) {
-      console.error("Document upload error:", error);
-      alert(error?.response?.data?.message || "Document upload failed");
-    } finally {
-      setDocumentLoading(false);
-    }
-  };
+      setProfile((prev) => ({
+        dealerId: resolvedDealerId || prev.dealerId,
+        fullName: dealerProfile?.fullName || prev.fullName,
+        email: dealerProfile?.email || prev.email,
+        mobileNumber: dealerProfile?.mobileNumber || prev.mobileNumber,
+        dealerCode: resolvedCode || prev.dealerCode,
+        role: dealerProfile?.role || prev.role || "DEALER",
+      }));
 
-  const handleNextStep1 = async () => {
-    if (!dealerUserData.name || !dealerUserData.mobile || !dealerUserData.email || !dealerUserData.loanAmount) {
-      alert("Please fill in all mandatory fields: Name, Mobile, Email, and Loan Amount");
-      return;
-    }
-    if (!dealerUserData.mobile.match(/^[6-9][0-9]{9}$/)) {
-      alert("Please enter a valid 10-digit mobile number starting with 6-9");
-      return;
-    }
-    if (parseFloat(dealerUserData.loanAmount) <= 0) {
-      alert("Loan amount must be greater than 0");
-      return;
-    }
-
-    try {
-      const storedDealer = JSON.parse(localStorage.getItem("dealerData"));
-      const dealerId = storedDealer?.dealerId || storedDealer?.id;
-      if (!dealerId) {
-        alert("Dealer session not found. Please log in again.");
-        return;
-      }
-
-      const payload = {
-        fullName: dealerUserData.name,
-        email: dealerUserData.email,
-        mobileNumber: dealerUserData.mobile,
-        loanAmount: parseFloat(dealerUserData.loanAmount),
-        address: dealerUserData.address || "",
-        city: dealerUserData.city || "",
-        state: dealerUserData.state || "",
-        pincode: dealerUserData.pincode || ""
-      };
-
-      let res;
-      if (currentApplicationNumber) {
-        res = await api.put(`/loan-applications/personal/${currentApplicationNumber}`, {
-          fullName: dealerUserData.name,
-          email: dealerUserData.email,
-          mobileNumber: dealerUserData.mobile,
-          address: dealerUserData.address || "",
-          city: dealerUserData.city || "",
-          state: dealerUserData.state || "",
-          pincode: dealerUserData.pincode || ""
-        });
-      } else {
-        res = await api.post(`/loan-applications/apply-by-dealer/${dealerId}`, payload);
-        const savedApp = res.data;
-        setCurrentApplicationNumber(savedApp.applicationNumber);
-        setCurrentCustomerUserId(savedApp.userId);
-      }
-      setDealerCurrentStep(2);
-    } catch (error) {
-      console.error("Error saving step 1:", error);
-      alert(error?.response?.data?.message || error?.response?.data || "Failed to save step 1 details");
-    }
-  };
-
-  const handleNext = async () => {
-    if (dealerCurrentStep === 1) {
-      await handleNextStep1();
-    } else if (dealerCurrentStep === 2) {
-      const panDoc = uploadedDocuments.find(d => d.documentType === "PAN" || d.type === "PAN");
-      const aadhaarDoc = uploadedDocuments.find(d => d.documentType === "AADHAAR" || d.type === "AADHAAR");
-      if (!panDoc || !aadhaarDoc) {
-        alert("Please upload both PAN Card and Aadhaar Card before proceeding.");
-        return;
-      }
-      try {
-        const payload = {
-          panDocumentId: panDoc.documentId,
-          aadhaarFrontDocumentId: aadhaarDoc.documentId,
-          aadhaarBackDocumentId: aadhaarDoc.documentId
-        };
-        await api.post(`/loan-applications/kyc/${currentApplicationNumber}`, payload);
-        setDealerCurrentStep(3);
-      } catch (err) {
-        console.error(err);
-        alert(err?.response?.data?.message || err?.response?.data || "Failed to save KYC");
-      }
-    } else if (dealerCurrentStep === 3) {
-      if (!dealerUserData.city || !dealerUserData.state || !dealerUserData.pincode) {
-        alert("Please fill in all address fields: City, State, and Pincode");
-        return;
-      }
-      if (!dealerUserData.pincode.match(/^[0-9]{6}$/)) {
-        alert("Please enter a valid 6-digit pincode");
-        return;
-      }
-      const lightBillDoc = uploadedDocuments.find(d => d.documentType === "LIGHT_BILL" || d.type === "LIGHT_BILL");
-      const rentalDoc = uploadedDocuments.find(d => d.documentType === "RENTAL_AGREEMENT" || d.type === "RENTAL_AGREEMENT");
-      const docId = lightBillDoc?.documentId || rentalDoc?.documentId;
-      if (!docId) {
-        alert("Please upload at least one residential proof (Light Bill or Rent Agreement).");
-        return;
-      }
-      try {
-        const payload = {
-          residentialProofDocumentId: docId,
-          address: dealerUserData.address,
-          city: dealerUserData.city,
-          state: dealerUserData.state,
-          pincode: dealerUserData.pincode
-        };
-        await api.post(`/loan-applications/residential/${currentApplicationNumber}`, payload);
-        setDealerCurrentStep(4);
-      } catch (err) {
-        console.error(err);
-        alert(err?.response?.data?.message || err?.response?.data || "Failed to save Residential details");
-      }
-    } else if (dealerCurrentStep === 4) {
-      if (!dealerUserData.employmentType) {
-        alert("Please select Employment Type.");
-        return;
-      }
-      const bankStatementDoc = uploadedDocuments.find(d => d.documentType === "BANK_STATEMENT" || d.type === "BANK_STATEMENT");
-      if (!bankStatementDoc) {
-        alert("Bank Statement is required.");
-        return;
-      }
-      try {
-        const payload = {
-          employmentType: dealerUserData.employmentType === "Salaried" ? "SALARIED" : "BUSINESS",
-          bankStatementDocumentId: bankStatementDoc.documentId,
-        };
-        if (dealerUserData.employmentType === "Salaried") {
-          const salarySlipDoc = uploadedDocuments.find(d => d.documentType === "SALARY_SLIP" || d.type === "SALARY_SLIP");
-          const appLetterDoc = uploadedDocuments.find(d => d.documentType === "APPOINTMENT_LETTER" || d.type === "APPOINTMENT_LETTER");
-          payload.salarySlipDocumentId = salarySlipDoc?.documentId || null;
-          payload.appointmentLetterDocumentId = appLetterDoc?.documentId || null;
-        } else {
-          const itrDoc = uploadedDocuments.find(d => d.documentType === "ITR_RETURN" || d.type === "ITR_RETURN");
-          payload.itrDocumentId = itrDoc?.documentId || null;
-        }
-        await api.post(`/loan-applications/income/${currentApplicationNumber}`, payload);
-        setDealerCurrentStep(5);
-      } catch (err) {
-        console.error(err);
-        alert(err?.response?.data?.message || err?.response?.data || "Failed to save Income details");
-      }
-    } else if (dealerCurrentStep === 5) {
-      const rcDoc = uploadedDocuments.find(d => d.documentType === "RC" || d.type === "RC");
-      const insDoc = uploadedDocuments.find(d => d.documentType === "INSURANCE" || d.type === "INSURANCE");
-      const carFrontDoc = uploadedDocuments.find(d => d.documentType === "CAR_FRONT_SIDE_PHOTO" || d.type === "CAR_FRONT_SIDE_PHOTO");
-      const carBackDoc = uploadedDocuments.find(d => d.documentType === "CAR_BACK_SIDE_PHOTO" || d.type === "CAR_BACK_SIDE_PHOTO");
-      
-      if (!rcDoc || !insDoc) {
-        alert("RC Copy and Insurance Copy are required.");
-        return;
-      }
-      try {
-        const payload = {
-          rcDocumentId: rcDoc.documentId,
-          insuranceDocumentId: insDoc.documentId,
-          carFrontDocumentId: carFrontDoc?.documentId || null,
-          carBackDocumentId: carBackDoc?.documentId || null
-        };
-        await api.post(`/loan-applications/vehicle/${currentApplicationNumber}`, payload);
-        setDealerCurrentStep(6);
-      } catch (err) {
-        console.error(err);
-        alert(err?.response?.data?.message || err?.response?.data || "Failed to save Vehicle details");
-      }
-    }
-  };
-
-  const resetNewUserForm = () => {
-    setDealerCurrentStep(1);
-    setDealerUserData({ name: "", mobile: "", email: "", city: "", state: "", pincode: "", address: "", loanAmount: "" });
-    setUploadedDocuments([]);
-    setCurrentApplicationNumber(null);
-    setCurrentCustomerUserId(null);
-    setDealerEmploymentType("");
-    setDealerResidentialType("");
-    setIsEditMode(false);
-  };
-
-  const handleFinalSubmit = async () => {
-    try {
-      if (isEditMode) {
-        const payload = { fullName: dealerUserData.name, email: dealerUserData.email, mobileNumber: dealerUserData.mobile, loanAmount: parseFloat(dealerUserData.loanAmount) || 0, address: dealerUserData.address || '', city: dealerUserData.city || '', state: dealerUserData.state || '', pincode: dealerUserData.pincode || '' };
-        await api.put(`/loan-applications/personal/${currentApplicationNumber}`, payload);
-        alert('Customer details updated successfully!');
-      } else {
-        await api.post(`/loan-applications/submit/${currentApplicationNumber}`);
-        alert('Customer documents submitted for approval successfully!');
-      }
-      setShowAddCustomerModal(false);
-      setIsEditMode(false);
-      setDealerCurrentStep(1);
-      setDealerUserData({ name: '', mobile: '', email: '', city: '', state: '', pincode: '', address: '', loanAmount: '' });
-      setUploadedDocuments([]);
-      setCurrentApplicationNumber(null);
-      setCurrentCustomerUserId(null);
-      const storedDealer = JSON.parse(localStorage.getItem('dealerData'));
-      const dealerId = storedDealer?.dealerId || storedDealer?.id;
-      if (dealerId) fetchApplications(dealerId);
-    } catch (err) {
-      console.error('Final submit error:', err);
-      alert(err?.response?.data?.message || err?.response?.data || 'Failed to submit application');
-    }
-  };
-
-  const handleEditUser = async (user) => {
-    setSelectedUser(user);
-    setEditingUser(user);
-    setDetailsEditMode(false);
-    setDocumentsEditMode(false);
-    setShowEditUserModal(true);
-
-    try {
-      const [appRes, docRes] = await Promise.all([
-        api.get(`/loan-applications/user/${user.userId}`),
-        api.get(`/documents/user/${user.userId}`),
+      const [userRes, personalRes] = await Promise.all([
+        api.get("/user/all"),
+        api.get("/personal-info/all"),
       ]);
 
-      const appData = appRes.data;
-      const app = Array.isArray(appData)
-        ? appData.find((a) => a.applicationNumber === user.applicationNumber) || appData[0]
-        : appData;
+      const allUsers = userRes.data?.data || [];
+      console.log("[DEALER] total users from API:", allUsers.length);
+      console.log("[DEALER] first user sample:", JSON.stringify(allUsers[0], null, 2));
 
-      if (app) {
-        setEditingUser((prev) => ({
-          ...prev,
-          name: app.fullName || prev?.name || "",
-          mobile: app.mobileNumber || prev?.mobile || "",
-          email: app.email || prev?.email || "",
-          loan: app.loanAmount ? `₹${app.loanAmount.toLocaleString("en-IN")}` : prev?.loan || "",
-        }));
-      }
-
-      setUploadedDocuments(docRes.data?.data || []);
-    } catch (err) {
-      console.error("Error fetching application details:", err);
-    }
-  };
-
-  const handleSaveEditUser = async () => {
-    if (!editingUser) return;
-
-    const applicationNumber = editingUser.applicationNumber || editingUser.applicationNo || editingUser.applicationNumber;
-    if (!applicationNumber) {
-      alert("Unable to identify application for update.");
-      return;
-    }
-
-    const loanAmountValue = Number(
-      String(editingUser.loan || "")
-        .replace(/[^0-9.]/g, "")
-    );
-
-    try {
-      const payload = {
-        fullName: editingUser.name,
-        email: editingUser.email,
-        mobileNumber: editingUser.mobile,
-        loanAmount: isNaN(loanAmountValue) ? 0 : loanAmountValue,
-      };
-
-      await api.put(`/loan-applications/personal/${applicationNumber}`, payload);
-
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.applicationNumber === applicationNumber || user.userId === editingUser.userId
-            ? {
-                ...user,
-                name: editingUser.name,
-                mobile: editingUser.mobile,
-                email: editingUser.email,
-                loan: editingUser.loan || user.loan,
-              }
-            : user
-        )
-      );
-      setStatusData((prev) =>
-        prev.map((user) =>
-          user.applicationNumber === applicationNumber || user.userId === editingUser.userId
-            ? {
-                ...user,
-                name: editingUser.name,
-                mobile: editingUser.mobile,
-                email: editingUser.email,
-                loan: editingUser.loan || user.loan,
-              }
-            : user
-        )
-      );
-
-      setSelectedUser((prev) =>
-        prev && (prev.applicationNumber === applicationNumber || prev.userId === editingUser.userId)
-          ? { ...prev, ...editingUser }
-          : prev
-      );
-
-      setShowEditUserModal(false);
-      alert("User updates saved successfully.");
-    } catch (err) {
-      console.error("Update user error:", err);
-      alert(err?.response?.data?.message || "Failed to save user updates");
-    }
-  };
-
-  const handleSaveProfile = async () => {
-    try {
-      const storedDealer = JSON.parse(localStorage.getItem("dealerData"));
-      const dealerId = storedDealer?.dealerId || storedDealer?.id;
-      if (!dealerId) {
-        alert("Dealer ID not found. Please log in again.");
-        return;
-      }
-      const payload = {
-        fullName: profileData.name,
-        email: profileData.email,
-        mobileNumber: profileData.phone,
-        role: "DEALER"
-      };
-      await api.put(`/dealer/update/${dealerId}`, payload);
-      
-      const updatedDealer = {
-        ...storedDealer,
-        fullName: profileData.name,
-        email: profileData.email,
-        mobileNumber: profileData.phone,
-        name: profileData.name,
-        phone: profileData.phone
-      };
-      localStorage.setItem("dealerData", JSON.stringify(updatedDealer));
-      alert("Profile updated successfully!");
-    } catch (err) {
-      console.error(err);
-      alert(err?.response?.data?.message || "Failed to update profile");
-    }
-  };
-
-  const handleSavePassword = async () => {
-    if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
-      alert("Please fill in all password fields");
-      return;
-    }
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert("New Password and Confirm Password do not match");
-      return;
-    }
-    try {
-      const payload = {
-        email: profileData.email,
-        newPassword: passwordForm.newPassword,
-      };
-      await api.post("/dealer/reset-password", payload);
-      alert("Password updated successfully!");
-      setPasswordForm({
-        currentPassword: "",
-        newPassword: "",
-        confirmPassword: "",
-      });
-      setShowPasswordForm(false);
-    } catch (err) {
-      console.error("Password change error:", err);
-      alert(err?.response?.data || err?.response?.data?.message || "Failed to update password");
-    }
-  };
-
-  const fetchNotifications = async (dealerId) => {
-    try {
-      // Fetch base notifications
-      const res = await api.get(`/notifications/${dealerId}`);
-      const sorted = (res.data || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      const feed = sorted.map((n) => {
-        const date = new Date(n.createdAt);
-        const diffMs = new Date() - date;
-        const diffMins = Math.floor(diffMs / 60000);
-        let timeStr = "Just now";
-        if (diffMins > 0) {
-          if (diffMins < 60) timeStr = `${diffMins} min${diffMins > 1 ? "s" : ""} ago`;
-          else {
-            const diffHours = Math.floor(diffMins / 60);
-            timeStr = diffHours < 24 ? `${diffHours} hour${diffHours > 1 ? "s" : ""} ago` : date.toLocaleDateString();
+        // Build filtered list of users belonging to the logged‑in dealer
+        // Match on dealerCode (if present) OR dealerId / assignedDealerId
+        const myUsers = allUsers.filter((u) => {
+          // Prefer dealerCode match when we have it
+          if (resolvedCode && u.dealerCode) {
+            if (sameCode(u.dealerCode, resolvedCode)) return true;
           }
+          // Fallback to dealerId matching (direct or assigned)
+          if (resolvedDealerId) {
+            if (sameId(u.dealerId, resolvedDealerId) || sameId(u.assignedDealerId, resolvedDealerId)) {
+              return true;
+            }
+          }
+          return false;
+        });
+        console.log("[DEALER] users matched after robust filter:", myUsers.length);
+
+      const ids = new Set(myUsers.map((u) => u.userId));
+      const myInfos = (personalRes.data?.data || []).filter((info) => ids.has(info.userId));
+      const myDocs = await fetchDocsForUsers([...ids]);
+
+      myUsers.sort((a, b) =>
+        String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" })
+      );
+      setUsers(myUsers);
+      setPersonalInfos(myInfos);
+      setDocs(myDocs);
+
+      if (resolvedDealerId) {
+        try {
+          const notifRes = await api.get(`/notifications/${resolvedDealerId}`);
+          const list = Array.isArray(notifRes.data) ? notifRes.data : [];
+          setNotifications([...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+        } catch {
+          // notifications failure is non-critical
         }
-        return { id: n.id, message: n.message, time: timeStr };
-      });
-
-      // Fetch document rejection/remark updates for dealer's customers
-      try {
-        const appsRes = await api.get(`/loan-applications/dealer/${dealerId}`);
-        const apps = appsRes.data || [];
-        const docFeed = [];
-
-        await Promise.all(apps.map(async (app) => {
-          if (!app.userId) return;
-          try {
-            const docRes = await api.get(`/documents/user/${app.userId}`);
-            const docs = docRes.data.data || [];
-            docs.forEach((doc) => {
-              const name = app.fullName || "Customer";
-              const label = docNames[doc.documentType] || (doc.documentType || "").replace(/_/g, " ");
-              if (doc.status === "REJECTED") {
-                docFeed.push({
-                  id: `rej-${doc.documentId}`,
-                  message: `❌ ${name}'s ${label} was rejected by admin${doc.remarks ? `: "${doc.remarks}"` : "."}`,
-                  time: "Recent",
-                  type: "rejected",
-                  documentId: doc.documentId,
-                  documentType: doc.documentType,
-                  userId: app.userId,
-                  customerName: name,
-                  label,
-                });
-              } else if (doc.remarks && doc.status !== "REJECTED") {
-                docFeed.push({
-                  id: `rem-${doc.documentId}`,
-                  message: `💬 Admin added remark on ${name}'s ${label}: "${doc.remarks}"`,
-                  time: "Recent",
-                  type: "remark",
-                  documentId: doc.documentId,
-                  documentType: doc.documentType,
-                  userId: app.userId,
-                  customerName: name,
-                  label,
-                });
-              } else if (doc.status === "APPROVED") {
-                docFeed.push({
-                  id: `apv-${doc.documentId}`,
-                  message: `✅ ${name}'s ${label} was approved by admin.`,
-                  time: "Recent",
-                  type: "approved",
-                });
-              }
-            });
-          } catch (_) {}
-        }));
-
-        // Merge: doc updates first (most actionable), then notifications
-        setActivityFeed([...docFeed, ...feed]);
-      } catch (_) {
-        setActivityFeed(feed);
       }
-    } catch (err) {
-      console.error("Failed to fetch notifications:", err);
+    } catch (error) {
+      showError(error, "Failed to load dealer dashboard");
+    } finally {
+      if (showLoader) setLoading(false);
     }
-  };
+  }, [dealerId, storedDealerCode, fetchDealerProfile, fetchDocsForUsers]);
 
-  const [activityFeed, setActivityFeed] = useState([]);
-  const [previewDoc, setPreviewDoc] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      loadDashboard(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadDashboard]);
 
-  const docNames = {
-    PAN: "PAN Card",
-    AADHAAR: "Aadhaar Card",
-    AADHAAR_FRONT: "Aadhaar Front",
-    AADHAAR_BACK: "Aadhaar Back",
-    LIGHT_BILL: "Light Bill",
-    RENTAL_AGREEMENT: "Rental Agreement",
-    RC: "RC Copy",
-    INSURANCE: "Insurance Copy",
-    SALARY_SLIP: "Salary Slip",
-    APPOINTMENT_LETTER: "Appointment Letter",
-    ITR_RETURN: "ITR Copy",
-    BANK_STATEMENT: "Bank Statement",
-    CAR_FRONT_SIDE_PHOTO: "Car Front Photo",
-    CAR_BACK_SIDE_PHOTO: "Car Back Photo",
-    CHASSIS_NUMBER: "Chassis Number",
-    ODOMETER_READING: "Odometer Reading",
+  useEffect(() => {
+    pollRef.current = window.setInterval(() => {
+      loadDashboard(false);
+    }, 30000);
+    return () => window.clearInterval(pollRef.current);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    return () => {
+      if (preview?.url) URL.revokeObjectURL(preview.url);
+    };
+  }, [preview]);
+
+  const markRead = async (notificationId) => {
+    try {
+      await api.put(`/notifications/read/${notificationId}`);
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === notificationId ? { ...item, read: true } : item))
+      );
+    } catch (error) {
+      showError(error, "Failed to mark notification as read");
+    }
   };
 
   const openPreview = async (doc) => {
+    if (!doc?.documentId) return;
+    if (!token) {
+      toast.error("Authorization token missing");
+      return;
+    }
+
     try {
-      const res = await fetch(`${api.defaults.baseURL}/documents/preview/${doc.documentId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      const res = await fetch(`http://localhost:8081/api/documents/preview/${doc.documentId}`, {
+        headers: { Authorization: `Bearer ${token}` },
       });
+      if (!res.ok) throw new Error("Preview request failed");
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      setPreviewUrl(url);
-      setPreviewDoc(doc);
-      setShowPreviewModal(true);
-    } catch (err) {
-      console.error("Preview error:", err);
-      alert("Failed to load document preview");
-    }
-  };
-
-  const handleReuploadDocument = async (documentId, documentType, file, userId) => {
-    if (!file) return;
-    const resolvedUserId = userId || currentCustomerUserId;
-    try {
-      setDocumentLoading(true);
-      await api.delete(`/documents/${documentId}`);
-      const formData = new FormData();
-      formData.append("userId", resolvedUserId);
-      formData.append("type", documentType);
-      formData.append("file", file);
-      const res = await api.post("/documents/upload", formData);
-      const uploadedDoc = res.data.data;
-      setUploadedDocuments((prev) => [
-        ...prev.filter((d) => d.documentId !== documentId),
-        uploadedDoc,
-      ]);
-      alert(`${documentType} re-uploaded successfully!`);
-      // Refresh notifications to reflect updated status
-      const storedDealer = JSON.parse(localStorage.getItem("dealerData"));
-      const dealerId = storedDealer?.dealerId || storedDealer?.id;
-      if (dealerId) fetchNotifications(dealerId);
+      if (preview?.url) URL.revokeObjectURL(preview.url);
+      const fileName = doc.fileName || "";
+      setPreview({
+        url: URL.createObjectURL(blob),
+        title: docLabel(doc.documentType),
+        isPdf: fileName.toLowerCase().endsWith(".pdf"),
+      });
     } catch (error) {
-      console.error("Re-upload error:", error);
-      alert(error?.response?.data?.message || "Failed to re-upload document");
-    } finally {
-      setDocumentLoading(false);
+      showError(error, "Failed to preview document");
     }
   };
 
-  useEffect(() => {
-    const storedDealer = JSON.parse(localStorage.getItem("dealerData"));
-    const storedCode = localStorage.getItem("dealerCode");
-    if (storedDealer || storedCode) {
-      setProfileData((prev) => ({
-        ...prev,
-        name: storedDealer?.fullName || storedDealer?.name || prev.name,
-        phone: storedDealer?.mobileNumber || storedDealer?.phone || prev.phone,
-        email: storedDealer?.email || prev.email,
-        dealerCode: storedDealer?.dealerCode || storedCode || prev.dealerCode,
-      }));
+  const openUserModal = async (user) => {
+    setSelectedUser(user);
+    setSelectedCounts(null);
+    setSelectedUserDocs(docsByUser[user.userId] || []);
+    try {
+      const [docsRes, countRes] = await Promise.all([
+        api.get(`/documents/user/${user.userId}`),
+        api.get(`/documents/count/${user.userId}`),
+      ]);
+      setSelectedUserDocs(docsRes.data?.data || []);
+      setSelectedCounts(countRes.data?.data || null);
+    } catch (error) {
+      showError(error, "Failed to load user details");
     }
-    const dealerId = storedDealer?.dealerId || storedDealer?.id;
-    let interval = null;
-    if (dealerId) {
-      fetchApplications(dealerId);
-      fetchNotifications(dealerId);
-      interval = setInterval(() => {
-        fetchNotifications(dealerId);
-      }, 10000);
+  };
+
+  const openTrackingModal = async (user) => {
+    setTrackingUser(user);
+    setTrackingCounts(null);
+    setTrackingDocs(docsByUser[user.userId] || []);
+    try {
+      const [docsRes, countRes] = await Promise.all([
+        api.get(`/documents/user/${user.userId}`),
+        api.get(`/documents/count/${user.userId}`),
+      ]);
+      setTrackingDocs(docsRes.data?.data || []);
+      setTrackingCounts(countRes.data?.data || null);
+    } catch (error) {
+      showError(error, "Failed to load user status details");
     }
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, []);
-
-
-
-  /* USERS */
-
-  const [users, setUsers] = useState([]);
-  const [statusData, setStatusData] = useState([]);
-
-  const statusUsers = [
-    "Documents Submitted",
-    "Documents Verified",
-    "Bank Review",
-    "Loan Approved",
-    "Rejected",
-  ];
-
-  const filteredUsers =
-    statusFilter === "All"
-      ? statusData
-      : statusData.filter(
-          (item) =>
-            item.status === statusFilter
-        );
-
-  /* FLOW */
-
-  const steps = [
-    "Documents Submitted",
-    "Documents Verified",
-    "Sent To Bank",
-    "Bank Review",
-    "Loan Approved",
-    "Amount Disbursed",
-  ];
-
-
-
-
-  const reportsData = [
-  {
-    month: "January",
-    values: [45, 70, 58, 95, 120, 85],
-  },
-  {
-    month: "February",
-    values: [60, 82, 74, 110, 138, 96],
-  },
-  {
-    month: "March",
-    values: [75, 90, 84, 125, 150, 118],
-  },
-  {
-    month: "April",
-    values: [55, 76, 66, 104, 132, 92],
-  },
-  {
-    month: "May",
-    values: [82, 105, 96, 138, 170, 130],
-  },
-];
-
-
-const weekLabels = [
-  "Week 1",
-  "Week 2",
-  "Week 3",
-  "Week 4",
-  "Week 5",
-  "Week 6",
-];
-
-
-
+  };
 
   const handleLogout = () => {
-    localStorage.clear();
+    localStorage.removeItem("role");
+    localStorage.removeItem("dealerData");
     navigate("/");
   };
 
+  const copyDealerCode = async () => {
+    try {
+      await navigator.clipboard.writeText(profile.dealerCode);
+      toast.success("Dealer code copied");
+    } catch {
+      toast.error("Could not copy dealer code");
+    }
+  };
+
+  const personalInfoFor = (userId) => personalInfos.find((item) => item.userId === userId);
+
+  const openWizard = () => {
+    setWizardOpen(true);
+    setEmploymentType("");
+    setFiles({});
+    setUploadedDocs([]);
+    setPersonalForm(initialPersonalForm);
+  };
+
+  const openUploadWizard = (user) => {
+    if (isUserAssignedToBank(user)) {
+      toast.info("This application is already assigned to a bank. Documents are locked.");
+      return;
+    }
+    toast.info("Document upload wizard is being updated. Please use Status re-upload for rejected documents for now.");
+  };
+
+  const requiredUploadTypes = () => {
+    const income =
+      employmentType === "Salaried"
+        ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+        : employmentType === "Self Employed"
+          ? ["ITR_RETURN", "BANK_STATEMENT"]
+          : [];
+    return [...STEP_TYPES[2], ...income, ...STEP_TYPES[5]];
+  };
+
+  const validateFiles = () => {
+    if (!files.PAN || !files.AADHAAR) {
+      toast.error("Upload PAN and Aadhaar");
+      return false;
+    }
+    if (!files.LIGHT_BILL && !files.RENTAL_AGREEMENT) {
+      toast.error("Upload Light Bill or Rental Agreement");
+      return false;
+    }
+    if (!employmentType) {
+      toast.error("Select employment type");
+      return false;
+    }
+    const missing = requiredUploadTypes().find((type) => !files[type]);
+    if (missing) {
+      toast.error(`Upload ${docLabel(missing)}`);
+      return false;
+    }
+    return true;
+  };
+
+  const validateRegistrationForm = () => {
+    const required = [
+      personalForm.fullName,
+      personalForm.email,
+      personalForm.mobileNumber,
+      personalForm.password,
+      personalForm.address,
+      personalForm.city,
+      personalForm.state,
+      personalForm.pincode,
+      personalForm.loanAmount,
+    ];
+
+    if (required.some((value) => String(value || "").trim() === "")) {
+      toast.error("Fill all registration and loan fields");
+      return false;
+    }
+    if (!/^\d{10}$/.test(String(personalForm.mobileNumber))) {
+      toast.error("Mobile number must be 10 digits");
+      return false;
+    }
+    if (!/^\d{6}$/.test(String(personalForm.pincode))) {
+      toast.error("Pincode must be 6 digits");
+      return false;
+    }
+    return validateFiles();
+  };
+
+  const resolveRegisteredUserId = async (registeredUser) => {
+    const directId = registeredUser?.userId || registeredUser?.id;
+    if (directId) return directId;
+
+    const usersRes = await api.get("/user/all");
+    const matched = (usersRes.data?.data || []).find(
+      (user) => String(user.email || "").toLowerCase() === personalForm.email.trim().toLowerCase()
+    );
+    return matched?.userId || matched?.id;
+  };
+
+  const submitLoanRegistration = async () => {
+    if (!validateRegistrationForm()) return false;
+    setSavingWizard(true);
+    try {
+      const registerRes = await api.post("/user/register", {
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        password: personalForm.password,
+        registrationType: "DEALER",
+        dealerCode: profile.dealerCode,
+        dealerId: profile.dealerId,
+      });
+      const newUserId = await resolveRegisteredUserId(registerRes.data?.data);
+      if (!newUserId) throw new Error("User registered, but backend did not return a userId");
+
+      await api.post("/personal-info/save", {
+        userId: Number(newUserId),
+        address: personalForm.address,
+        mobileNumber: personalForm.mobileNumber,
+        city: personalForm.city,
+        state: personalForm.state,
+        pincode: personalForm.pincode,
+        loanAmount: Number(personalForm.loanAmount),
+      });
+
+      const selectedTypes = [...requiredUploadTypes(), files.LIGHT_BILL ? "LIGHT_BILL" : "RENTAL_AGREEMENT"];
+      const uploaded = [];
+
+      for (const type of selectedTypes) {
+        const formData = new FormData();
+        formData.append("userId", String(newUserId));
+        formData.append("type", type);
+        formData.append("file", files[type]);
+        const res = await api.post("/documents/upload", formData);
+        uploaded.push(res.data?.data);
+      }
+
+      setUploadedDocs(uploaded.filter(Boolean));
+      await loadDashboard();
+      toast.success("New user loan registration submitted");
+      return true;
+    } catch (error) {
+      showError(error, "Failed to submit loan registration");
+      return false;
+    } finally {
+      setSavingWizard(false);
+    }
+  };
+
+  const reuploadDoc = async (userId, type, file) => {
+    if (!file) return;
+    const user = users.find((item) => item.userId === userId);
+    if (isUserAssignedToBank(user)) {
+      toast.info("This application is already assigned to a bank. Documents are locked.");
+      return;
+    }
+    try {
+      const existing = docs.find((doc) => doc.userId === userId && doc.documentType === type);
+      if (existing?.documentId) await api.delete(`/documents/${existing.documentId}`);
+      const formData = new FormData();
+      formData.append("userId", String(userId));
+      formData.append("type", type);
+      formData.append("file", file);
+      await api.post("/documents/upload", formData);
+      const freshDocs = await fetchDocsForUsers(userIds);
+      setDocs(freshDocs);
+      if (selectedUser?.userId === userId) {
+        setSelectedUserDocs(freshDocs.filter((doc) => doc.userId === userId));
+      }
+      toast.success(`${docLabel(type)} updated`);
+    } catch (error) {
+      showError(error, "Failed to re-upload document");
+    }
+  };
+
+  const saveProfile = async () => {
+    setProfileSaving(true);
+    try {
+      await api.put(`/dealer/update/${dealerId}`, {
+        fullName: profile.fullName,
+        email: profile.email,
+        mobileNumber: profile.mobileNumber,
+      });
+      toast.success("Profile updated");
+    } catch (error) {
+      showError(error, "Failed to update profile");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (!passwordForm.password || passwordForm.password !== passwordForm.confirm) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    try {
+      await api.post("/dealer/reset-password", {
+        email: profile.email,
+        newPassword: passwordForm.password,
+      });
+      setPasswordForm({ password: "", confirm: "" });
+      toast.success("Password changed");
+    } catch (error) {
+      showError(error, "Failed to change password");
+    }
+  };
+
+  const sortedStatusUsers = useMemo(() => {
+    return [...users].sort((a, b) =>
+      String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" })
+    );
+  }, [users]);
+
+  const title = normalizedMenu === "Users" ? "Users" : normalizedMenu;
+
   return (
     <div className="flex min-h-screen bg-[#F4F6F9]">
-      {/* SIDEBAR */}
-
       <Sidebar
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
-        activeMenu={activeMenu}
+        activeMenu={activeMenu === "Users" ? "User" : activeMenu}
         setActiveMenu={setActiveMenu}
         handleLogout={handleLogout}
       />
 
-      {/* MAIN */}
-
-      <div className="flex-1 overflow-y-auto">
-        {/* TOPBAR */}
-
-        <div className="bg-white px-8 py-6 shadow-sm flex items-center justify-between">
-
-  {/* LEFT SIDE */}
-
-  <div>
-    <h1 className="text-3xl font-bold text-[#0B2A4A]">
-      Dealer Panel
-    </h1>
-
-    <p className="text-sm text-gray-500 mt-1">
-      Manage customers, documents & bank approvals
-    </p>
-  </div>
-
-  {/* RIGHT SIDE — DEALER CODE */}
-
-  <div
-    className="bg-gradient-to-r from-[#0B2A4A] to-[#123E68]
-    text-white px-6 py-4 rounded-2xl
-    shadow-lg min-w-[220px]"
-  >
-
-    <p className="text-xs uppercase tracking-wider text-gray-300">
-      Dealer Code
-    </p>
-
-    <div className="flex items-center justify-between mt-2">
-
-      <h2 className="text-2xl font-bold tracking-widest">
-        {profileData.dealerCode}
-      </h2>
-
-      <button
-        onClick={() => {
-          navigator.clipboard.writeText(profileData.dealerCode);
-          alert("Dealer Code Copied");
-        }}
-        className="bg-white/20 hover:bg-white/30
-        px-3 py-1 rounded-lg text-sm transition"
-      >
-        Copy
-      </button>
-
-    </div>
-
-  </div>
-
-</div>
-
-        {/* CONTENT */}
-
-        <div className="p-8 space-y-8">
-          {/* DASHBOARD */}
-
-          {activeMenu === "Dashboard" && (
-            <>
-              {/* STATS */}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-                <div className="bg-white rounded-3xl p-6 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Total Applications
-                  </p>
-
-                  <h2 className="text-3xl font-bold text-[#0B2A4A] mt-3">
-                    {users.length}
-                  </h2>
-
-                  <p className="text-xs text-green-600 mt-2">
-                    Active applications
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Pending Applications
-                  </p>
-
-                  <h2 className="text-3xl font-bold text-[#0B2A4A] mt-3">
-                    {statusData.filter(app => app.rawStatus === "DOCUMENTS_SUBMITTED" || app.rawStatus === "PENDING").length}
-                  </h2>
-
-                  <p className="text-xs text-orange-500 mt-2">
-                    Submitted for approval
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Approved Loans
-                  </p>
-
-                  <h2 className="text-3xl font-bold text-[#0B2A4A] mt-3">
-                    {statusData.filter(app => app.rawStatus === "APPROVED").length}
-                  </h2>
-
-                  <p className="text-xs text-green-600 mt-2">
-                    Loans approved
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-3xl p-6 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Loan Value
-                  </p>
-
-                  <h2 className="text-3xl font-bold text-[#0B2A4A] mt-3">
-                    {(() => {
-                      const totalVal = statusData.reduce((sum, app) => sum + (app.loanAmount || 0), 0);
-                      if (totalVal >= 10000000) {
-                        return `₹${(totalVal / 10000000).toFixed(2)}Cr`;
-                      } else if (totalVal >= 100000) {
-                        return `₹${(totalVal / 100000).toFixed(2)}L`;
-                      }
-                      return `₹${totalVal.toLocaleString('en-IN')}`;
-                    })()}
-                  </h2>
-
-                  <p className="text-xs text-blue-500 mt-2">
-                    Total processed amount
-                  </p>
-                </div>
-              </div>
-
-              {/* QUICK ACTIONS */}
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-  {/* ADD CUSTOMER CARD */}
-
-  <div
-    onClick={() => { resetNewUserForm(); setShowAddCustomerModal(true); }}
-    className="group relative overflow-hidden
-    bg-gradient-to-r from-[#0B2A4A] to-[#123E68]
-    rounded-3xl p-6 cursor-pointer
-    transition-all duration-300
-    hover:scale-[1.02] hover:shadow-2xl"
-  >
-
-    {/* WHITE OVERLAY */}
-
-    <div
-      className="absolute inset-0
-      bg-white
-      opacity-0
-      group-hover:opacity-100
-      transition-all duration-300"
-    ></div>
-
-    {/* CONTENT */}
-
-    <div className="relative z-10">
-
-      <h2
-        className="text-xl font-bold text-white
-        group-hover:text-[#0B2A4A]
-        transition-colors duration-300"
-      >
-        Add New Customer
-      </h2>
-
-      <p
-        className="text-sm text-gray-300 mt-2 leading-6
-        group-hover:text-[#0B2A4A]
-        transition-colors duration-300"
-      >
-        Create loan applications and upload customer documents
-      </p>
-
-    </div>
-
-  </div>
-
-  {/* DEALER PERFORMANCE */}
-
-  <div
-    onClick={() =>
-      setActiveMenu("Reports")
-    }
-    className="group relative overflow-hidden
-    bg-gradient-to-r from-[#0B2A4A] to-[#123E68]
-    rounded-3xl p-6 cursor-pointer
-    transition-all duration-300
-    hover:scale-[1.02] hover:shadow-2xl"
-  >
-
-    {/* WHITE OVERLAY */}
-
-    <div
-      className="absolute inset-0
-      bg-white
-      opacity-0
-      group-hover:opacity-100
-      transition-all duration-300"
-    ></div>
-
-    {/* CONTENT */}
-
-    <div className="relative z-10">
-
-      <h2
-        className="text-xl font-bold text-white
-        group-hover:text-[#0B2A4A]
-        transition-colors duration-300"
-      >
-        Dealer Performance
-      </h2>
-
-      <p
-        className="text-sm text-gray-300 mt-2 leading-6
-        group-hover:text-[#0B2A4A]
-        transition-colors duration-300"
-      >
-        Track monthly approvals & customer growth
-      </p>
-
-    </div>
-
-  </div>
-
-</div>
-
-{/* ADD CUSTOMER MODAL */}
-
-{showAddCustomerModal && (
-
-  <div
-    className="fixed inset-0 z-50
-    bg-black/50 backdrop-blur-sm
-    flex items-center justify-center p-4"
-  >
-
-    {/* MODAL */}
-
-    <div
-      className="bg-white w-full max-w-6xl
-      max-h-[95vh] overflow-y-auto
-      rounded-[32px] shadow-2xl
-      animate-in fade-in zoom-in duration-200"
-    >
-
-      {/* HEADER */}
-
-      <div
-        className="sticky top-0 z-20
-        bg-white border-b border-gray-100
-        px-8 py-5 flex items-center justify-between"
-      >
-
-        <div>
-
-          <h2 className="text-2xl font-bold text-[#0B2A4A]">
-            Add New Customer
-          </h2>
-
-          <p className="text-sm text-gray-500 mt-1">
-            Upload customer loan documents
-          </p>
-
-        </div>
-
-        <button
-          onClick={() =>
-            setShowAddCustomerModal(false)
-          }
-          className="w-11 h-11 rounded-full
-          bg-[#F4F6F9]
-          hover:bg-gray-200
-          flex items-center justify-center
-          text-lg font-bold"
-        >
-          ✕
-        </button>
-
-      </div>
-
-      {/* BODY */}
-
-      <div className="p-8">
-
-  {/* STEPS */}
-
-  <div className="flex items-center gap-3 mb-8 overflow-x-auto">
-
-    {[
-      "Personal",
-      "KYC",
-      "Residential",
-      "Income",
-      "Vehicle",
-      "Verify",
-    ].map((step, index) => (
-
-      <div
-        key={index}
-        className={`px-5 py-2 rounded-2xl
-        text-sm font-semibold whitespace-nowrap
-        transition-all duration-200
-
-        ${
-          dealerCurrentStep === index + 1
-            ? "bg-[#27D3C3] text-[#0B2A4A] shadow-lg scale-105"
-            : "bg-[#F4F6F9] text-gray-500"
-        }`}
-      >
-        {index + 1}. {step}
-      </div>
-
-    ))}
-
-  </div>
-
-  {/* STEP 1 — PERSONAL */}
-
-  {dealerCurrentStep === 1 && (
-
-    <div>
-
-      <div className="mb-8">
-
-        <h2 className="text-2xl font-bold text-[#0B2A4A]">
-          Personal Information
-        </h2>
-
-        <p className="text-sm text-gray-500 mt-2">
-          Enter customer personal details
-        </p>
-
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            Full Name <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            type="text"
-            placeholder="Enter Full Name"
-            value={dealerUserData?.name || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                name: e.target.value,
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            Mobile Number <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            type="text"
-            maxLength={10}
-            placeholder="Enter Mobile Number"
-            value={dealerUserData?.mobile || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                mobile: e.target.value.replace(/\D/g, ""),
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            Email Address <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            type="email"
-            placeholder="Enter Email"
-            value={dealerUserData?.email || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                email: e.target.value,
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            Loan Amount <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            type="number"
-            placeholder="Enter Loan Amount"
-            value={dealerUserData?.loanAmount || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                loanAmount: e.target.value,
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            Date Of Birth
-          </label>
-
-          <input
-            type="date"
-            value={dealerUserData?.dob || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                dob: e.target.value,
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            City <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            type="text"
-            placeholder="Enter City"
-            value={dealerUserData?.city || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                city: e.target.value,
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            State <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            type="text"
-            placeholder="Enter State"
-            value={dealerUserData?.state || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                state: e.target.value,
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            Pincode <span className="text-red-500">*</span>
-          </label>
-
-          <input
-            type="text"
-            maxLength={6}
-            placeholder="Enter Pincode"
-            value={dealerUserData?.pincode || ""}
-            onChange={(e) =>
-              setDealerUserData({
-                ...dealerUserData,
-                pincode: e.target.value.replace(/\D/g, ""),
-              })
-            }
-            className="w-full h-14 rounded-2xl border border-gray-200
-            bg-[#F8FAFC] px-5 outline-none"
-          />
-
-        </div>
-
-        
-
-      </div>
-
-    </div>
-
-  )}
-
-  {/* STEP 2 — KYC */}
-
-  {dealerCurrentStep === 2 && (
-
-    <div>
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-        KYC Documents
-      </h2>
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-        Upload PAN & Aadhaar documents
-      </p>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* PAN */}
-
-        <div className="bg-[#F8FAFC] border border-gray-200 rounded-3xl p-5">
-
-          <label className="font-semibold text-[#0B2A4A] block mb-3">
-            Upload PAN Card
-          </label>
-
-          <input
-            type="file"
-            accept=".jpg,.jpeg,.png,.pdf"
-            onChange={(e) => {
-              const file = e.target.files[0];
-              if (file) {
-                setDealerUserData({
-                  ...dealerUserData,
-                  panFile: file,
-                });
-                handleDocumentUpload(file, "PAN");
-              }
-            }}
-            className="mt-4 w-full text-sm
-            file:mr-4 file:px-4 file:py-2
-            file:rounded-xl file:border-0
-            file:bg-[#0B2A4A]
-            file:text-white"
-          />
-
-        </div>
-
-        {/* AADHAAR */}
-
-        <div className="bg-[#F8FAFC] border border-gray-200 rounded-3xl p-5">
-
-          <label className="font-semibold text-[#0B2A4A] block mb-3">
-            Upload Aadhaar Card
-          </label>
-
-          <input
-            type="file"
-            accept=".jpg,.jpeg,.png,.pdf"
-            onChange={(e) => {
-              const file = e.target.files[0];
-              if (file) {
-                setDealerUserData({
-                  ...dealerUserData,
-                  aadhaarFile: file,
-                });
-                handleDocumentUpload(file, "AADHAAR");
-              }
-            }}
-            className="mt-4 w-full text-sm
-            file:mr-4 file:px-4 file:py-2
-            file:rounded-xl file:border-0
-            file:bg-[#0B2A4A]
-            file:text-white"
-          />
-
-        </div>
-
-      </div>
-
-    </div>
-
-  )}
-
-  {/* STEP 3 — RESIDENTIAL */}
-
-  {dealerCurrentStep === 3 && (
-
-    <div>
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-        Residential Proof
-      </h2>
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-        Upload Light Bill or Rental Agreement
-      </p>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {[
-          {
-            title: "Light Bill",
-            key: "lightBill",
-          },
-          {
-            title: "Rental Agreement",
-            key: "rentAgreement",
-          },
-        ].map((doc, index) => (
-
-          <div
-            key={index}
-            className="bg-[#F8FAFC]
-            border border-gray-200 rounded-3xl p-5"
-          >
-
-            <h3 className="font-semibold text-[#0B2A4A]">
-              {doc.title}
-            </h3>
-
-            <input
-              type="file"
-              accept=".jpg,.jpeg,.png,.pdf"
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  setDealerUserData({
-                    ...dealerUserData,
-                    [doc.key]: file,
-                  });
-                  const docType = doc.key === "lightBill" ? "LIGHT_BILL" : "RENTAL_AGREEMENT";
-                  handleDocumentUpload(file, docType);
-                }
-              }}
-              className="mt-5 w-full text-sm
-              file:mr-4 file:px-4 file:py-2
-              file:rounded-xl file:border-0
-              file:bg-[#0B2A4A]
-              file:text-white"
-            />
-
-          </div>
-
-        ))}
-
-      </div>
-
-    </div>
-
-  )}
-
-  {/* STEP 4 — INCOME */}
-
-  {dealerCurrentStep === 4 && (
-
-    <div>
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-        Income Proof
-      </h2>
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-        Upload income verification documents
-      </p>
-
-      <select
-        value={dealerUserData?.employmentType || ""}
-        onChange={(e) =>
-          setDealerUserData({
-            ...dealerUserData,
-            employmentType: e.target.value,
-          })
-        }
-        className="w-full md:w-1/2 h-14 rounded-2xl border border-gray-200
-        bg-[#F8FAFC] px-5 mb-8"
-      >
-
-        <option value="">
-          Select Employment Type
-        </option>
-
-        <option value="Salaried">
-          Salaried
-        </option>
-
-        <option value="Self Employed">
-          Self Employed
-        </option>
-
-      </select>
-
-      {/* SALARIED */}
-
-      {dealerUserData?.employmentType === "Salaried" && (
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {[
-            { label: "Appointment Letter", type: "APPOINTMENT_LETTER" },
-            { label: "3 Months Salary Slips", type: "SALARY_SLIP" },
-            { label: "6 Months Bank Statement", type: "BANK_STATEMENT" },
-          ].map((doc, index) => (
-
-            <div
-              key={index}
-              className="bg-[#F8FAFC]
-              border border-gray-200 rounded-3xl p-5"
-            >
-
-              <h3 className="font-semibold text-[#0B2A4A]">
-                {doc.label}
-              </h3>
-
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.pdf"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    handleDocumentUpload(file, doc.type);
-                  }
-                }}
-                className="mt-5 w-full text-sm
-                file:mr-4 file:px-4 file:py-2
-                file:rounded-xl file:border-0
-                file:bg-[#0B2A4A]
-                file:text-white"
-              />
-
+      <main className="min-w-0 flex-1">
+        <div className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 px-6 py-4 backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-black text-[#0B2A4A]">{title}</h1>
+              <p className="text-sm font-medium text-gray-500">Dealer Panel</p>
             </div>
 
-          ))}
-
-        </div>
-
-      )}
-
-      {/* SELF EMPLOYED */}
-
-      {dealerUserData?.employmentType === "Self Employed" && (
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-          {[
-            { label: "ITR Copy", type: "ITR_RETURN" },
-            { label: "6 Months Bank Statement", type: "BANK_STATEMENT" },
-          ].map((doc, index) => (
-
-            <div
-              key={index}
-              className="bg-[#F8FAFC]
-              border border-gray-200 rounded-3xl p-5"
-            >
-
-              <h3 className="font-semibold text-[#0B2A4A]">
-                {doc.label}
-              </h3>
-
-              <input
-                type="file"
-                accept=".jpg,.jpeg,.png,.pdf"
-                onChange={(e) => {
-                  const file = e.target.files[0];
-                  if (file) {
-                    handleDocumentUpload(file, doc.type);
-                  }
-                }}
-                className="mt-5 w-full text-sm
-                file:mr-4 file:px-4 file:py-2
-                file:rounded-xl file:border-0
-                file:bg-[#0B2A4A]
-                file:text-white"
-              />
-
-            </div>
-
-          ))}
-
-        </div>
-
-      )}
-
-    </div>
-
-  )}
-
-  {/* STEP 5 — VEHICLE */}
-
-  {dealerCurrentStep === 5 && (
-
-    <div>
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-        Vehicle Documents
-      </h2>
-
-      <p className="text-sm text-gray-500 mt-2 mb-8">
-        Upload vehicle verification documents
-      </p>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {[
-          { label: "RC Copy", type: "RC" },
-          { label: "Insurance Copy", type: "INSURANCE" },
-          { label: "Front Car Image", type: "CAR_FRONT_SIDE_PHOTO" },
-          { label: "Rear Car Image", type: "CAR_BACK_SIDE_PHOTO" },
-          { label: "Chassis Number Image", type: "CHASSIS_NUMBER" },
-          { label: "Odometer Image (KM Visible)", type: "ODOMETER_READING" },
-        ].map((doc, index) => (
-
-          <div
-            key={index}
-            className="bg-[#FFF7F7]
-            border border-red-200 rounded-3xl p-5"
-          >
-
-            <h3 className="font-semibold text-[#0B2A4A]">
-              {doc.label}
-            </h3>
-
-            <input
-              type="file"
-              accept=".jpg,.jpeg,.png,.pdf"
-              onChange={(e) => {
-                const file = e.target.files[0];
-                if (file) {
-                  handleDocumentUpload(file, doc.type);
-                }
-              }}
-              className="mt-5 w-full text-sm
-              file:mr-4 file:px-4 file:py-2
-              file:rounded-xl file:border-0
-              file:bg-[#0B2A4A]
-              file:text-white"
-            />
-
-          </div>
-
-        ))}
-
-      </div>
-
-    </div>
-
-  )}
-
-  {/* STEP 6 — VERIFY */}
-
-  {dealerCurrentStep === 6 && (
-
-    <div>
-
-      <div className="text-center mb-8">
-        <div className="w-24 h-24 mx-auto rounded-full bg-[#EAFBF8] flex items-center justify-center text-5xl">✅</div>
-        <h2 className="text-2xl font-bold text-[#0B2A4A] mt-6">{isEditMode ? 'Edit Customer Details' : 'Verify Customer Details'}</h2>
-        <p className="text-gray-500 mt-3">{isEditMode ? 'Update details and re-upload documents, then click Update' : 'Please verify all details before final submission'}</p>
-      </div>
-
-      {/* CUSTOMER INFO */}
-      <div className="bg-[#F8FAFC] rounded-3xl p-6 mb-6 space-y-3">
-        <div><span className="font-semibold text-[#0B2A4A]">Name:</span> {dealerUserData?.name}</div>
-        <div><span className="font-semibold text-[#0B2A4A]">Mobile:</span> {dealerUserData?.mobile}</div>
-        <div><span className="font-semibold text-[#0B2A4A]">Email:</span> {dealerUserData?.email}</div>
-        <div><span className="font-semibold text-[#0B2A4A]">Employment:</span> {dealerUserData?.employmentType}</div>
-        
-      </div>
-
-      {/* UPLOADED DOCUMENTS */}
-      <h3 className="text-lg font-bold text-[#0B2A4A] mb-4">Uploaded Documents</h3>
-      {uploadedDocuments.length === 0 ? (
-        <p className="text-sm text-gray-400">No documents uploaded.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {uploadedDocuments.map((doc, index) => {
-            const type = doc.documentType || doc.type || "";
-            const label = docNames[type] || type.replace(/_/g, " ");
-            return (
-              <div key={index} className="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <p className="text-xs text-gray-500">Document</p>
-                    <p className="font-semibold text-[#0B2A4A]">{label}</p>
-                  </div>
-                  <button
-                    onClick={() => openPreview(doc)}
-                    className="bg-[#0B2A4A] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-[#081f36] transition"
-                  >
-                    View {label}
-                  </button>
-                </div>
-                {/* REUPLOAD */}
-                <div>
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.pdf"
-                    id={`reupload-${doc.documentId || index}`}
-                    className="hidden"
-                    onChange={async (e) => {
-                      const file = e.target.files[0];
-                      if (file) await handleReuploadDocument(doc.documentId, type, file);
-                    }}
-                  />
-                  <button
-                    onClick={() => document.getElementById(`reupload-${doc.documentId || index}`).click()}
-                    disabled={documentLoading}
-                    className="w-full bg-[#F4F6F9] hover:bg-[#EAFBF8] text-[#0B2A4A] py-2 rounded-xl text-xs font-semibold transition disabled:opacity-50"
-                  >
-                    📤 Re-upload {label}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-    </div>
-
-  )}
-
-  {/* FOOTER */}
-
-  <div className="flex items-center justify-between mt-10">
-
-    <button
-      disabled={dealerCurrentStep === 1}
-      onClick={() =>
-        setDealerCurrentStep((prev) => prev - 1)
-      }
-      className={`px-6 py-3 rounded-2xl font-semibold
-
-      ${
-        dealerCurrentStep === 1
-          ? "bg-gray-200 text-gray-400"
-          : "bg-[#F4F6F9]"
-      }`}
-    >
-      ← Previous
-    </button>
-
-    {dealerCurrentStep !== 6 ? (
-
-      <button
-        onClick={handleNext}
-        className="bg-[#0B2A4A]
-        hover:bg-[#081f36]
-        text-white px-6 py-3
-        rounded-2xl font-semibold"
-      >
-        Next →
-      </button>
-
-    ) : (
-
-      <button
-        onClick={handleFinalSubmit}
-        className="bg-[#27D3C3]
-        hover:bg-[#1fb5a7]
-        text-[#0B2A4A]
-        px-8 py-3 rounded-2xl
-        font-bold"
-      >
-        {isEditMode ? 'Update Details' : 'Submit Documents'}
-      </button>
-
-    )}
-
-  </div>
-
-</div>
-
-    </div>
-
-  </div>
-
-)}
-
-              {/* LIVE + RECENT */}
-
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {/* LIVE */}
-
-                <div className="bg-white rounded-3xl p-6 shadow-sm">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="text-xl font-bold text-[#0B2A4A]">
-                        Live Quick View
-                      </h2>
-
-                      <p className="text-sm text-gray-500 mt-1">
-                        Real-time traffic
-                      </p>
-                    </div>
-
-                    <div className="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-                  </div>
-
-                  <div className="space-y-4">
-                    {activityFeed.length === 0 ? (
-                      <p className="text-sm text-gray-400">No updates yet.</p>
-                    ) : (
-                      activityFeed.map((item) => (
-                        <div
-                          key={item.id}
-                          className={`rounded-2xl p-4 border ${
-                            item.type === "rejected"
-                              ? "bg-red-50 border-red-100"
-                              : item.type === "remark"
-                              ? "bg-amber-50 border-amber-100"
-                              : item.type === "approved"
-                              ? "bg-green-50 border-green-100"
-                              : "bg-[#F8FAFC] border-gray-100"
-                          }`}
-                        >
-                          <p className={`text-sm font-medium ${
-                            item.type === "rejected" ? "text-red-700"
-                            : item.type === "remark" ? "text-amber-700"
-                            : item.type === "approved" ? "text-green-700"
-                            : "text-[#0B2A4A]"
-                          }`}>
-                            {item.message}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1">{item.time}</p>
-
-                          {/* REUPLOAD BUTTON for rejected or remarked docs */}
-                          {(item.type === "rejected" || item.type === "remark") && item.documentId && (
-                            <div className="mt-3">
-                              <input
-                                type="file"
-                                accept=".jpg,.jpeg,.png,.pdf"
-                                id={`live-reupload-${item.documentId}`}
-                                className="hidden"
-                                onChange={async (e) => {
-                                  const file = e.target.files[0];
-                                  if (file) await handleReuploadDocument(item.documentId, item.documentType, file, item.userId);
-                                }}
-                              />
-                              <button
-                                onClick={() => document.getElementById(`live-reupload-${item.documentId}`).click()}
-                                disabled={documentLoading}
-                                className={`w-full py-2 rounded-xl text-xs font-semibold transition disabled:opacity-50 ${
-                                  item.type === "rejected"
-                                    ? "bg-red-600 hover:bg-red-700 text-white"
-                                    : "bg-amber-500 hover:bg-amber-600 text-white"
-                                }`}
-                              >
-                                📤 Re-upload {item.label}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* RECENT */}
-
-                <div className="bg-white rounded-3xl p-6 shadow-sm xl:col-span-2">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="text-xl font-bold text-[#0B2A4A]">
-                        Recent Applications
-                      </h2>
-
-                      <p className="text-sm text-gray-500 mt-1">
-                        Customers linked to
-                        your dealer code
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-100">
-                          <th className="pb-4 text-left text-sm text-gray-500">
-                            Customer
-                          </th>
-
-                          <th className="pb-4 text-left text-sm text-gray-500">
-                            Loan
-                          </th>
-
-                          <th className="pb-4 text-left text-sm text-gray-500">
-                            Status
-                          </th>
-
-                          <th className="pb-4 text-left text-sm text-gray-500">
-                            Type
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody>
-                        {users.map((user) => (
-                          <tr
-                            key={user.id}
-                            className="border-b border-gray-50"
-                          >
-                            <td className="py-5">
-                              <h3 className="font-semibold text-[#0B2A4A]">
-                                {user.name}
-                              </h3>
-
-                              <p className="text-sm text-gray-500 mt-1">
-                                {user.mobile}
-                              </p>
-                            </td>
-
-                            <td className="py-5 font-semibold text-[#0B2A4A]">
-                              {user.loan}
-                            </td>
-
-                            <td className="py-5">
-                              <span
-                                className="px-4 py-2 rounded-full text-xs font-bold bg-[#EAFBF8] text-[#0B2A4A]"
-                              >
-                                {user.status}
-                              </span>
-                            </td>
-
-                            <td className="py-5 text-sm text-gray-600">
-                              {user.type}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* USERS */}
-
-          {activeMenu === "User" && (
-  <div className="space-y-6">
-    {/* HEADER */}
-
-    <div
-      className="bg-white rounded-3xl p-6
-      shadow-sm flex items-center justify-between"
-    >
-      <div>
-        <h2 className="text-2xl font-bold text-[#0B2A4A]">
-          User Management
-        </h2>
-
-        <p className="text-sm text-gray-500 mt-1">
-          Add customers and manage
-          documents
-        </p>
-      </div>
-
-      <button
-  type="button"
-  onClick={() => {
-    resetNewUserForm();
-
-    setDealerCurrentStep(1);
-    setUploadedDocuments([]);
-    setIsEditMode(false);
-
-    setDealerUserData({
-      name: "",
-      mobile: "",
-      email: "",
-      loanAmount: "",
-      dob: "",
-      city: "",
-      state: "",
-      pincode: "",
-      employmentType: "",
-    });
-
-    setActiveMenu("Dashboard"); // switch to Dashboard
-
-    setTimeout(() => {
-      setShowAddCustomerModal(true);
-    }, 0);
-  }}
-  className="bg-[#27D3C3] hover:bg-[#1fb5a7] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold transition-all duration-200 hover:scale-[1.02]"
->
-  + Add User
-</button>
-    </div>
-
-    {/* USER LIST */}
-
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-  {users.map((user) => (
-    <div
-      key={user.id}
-      className="bg-white rounded-3xl p-6 shadow-sm"
-    >
-      {/* TOP SECTION */}
-
-      <div className="flex items-start justify-between">
-        {/* USER INFO */}
-
-        <div className="flex items-start gap-3">
-          <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-xl font-bold text-[#0B2A4A]">
-                {user.name}
-              </h2>
+              <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-[#F4F6F9] px-4 py-3">
+                <span className="text-sm font-bold text-[#0B2A4A]">{dealerCode || "No Code"}</span>
+                <button onClick={copyDealerCode} className="text-[#0B2A4A]" aria-label="Copy dealer code">
+                  <FaCopy />
+                </button>
+              </div>
 
-              {/* REMARKS BUTTON ONLY FOR DEALER ADDED */}
-
-              {user.type === "Dealer Added" && (
+              <div className="relative">
                 <button
-                  onClick={() => {
-                    setSelectedUser(user);
-
-                    setSelectedRemark(
-                      user.remark ||
-                        "No remarks added by admin."
-                    );
-
-                    setShowRemarksModal(true);
-                  }}
-                  className="relative w-9 h-9 rounded-full
-                  bg-[#F4F6F9]
-                  hover:bg-[#EAFBF8]
-                  border border-gray-200
-                  flex items-center justify-center
-                  transition"
+                  onClick={() => setNotifOpen((open) => !open)}
+                  className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-[#0B2A4A] text-white"
+                  aria-label="Notifications"
                 >
-                  💬
-
-                  {/* RED DOT */}
-
-                  {user.hasRemark && (
-                    <span
-                      className="absolute top-1 right-1
-                      w-3 h-3 rounded-full
-                      bg-red-500 border-2 border-white
-                      animate-pulse"
-                    ></span>
+                  <FaBell />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold">
+                      {unreadCount}
+                    </span>
                   )}
                 </button>
-              )}
-            </div>
-
-            <p className="text-sm text-gray-500 mt-1">
-              {user.mobile}
-            </p>
-          </div>
-        </div>
-
-        {/* STATUS */}
-
-        <span
-          className="bg-[#EAFBF8]
-          text-[#0B2A4A]
-          px-4 py-2 rounded-full
-          text-xs font-bold"
-        >
-          {user.status}
-        </span>
-      </div>
-
-      {/* INFO CARDS */}
-
-      <div className="mt-5 grid grid-cols-2 gap-4">
-        <div className="bg-[#F8FAFC] rounded-2xl p-4">
-          <p className="text-xs text-gray-500">
-            Loan Amount
-          </p>
-
-          <h3 className="font-bold text-[#0B2A4A] mt-2">
-            {user.loan}
-          </h3>
-        </div>
-
-        <div className="bg-[#F8FAFC] rounded-2xl p-4">
-          <p className="text-xs text-gray-500">
-            User Type
-          </p>
-
-          <h3 className="font-bold text-[#0B2A4A] mt-2">
-            {user.type}
-          </h3>
-        </div>
-      </div>
-
-      {/* ACTION BUTTONS */}
-
-      <div className="flex flex-wrap gap-3 mt-6">
-        <button
-          onClick={() => {
-            setSelectedUser(user);
-            setShowStatusModal(true);
-          }}
-          className="bg-[#0B2A4A]
-          text-white px-5 py-3
-          rounded-2xl text-sm font-semibold"
-        >
-          View Status
-        </button>
-
-        <button
-          onClick={() => {
-            setSelectedUser(user);
-            setShowDetailsModal(true);
-          }}
-          className="bg-[#EAFBF8]
-          text-[#0B2A4A]
-          px-5 py-3 rounded-2xl
-          text-sm font-semibold"
-        >
-          View Details
-        </button>
-
-        {user.editable && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleEditUser(user);
-            }}
-            className="bg-yellow-100
-            text-yellow-700 px-5 py-3
-            rounded-2xl text-sm font-semibold"
-          >
-            Edit User
-          </button>
-        )}
-      </div>
-    </div>
-  ))}
-</div>
-
-    {/* REMARKS MODAL */}
-
-    {/* REMARKS MODAL */}
-
-{showRemarksModal && selectedUser && (
-  <div
-    className="fixed inset-0 bg-black/40
-    flex items-center justify-center z-50"
-  >
-    <div className="bg-white rounded-3xl p-8 w-full max-w-md">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-[#0B2A4A]">
-            Admin Remarks
-          </h2>
-
-          <p className="text-sm text-gray-500 mt-1">
-            Read-only review updates
-          </p>
-        </div>
-
-        <button
-          onClick={() =>
-            setShowRemarksModal(false)
-          }
-          className="text-2xl"
-        >
-          ×
-        </button>
-      </div>
-
-      <div
-        className="bg-[#F8FAFC]
-        border border-gray-200
-        rounded-2xl p-5 min-h-[160px]"
-      >
-        <p className="text-sm leading-7 text-gray-700">
-          {selectedRemark}
-        </p>
-      </div>
-
-      <div
-        className="mt-5 bg-red-50
-        border border-red-100
-        rounded-2xl p-4"
-      >
-        <p className="text-xs text-red-600 font-medium">
-          Remarks are added by admin and
-          cannot be edited by dealer.
-        </p>
-      </div>
-    </div>
-  </div>
-)}
-
-{showEditUserModal && editingUser && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-auto">
-    <div className="bg-white rounded-3xl w-full max-w-5xl p-8 max-h-[90vh] overflow-y-auto">
-
-      {/* HEADER */}
-
-      <div className="flex justify-between items-center mb-8">
-        <div>
-          <h2 className="text-2xl font-bold text-[#0B2A4A]">
-            Edit User Application
-          </h2>
-
-          <p className="text-gray-500 text-sm mt-1">
-            View submitted details and uploaded documents
-          </p>
-        </div>
-
-        <button
-          onClick={() => setShowEditUserModal(false)}
-          className="text-3xl text-gray-500"
-        >
-          ×
-        </button>
-      </div>
-
-      {/* PERSONAL DETAILS */}
-
-      <div className="bg-[#F8FAFC] rounded-3xl p-6 mb-6">
-        <div className="flex justify-between items-center mb-5">
-          <h3 className="font-bold text-lg text-[#0B2A4A]">
-            Personal Details
-          </h3>
-
-          <button
-            onClick={() =>
-              setDetailsEditMode(!detailsEditMode)
-            }
-            className="bg-yellow-100 text-yellow-700 px-4 py-2 rounded-xl"
-          >
-            ✏️ Edit Details
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          <div>
-            <label className="text-xs text-gray-500">
-              Full Name
-            </label>
-
-            <input
-              value={editingUser.name || ""}
-              disabled={!detailsEditMode}
-              onChange={(e) =>
-                setEditingUser({
-                  ...editingUser,
-                  name: e.target.value,
-                })
-              }
-              className="w-full mt-1 border rounded-xl p-3"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-500">
-              Mobile Number
-            </label>
-
-            <input
-              value={editingUser.mobile || ""}
-              disabled={!detailsEditMode}
-              onChange={(e) =>
-                setEditingUser({
-                  ...editingUser,
-                  mobile: e.target.value,
-                })
-              }
-              className="w-full mt-1 border rounded-xl p-3"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-500">
-              Email
-            </label>
-
-            <input
-              value={editingUser.email || ""}
-              disabled={!detailsEditMode}
-              onChange={(e) =>
-                setEditingUser({
-                  ...editingUser,
-                  email: e.target.value,
-                })
-              }
-              className="w-full mt-1 border rounded-xl p-3"
-            />
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-500">
-              Loan Amount
-            </label>
-
-            <input
-              value={editingUser.loan || ""}
-              disabled={!detailsEditMode}
-              onChange={(e) =>
-                setEditingUser({
-                  ...editingUser,
-                  loan: e.target.value,
-                })
-              }
-              className="w-full mt-1 border rounded-xl p-3"
-            />
-          </div>
-
-        </div>
-      </div>
-
-      {/* DOCUMENTS */}
-
-      <div className="bg-[#F8FAFC] rounded-3xl p-6">
-        <div className="flex justify-between items-center mb-5">
-          <h3 className="font-bold text-lg text-[#0B2A4A]">
-            Uploaded Documents
-          </h3>
-
-          <button
-            onClick={() =>
-              setDocumentsEditMode(!documentsEditMode)
-            }
-            className="bg-green-100 text-green-700 px-4 py-2 rounded-xl"
-          >
-            🔄 Re-upload Documents
-          </button>
-        </div>
-
-        <div className="space-y-5">
-
-          <div className="flex justify-between items-center border rounded-2xl p-4 bg-white">
-            <div>
-              <h4 className="font-semibold">
-                Aadhaar Card
-              </h4>
-            </div>
-
-            {documentsEditMode ? (
-              <input type="file" />
-            ) : (
-              <button className="text-blue-600 font-medium">
-                View
-              </button>
-            )}
-          </div>
-
-          <div className="flex justify-between items-center border rounded-2xl p-4 bg-white">
-            <div>
-              <h4 className="font-semibold">
-                PAN Card
-              </h4>
-            </div>
-
-            {documentsEditMode ? (
-              <input type="file" />
-            ) : (
-              <button className="text-blue-600 font-medium">
-                View
-              </button>
-            )}
-          </div>
-
-          <div className="flex justify-between items-center border rounded-2xl p-4 bg-white">
-            <div>
-              <h4 className="font-semibold">
-                Bank Statement
-              </h4>
-            </div>
-
-            {documentsEditMode ? (
-              <input type="file" />
-            ) : (
-              <button className="text-blue-600 font-medium">
-                View
-              </button>
-            )}
-          </div>
-
-        </div>
-      </div>
-
-      {/* FOOTER */}
-
-      <div className="flex justify-end gap-4 mt-8">
-        <button
-          onClick={() =>
-            setShowEditUserModal(false)
-          }
-          className="px-6 py-3 rounded-2xl border"
-        >
-          Cancel
-        </button>
-
-        <button
-          onClick={handleSaveEditUser}
-          className="bg-[#27D3C3] hover:bg-[#1fb5a7] text-[#0B2A4A] px-8 py-3 rounded-2xl font-bold"
-        >
-          Save Changes
-        </button>
-      </div>
-
-    </div>
-  </div>
-)}
-  </div>
-)}
-
-          {/* STATUS */}
-
-          {activeMenu === "Status" && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-3xl p-6 shadow-sm">
-                <div className="flex items-center justify-between flex-wrap gap-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-[#0B2A4A]">
-                      Application Status
-                    </h2>
-
-                    <p className="text-sm text-gray-500 mt-1">
-                      Track customer
-                      applications
-                    </p>
-                  </div>
-
-                  <select
-                    value={statusFilter}
-                    onChange={(e) =>
-                      setStatusFilter(
-                        e.target.value
-                      )
-                    }
-                    className="border border-gray-200 rounded-2xl px-5 py-3"
-                  >
-                    <option value="All">
-                      All
-                    </option>
-
-                    {statusUsers.map(
-                      (status, index) => (
-                        <option
-                          key={index}
-                          value={status}
-                        >
-                          {status}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-3xl p-6 shadow-sm overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="pb-4 text-left text-sm text-gray-500">
-                        Name
-                      </th>
-
-                      <th className="pb-4 text-left text-sm text-gray-500">
-                        Mobile
-                      </th>
-
-                      <th className="pb-4 text-left text-sm text-gray-500">
-                        Current Status
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {filteredUsers.map(
-                      (user, index) => (
-                        <tr
-                          key={index}
-                          className="border-b border-gray-50"
-                        >
-                          <td className="py-5 font-semibold text-[#0B2A4A]">
-                            {user.name}
-                          </td>
-
-                          <td className="py-5 text-gray-600">
-                            {user.mobile}
-                          </td>
-
-                          <td className="py-5">
-                            <span
-                              className="bg-[#EAFBF8]
-                              text-[#0B2A4A]
-                              px-4 py-2 rounded-full
-                              text-xs font-bold"
-                            >
-                              {user.status}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* REPORTS */}
-
-          {/* REPORTS */}
-
-{/* REPORTS */}
-
-{activeMenu === "Reports" && (
-  <div className="space-y-6">
-
-    {/* HEADER */}
-
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
-
-      <div className="flex items-center justify-between flex-wrap gap-4">
-
-        <div>
-
-          <h2 className="text-2xl font-bold text-[#0B2A4A]">
-            Reports & Analytics
-          </h2>
-
-          <p className="text-sm text-gray-500 mt-1">
-            Monthly dealer performance & growth analytics
-          </p>
-
-        </div>
-
-        {/* MONTH SWITCH */}
-
-        <div className="flex items-center gap-3">
-
-          <button
-            onClick={() =>
-              setActiveMonth((prev) =>
-                prev === 0
-                  ? reportsData.length - 1
-                  : prev - 1
-              )
-            }
-            className="w-11 h-11 rounded-2xl
-            bg-[#F4F6F9]
-            hover:bg-[#EAFBF8]
-            transition"
-          >
-            ←
-          </button>
-
-          <div
-            className="bg-[#0B2A4A]
-            text-white px-6 py-3
-            rounded-2xl text-sm font-semibold"
-          >
-            {reportsData[activeMonth].month}
-          </div>
-
-          <button
-            onClick={() =>
-              setActiveMonth((prev) =>
-                prev === reportsData.length - 1
-                  ? 0
-                  : prev + 1
-              )
-            }
-            className="w-11 h-11 rounded-2xl
-            bg-[#F4F6F9]
-            hover:bg-[#EAFBF8]
-            transition"
-          >
-            →
-          </button>
-
-        </div>
-
-      </div>
-
-    </div>
-
-    {/* GRAPH */}
-
-    <div className="bg-white rounded-3xl p-8 shadow-sm">
-
-      <div className="flex items-center justify-between mb-8">
-
-        <div>
-
-          <h3 className="text-xl font-bold text-[#0B2A4A]">
-            Users Added Trend
-          </h3>
-
-          <p className="text-sm text-gray-500 mt-1">
-            Weekly customer onboarding activity
-          </p>
-
-        </div>
-
-        <div
-          className="bg-[#EAFBF8]
-          px-5 py-3 rounded-2xl"
-        >
-
-          <p className="text-xs text-gray-500">
-            Monthly Growth
-          </p>
-
-          <h3 className="font-bold text-[#0B2A4A] mt-1">
-            +18.6%
-          </h3>
-
-        </div>
-
-      </div>
-
-      {/* BAR GRAPH */}
-
-      <div className="flex items-end gap-5 h-80">
-
-        {reportsData[activeMonth].values.map(
-          (value, index) => (
-
-            <div
-              key={index}
-              className="flex-1 flex flex-col items-center"
-            >
-
-              {/* VALUE */}
-
-              <div className="mb-3 text-sm font-bold text-[#0B2A4A]">
-                {value}
-              </div>
-
-              {/* BAR */}
-
-              <div
-                className="w-full rounded-t-[28px]
-                bg-gradient-to-t
-                from-[#27D3C3]
-                to-[#0B2A4A]
-                transition-all duration-700
-                hover:scale-105"
-                style={{
-                  height: `${value * 1.5}px`,
-                }}
-              ></div>
-
-              {/* LABEL */}
-
-              <p className="text-xs text-gray-500 mt-4">
-                {weekLabels[index]}
-              </p>
-
-            </div>
-
-          )
-        )}
-
-      </div>
-
-    </div>
-
-    {/* REPORT STATS */}
-
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
-
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
-
-        <p className="text-sm text-gray-500">
-          Approval Rate
-        </p>
-
-        <h2 className="text-3xl font-bold text-[#0B2A4A] mt-3">
-          82%
-        </h2>
-
-        <p className="text-xs text-green-600 mt-2">
-          +4.2% increase
-        </p>
-
-      </div>
-
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
-
-        <p className="text-sm text-gray-500">
-          Avg Loan Size
-        </p>
-
-        <h2 className="text-3xl font-bold text-[#0B2A4A] mt-3">
-          ₹7.2L
-        </h2>
-
-        <p className="text-xs text-blue-500 mt-2">
-          Higher than last month
-        </p>
-
-      </div>
-
-      
-
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
-
-        <p className="text-sm text-gray-500">
-          Revenue Generated
-        </p>
-
-        <h2 className="text-3xl font-bold text-[#0B2A4A] mt-3">
-          ₹18.4L
-        </h2>
-
-        <p className="text-xs text-orange-500 mt-2">
-          Updated from approvals
-        </p>
-
-      </div>
-
-    </div>
-
-    
-
-  </div>
-)}
-
-{/* SETTINGS */}
-
-{activeMenu === "Settings" && (
-
-  <div className="max-w-4xl mx-auto space-y-6">
-
-    {/* HEADER */}
-
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
-
-      <h2 className="text-2xl font-bold text-[#0B2A4A]">
-        Dealer Settings
-      </h2>
-
-      <p className="text-sm text-gray-500 mt-1">
-        Manage dealer profile and security
-      </p>
-
-    </div>
-
-    {/* PROFILE CARD */}
-
-    <div className="bg-white rounded-3xl p-8 shadow-sm">
-
-      {/* TOP */}
-
-      <div className="flex items-center gap-5 mb-8">
-
-        <div
-          className="w-20 h-20 rounded-full
-          bg-[#EAFBF8]
-          flex items-center justify-center
-          text-3xl"
-        >
-          🏢
-        </div>
-
-        <div>
-
-          <h3 className="text-2xl font-bold text-[#0B2A4A]">
-            {profileData.name}
-          </h3>
-
-          <p className="text-sm text-gray-500 mt-1">
-            {profileData.email}
-          </p>
-
-        </div>
-
-      </div>
-
-      {/* FORM */}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* NAME */}
-
-        <div>
-
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">
-            Dealer Name
-          </label>
-
-          <input
-            type="text"
-            value={profileData.name}
-            onChange={(e) =>
-              setProfileData({
-                ...profileData,
-                name: e.target.value,
-              })
-            }
-            className="w-full bg-[#F8FAFC]
-            border border-gray-200
-            rounded-2xl px-5 py-4
-            outline-none"
-          />
-
-        </div>
-
-        {/* PHONE */}
-
-        <div>
-
-          <div className="flex items-center justify-between mb-2">
-
-            <label className="text-sm font-semibold text-[#0B2A4A]">
-              Phone Number
-            </label>
-
-            <button
-              onClick={() =>
-                setShowPhoneModal(true)
-              }
-              className="w-8 h-8 rounded-full
-              bg-[#EAFBF8]
-              flex items-center justify-center"
-            >
-              ✏️
-            </button>
-
-          </div>
-
-          <input
-            type="text"
-            value={profileData.phone}
-            readOnly
-            className="w-full bg-[#F8FAFC]
-            border border-gray-200
-            rounded-2xl px-5 py-4"
-          />
-
-        </div>
-
-        {/* EMAIL */}
-
-        <div className="md:col-span-2">
-
-          <div className="flex items-center justify-between mb-2">
-
-            <label className="text-sm font-semibold text-[#0B2A4A]">
-              Email Address
-            </label>
-
-            <button
-              onClick={() =>
-                setShowEmailModal(true)
-              }
-              className="w-8 h-8 rounded-full
-              bg-[#EAFBF8]
-              flex items-center justify-center"
-            >
-              ✏️
-            </button>
-
-          </div>
-
-          <input
-            type="email"
-            value={profileData.email}
-            readOnly
-            className="w-full bg-[#F8FAFC]
-            border border-gray-200
-            rounded-2xl px-5 py-4"
-          />
-
-        </div>
-
-      </div>
-
-      {/* BUTTONS */}
-
-      <div className="flex gap-4 mt-8">
-
-        <button
-          onClick={handleSaveProfile}
-          className="bg-[#0B2A4A]
-          text-white px-6 py-3
-          rounded-2xl font-semibold"
-        >
-          Save Changes
-        </button>
-
-        <button
-          onClick={() =>
-            setShowPasswordForm(
-              !showPasswordForm
-            )
-          }
-          className="bg-[#EAFBF8]
-          text-[#0B2A4A]
-          px-6 py-3 rounded-2xl
-          font-semibold"
-        >
-          Update Password
-        </button>
-
-      </div>
-
-      {/* PASSWORD FORM */}
-
-      {showPasswordForm && (
-
-        <div className="mt-8 border-t pt-8">
-
-          <h3 className="text-lg font-bold text-[#0B2A4A] mb-5">
-            Change Password
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-
-            <input
-              type="password"
-              placeholder="Current Password"
-              value={passwordForm.currentPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-              className="bg-[#F8FAFC]
-              border border-gray-200
-              rounded-2xl px-5 py-4 outline-none"
-            />
-
-            <input
-              type="password"
-              placeholder="New Password"
-              value={passwordForm.newPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-              className="bg-[#F8FAFC]
-              border border-gray-200
-              rounded-2xl px-5 py-4 outline-none"
-            />
-
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              value={passwordForm.confirmPassword}
-              onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-              className="bg-[#F8FAFC]
-              border border-gray-200
-              rounded-2xl px-5 py-4 outline-none"
-            />
-
-          </div>
-
-          <button
-            onClick={handleSavePassword}
-            className="mt-5 bg-[#27D3C3]
-            text-[#0B2A4A]
-            px-6 py-3 rounded-2xl
-            font-bold"
-          >
-            Save Password
-          </button>
-
-        </div>
-
-      )}
-
-    </div>
-
-  </div>
-
-)}
-        </div>
-      </div>
-
-      {/* STATUS MODAL */}
-
-      {showStatusModal && selectedUser && (
-        <div
-          className="fixed inset-0 bg-black/40
-          flex items-center justify-center z-50"
-        >
-          <div className="bg-white rounded-3xl p-8 w-full max-w-2xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-[#0B2A4A]">
-                Loan Journey for {selectedUser.name}
-              </h2>
-
-              <button
-                onClick={() =>
-                  setShowStatusModal(false)
-                }
-                className="text-2xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="space-y-5">
-              {steps.map((step, index) => {
-                const statusOrder = [
-                  "PENDING",
-                  "DOCUMENTS_SUBMITTED",
-                  "DOCUMENTS_VERIFIED",
-                  "SENT_TO_BANK",
-                  "BANK_REVIEW",
-                  "APPROVED"
-                ];
-                
-                const stepStatusMapping = {
-                  "Documents Submitted": "DOCUMENTS_SUBMITTED",
-                  "Documents Verified": "DOCUMENTS_VERIFIED",
-                  "Sent To Bank": "SENT_TO_BANK",
-                  "Bank Review": "BANK_REVIEW",
-                  "Loan Approved": "APPROVED",
-                  "Amount Disbursed": "APPROVED"
-                };
-
-                const requiredStatus = stepStatusMapping[step];
-                const appStatus = selectedUser.rawStatus;
-                const appStatusIndex = statusOrder.indexOf(appStatus);
-                const requiredStatusIndex = statusOrder.indexOf(requiredStatus);
-
-                let icon = index + 1;
-                let bgClass = "bg-gray-100 text-gray-400";
-                let desc = "Pending";
-
-                if (appStatus === "REJECTED") {
-                  if (index === 0) {
-                    icon = "✓";
-                    bgClass = "bg-[#27D3C3] text-[#0B2A4A]";
-                    desc = "Completed";
-                  } else {
-                    icon = "✕";
-                    bgClass = "bg-red-100 text-red-500";
-                    desc = "Rejected/Stopped";
-                  }
-                } else if (appStatusIndex >= requiredStatusIndex) {
-                  icon = "✓";
-                  bgClass = "bg-[#27D3C3] text-[#0B2A4A]";
-                  desc = "Process completed";
-                } else if (appStatusIndex + 1 === requiredStatusIndex) {
-                  icon = "●";
-                  bgClass = "bg-blue-100 text-blue-600 animate-pulse";
-                  desc = "In progress";
-                }
-
-                return (
-                  <div
-                    key={index}
-                    className="flex items-center gap-4"
-                  >
-                    <div
-                      className={`w-10 h-10 rounded-full
-                      flex items-center justify-center
-                      font-bold ${bgClass}`}
-                    >
-                      {icon}
-                    </div>
-
-                    <div>
-                      <h3 className="font-bold text-[#0B2A4A]">
-                        {step}
-                      </h3>
-
-                      <p className="text-sm text-gray-500">
-                        {desc}
-                      </p>
+                {notifOpen && (
+                  <div className="absolute right-0 mt-3 w-80 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl">
+                    <div className="border-b border-gray-100 px-4 py-3 font-bold text-[#0B2A4A]">Notifications</div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-4 text-sm text-gray-500">No notifications</div>
+                      ) : (
+                        notifications.slice(0, 8).map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => markRead(item.id)}
+                            className={`block w-full border-b border-gray-50 px-4 py-3 text-left text-sm ${
+                              item.read ? "bg-white text-gray-600" : "bg-[#EAFBF8] text-[#0B2A4A]"
+                            }`}
+                          >
+                            <p className="font-semibold">{item.message}</p>
+                            <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
+                          </button>
+                        ))
+                      )}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DETAILS MODAL */}
-
-      {showDetailsModal && selectedUser && (
-        <div
-          className="fixed inset-0 bg-black/40
-          flex items-center justify-center z-50"
-        >
-          <div className="bg-white rounded-3xl p-8 w-full max-w-xl">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-[#0B2A4A]">
-                User Documents
-              </h2>
-
-              <button
-                onClick={() =>
-                  setShowDetailsModal(false)
-                }
-                className="text-2xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {selectedUser.documents.map(
-                (doc, index) => (
-                  <div
-                    key={index}
-                    className="bg-[#F8FAFC]
-                    rounded-2xl p-4
-                    flex items-center justify-between"
-                  >
-                    <h3 className="font-semibold text-[#0B2A4A]">
-                      {doc}
-                    </h3>
-
-                    <span
-                      className="bg-green-100
-                      text-green-700 px-4 py-2
-                      rounded-full text-xs font-bold"
-                    >
-                      Submitted
-                    </span>
-                  </div>
-                )
-              )}
-            </div>
-
-            {!selectedUser.editable && (
-              <div
-                className="mt-6 bg-yellow-50
-                border border-yellow-200
-                rounded-2xl p-4"
-              >
-                <p className="text-sm text-yellow-700">
-                  This user registered using
-                  your dealer code. Actual
-                  document files cannot be
-                  viewed or edited.
-                </p>
+                )}
               </div>
-            )}
+            </div>
           </div>
         </div>
 
-        
-      )}
-
-      {/* PHONE UPDATE MODAL */}
-
-{showPhoneModal && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-3xl p-8 w-full max-w-md relative">
-      <button onClick={() => setShowPhoneModal(false)} className="absolute top-5 right-5 w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-red-100 text-[#0B2A4A] hover:text-red-600 text-xl font-bold flex items-center justify-center transition">×</button>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-[#0B2A4A]">Update Phone Number</h2>
-        <p className="text-sm text-gray-500 mt-1">Enter new phone number</p>
-      </div>
-      <div className="space-y-5">
-        <div>
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">Current Phone</label>
-          <input type="text" value={profileData.phone} readOnly className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4" />
-        </div>
-        <div>
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">New Phone</label>
-          <input type="text" value={phoneForm.newPhone} onChange={(e) => setPhoneForm({ ...phoneForm, newPhone: e.target.value })} placeholder="Enter new phone number" className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4 outline-none" />
-        </div>
-      </div>
-      <div className="flex gap-4 mt-8">
-        <button onClick={() => { setProfileData({ ...profileData, phone: phoneForm.newPhone }); setPhoneForm({ ...phoneForm, newPhone: "" }); setShowPhoneModal(false); }} className="flex-1 bg-[#0B2A4A] text-white py-3 rounded-2xl font-semibold">Submit</button>
-      </div>
-    </div>
-  </div>
-)}
-
-{/* EMAIL UPDATE MODAL */}
-
-{showEmailModal && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-3xl p-8 w-full max-w-md relative">
-      <button onClick={() => setShowEmailModal(false)} className="absolute top-5 right-5 w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-red-100 text-[#0B2A4A] hover:text-red-600 text-xl font-bold flex items-center justify-center transition">×</button>
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-[#0B2A4A]">Update Email Address</h2>
-        <p className="text-sm text-gray-500 mt-1">Enter new email address</p>
-      </div>
-      <div className="space-y-5">
-        <div>
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">Current Email</label>
-          <input type="email" value={profileData.email} readOnly className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4" />
-        </div>
-        <div>
-          <label className="text-sm font-semibold text-[#0B2A4A] block mb-2">New Email</label>
-          <input type="email" value={emailForm.newEmail} onChange={(e) => setEmailForm({ ...emailForm, newEmail: e.target.value })} placeholder="Enter new email" className="w-full bg-[#F8FAFC] border border-gray-200 rounded-2xl px-5 py-4 outline-none" />
-        </div>
-      </div>
-      <div className="flex gap-4 mt-8">
-        <button onClick={() => { setProfileData({ ...profileData, email: emailForm.newEmail }); setEmailForm({ ...emailForm, newEmail: "" }); setShowEmailModal(false); }} className="flex-1 bg-[#0B2A4A] text-white py-3 rounded-2xl font-semibold">Submit</button>
-      </div>
-    </div>
-  </div>
-)}
-
-{/* DOCUMENT PREVIEW MODAL */}
-
-{showPreviewModal && previewDoc && (
-  <div
-    className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
-    onClick={() => { setShowPreviewModal(false); setPreviewUrl(null); setPreviewDoc(null); }}
-  >
-    <div
-      className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-        <p className="font-bold text-[#0B2A4A]">
-          {docNames[previewDoc.documentType || previewDoc.type] || (previewDoc.documentType || previewDoc.type || "Document").replace(/_/g, " ")}
-        </p>
-        <button
-          onClick={() => { setShowPreviewModal(false); setPreviewUrl(null); setPreviewDoc(null); }}
-          className="w-9 h-9 rounded-full bg-[#F4F6F9] hover:bg-red-100 flex items-center justify-center text-lg font-bold transition"
-        >
-          ✕
-        </button>
-      </div>
-      <div className="p-4 flex items-center justify-center bg-[#F8FAFC] min-h-[300px]">
-        {previewUrl ? (
-          previewUrl.startsWith("blob:") && previewDoc.fileType?.includes("pdf") ? (
-            <iframe src={previewUrl} title="Document Preview" className="w-full h-[400px] rounded-xl border-0" />
+        <div className="p-6">
+          {loading ? (
+            <EmptyState text="Loading dealer dashboard..." />
           ) : (
-            <img src={previewUrl} alt="Document Preview" className="max-w-full max-h-[400px] object-contain rounded-xl" />
-          )
-        ) : (
-          <p className="text-gray-400 text-sm">Loading preview...</p>
-        )}
-      </div>
-    </div>
-  </div>
-)}
+            <>
+              {normalizedMenu === "Dashboard" && (
+                <DashboardTab
+                  stats={stats}
+                  rejectedUsers={rejectedUsers}
+                  notifications={notifications}
+                  users={users}
+                  markRead={markRead}
+                  openNewCustomer={openWizard}
+                  openUserModal={openUserModal}
+                  openTrackingModal={openTrackingModal}
+                />
+              )}
+
+              {normalizedMenu === "Users" && (
+                <UsersTab
+                  users={users}
+                  openUserModal={openUserModal}
+                  openTrackingModal={openTrackingModal}
+                />
+              )}
+
+              {normalizedMenu === "Status" && (
+                <StatusTab
+                  users={sortedStatusUsers}
+                  docsByUser={docsByUser}
+                  openPreview={openPreview}
+                  reuploadDoc={reuploadDoc}
+                  openTrackingModal={openTrackingModal}
+                />
+              )}
+
+              {normalizedMenu === "Settings" && (
+                <SettingsTab
+                  profile={profile}
+                  setProfile={setProfile}
+                  saveProfile={saveProfile}
+                  profileSaving={profileSaving}
+                  passwordForm={passwordForm}
+                  setPasswordForm={setPasswordForm}
+                  changePassword={changePassword}
+                />
+              )}
+
+              {normalizedMenu === "Reports" && (
+                <EmptyState text="Reports are not part of the current dealer API surface." />
+              )}
+            </>
+          )}
+        </div>
+      </main>
+
+      {selectedUser && (
+        <UserModal
+          user={selectedUser}
+          info={personalInfoFor(selectedUser.userId)}
+          docs={selectedUserDocs}
+          counts={selectedCounts}
+          onClose={() => setSelectedUser(null)}
+          openPreview={openPreview}
+          openWizard={() => openUploadWizard(selectedUser)}
+          reuploadDoc={reuploadDoc}
+          locked={isUserAssignedToBank(selectedUser)}
+        />
+      )}
+
+      {trackingUser && (
+        <TrackingModal
+          user={trackingUser}
+          docs={trackingDocs}
+          counts={trackingCounts}
+          onClose={() => setTrackingUser(null)}
+        />
+      )}
+
+      {wizardOpen && (
+        <WizardModal
+          personalForm={personalForm}
+          setPersonalForm={setPersonalForm}
+          employmentType={employmentType}
+          setEmploymentType={setEmploymentType}
+          files={files}
+          setFiles={setFiles}
+          onSubmit={submitLoanRegistration}
+          saving={savingWizard}
+          uploadedDocs={uploadedDocs}
+          openPreview={openPreview}
+          onClose={() => setWizardOpen(false)}
+        />
+      )}
+
+      {preview && (
+        <Modal title={preview.title} onClose={() => setPreview(null)} wide>
+          <div className="h-[75vh] overflow-hidden rounded-2xl border border-gray-100 bg-[#F4F6F9]">
+            {preview.isPdf ? (
+              <iframe title={preview.title} src={preview.url} className="h-full w-full" />
+            ) : (
+              <img src={preview.url} alt={preview.title} className="h-full w-full object-contain" />
+            )}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };
 
-export default Dashboard;
+const DashboardTab = ({ stats, rejectedUsers, notifications, users, markRead, openNewCustomer, openUserModal, openTrackingModal }) => {
+  const recentUsers = [...users]
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          onClick={openNewCustomer}
+          className="flex items-center gap-2 rounded-2xl bg-[#27D3C3] px-5 py-3 font-black text-[#0B2A4A]"
+        >
+          <FaUpload /> Add New Customer
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={<FaUsers />} label="My Users" value={stats.users} />
+        <StatCard icon={<FaFileAlt />} label="Total Docs Uploaded" value={stats.docs} />
+        <StatCard icon={<FaClipboardList />} label="Pending Docs" value={stats.pending} />
+        <StatCard icon={<FaCheckCircle />} label="Approved Docs" value={stats.approved} />
+      </div>
+
+      {users.length === 0 && <EmptyState text="No users found" />}
+      {rejectedUsers.length > 0 && (
+        <div className="rounded-3xl border border-red-100 bg-red-50 p-5 text-red-700">
+          <p className="font-bold">Rejected documents need attention</p>
+          <p className="mt-1 text-sm">{rejectedUsers.map((user) => user.fullName).join(", ")}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <section className="xl:col-span-2">
+          <SectionTitle title="Recent Users" />
+          <UserTable users={recentUsers} openUserModal={openUserModal} openTrackingModal={openTrackingModal} />
+        </section>
+
+        <section>
+          <SectionTitle title="Latest Notifications" />
+          <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            {notifications.slice(0, 5).map((item) => (
+              <button
+                key={item.id}
+                onClick={() => markRead(item.id)}
+                className={`block w-full border-b border-gray-50 p-4 text-left text-sm ${
+                  item.read ? "bg-white" : "bg-[#EAFBF8]"
+                }`}
+              >
+                <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
+                <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
+              </button>
+            ))}
+            {notifications.length === 0 && <div className="p-5 text-sm text-gray-500">No notifications</div>}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+};
+
+const StatCard = ({ icon, label, value }) => (
+  <div className="rounded-3xl bg-white p-6 shadow-sm">
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-semibold text-gray-500">{label}</p>
+        <p className="mt-2 text-3xl font-black text-[#0B2A4A]">{value}</p>
+      </div>
+      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAFBF8] text-2xl text-[#0B2A4A]">
+        {icon}
+      </div>
+    </div>
+  </div>
+);
+
+const SectionTitle = ({ title }) => <h2 className="mb-4 text-lg font-black text-[#0B2A4A]">{title}</h2>;
+
+const UserTable = ({ users, openUserModal, openTrackingModal }) => (
+  <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[760px] text-left">
+        <thead className="bg-[#0B2A4A] text-sm text-white">
+          <tr>
+            <th className="px-5 py-4">Name</th>
+            <th className="px-5 py-4">Email</th>
+            <th className="px-5 py-4">Mobile</th>
+            <th className="px-5 py-4">Registered Date</th>
+            {openUserModal && <th className="px-5 py-4">Action</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((user) => (
+            <tr key={user.userId} className="border-b border-gray-50 text-sm">
+              <td className="px-5 py-4 font-bold text-[#0B2A4A]">{user.fullName || "-"}</td>
+              <td className="px-5 py-4 text-gray-600">{user.email || "-"}</td>
+              <td className="px-5 py-4 text-gray-600">{user.mobileNumber || "-"}</td>
+              <td className="px-5 py-4 text-gray-600">{formatDate(user.createdAt)}</td>
+              {openUserModal && (
+                <td className="px-5 py-4 flex gap-2">
+                  <button
+                    onClick={() => openUserModal(user)}
+                    className="rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
+                  >
+                    View Info
+                  </button>
+                  <button
+                    onClick={() => openTrackingModal(user)}
+                    className="rounded-2xl bg-[#27D3C3] px-4 py-2 text-sm font-black text-[#0B2A4A]"
+                  >
+                    View Status
+                  </button>
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {users.length === 0 && <div className="p-6 text-center text-sm text-gray-500">No users found</div>}
+    </div>
+  </div>
+);
+
+const UsersTab = ({ users, openUserModal, openTrackingModal }) => (
+  <div className="space-y-5">
+    <SectionTitle title="My Users" />
+    <UserTable users={users} openUserModal={openUserModal} openTrackingModal={openTrackingModal} />
+  </div>
+);
+
+const UserModal = ({ user, info, docs, counts, onClose, openPreview, openWizard, reuploadDoc, locked }) => (
+  <Modal title={user.fullName || "User Details"} onClose={onClose} wide>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <InfoTile label="Name" value={user.fullName} />
+        <InfoTile label="Email" value={user.email} />
+        <InfoTile label="Mobile" value={user.mobileNumber} />
+      </div>
+
+      <div className="rounded-3xl bg-[#F4F6F9] p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h4 className="font-black text-[#0B2A4A]">Personal Info</h4>
+          {!locked && (
+            <button
+              onClick={openWizard}
+              className="flex items-center gap-2 rounded-2xl bg-[#27D3C3] px-4 py-2 text-sm font-black text-[#0B2A4A]"
+            >
+              <FaUpload /> Add / Update Documents
+            </button>
+          )}
+        </div>
+        {info ? (
+          <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <InfoTile label="Address" value={info.address} />
+            <InfoTile label="City" value={info.city} />
+            <InfoTile label="State" value={info.state} />
+            <InfoTile label="Pincode" value={info.pincode} />
+            <InfoTile label="Loan Amount" value={info.loanAmount} />
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-gray-500">No personal info saved yet.</p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {["pendingCount", "verifiedCount", "approvedCount", "rejectedCount"].map((key) => (
+          <div key={key} className="rounded-2xl border border-gray-100 p-4">
+            <p className="text-xs font-semibold uppercase text-gray-500">{key.replace("Count", "")}</p>
+            <p className="mt-1 text-2xl font-black text-[#0B2A4A]">{counts?.[key] ?? 0}</p>
+          </div>
+        ))}
+      </div>
+
+      <DocumentGrid docs={docs} openPreview={openPreview} reuploadDoc={locked ? null : reuploadDoc} />
+    </div>
+  </Modal>
+);
+
+const InfoTile = ({ label, value }) => (
+  <div className="rounded-2xl bg-white p-4">
+    <p className="text-xs font-bold uppercase text-gray-400">{label}</p>
+    <p className="mt-1 break-words font-bold text-[#0B2A4A]">{value || "-"}</p>
+  </div>
+);
+
+const DocumentGrid = ({ docs, openPreview, reuploadDoc }) => (
+  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    {docs.map((doc) => (
+      <div key={doc.documentId} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-black text-[#0B2A4A]">{docLabel(doc.documentType)}</p>
+            <p className="mt-1 text-sm text-gray-500">{doc.fileName || "-"}</p>
+          </div>
+          <Badge status={doc.status} />
+        </div>
+        {doc.remarks && <p className="mt-3 rounded-2xl bg-[#F4F6F9] p-3 text-sm text-gray-600">{doc.remarks}</p>}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            onClick={() => openPreview(doc)}
+            className="flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
+          >
+            <FaEye /> Preview
+          </button>
+          {reuploadDoc && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-2xl bg-red-50 px-4 py-2 text-sm font-bold text-red-700">
+              <FaRedo /> {doc.status === "REJECTED" ? "Re-upload" : "Replace"}
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf"
+                className="hidden"
+                onChange={(event) => reuploadDoc(doc.userId, doc.documentType, event.target.files?.[0])}
+              />
+            </label>
+          )}
+        </div>
+      </div>
+    ))}
+    {docs.length === 0 && <EmptyState text="No documents uploaded yet." />}
+  </div>
+);
+
+const StatusTab = ({ users, docsByUser, openPreview, reuploadDoc }) => (
+  <div className="space-y-6">
+    {users.map((user) => {
+      const userDocs = docsByUser[user.userId] || [];
+      const counts = {
+        total: userDocs.length,
+        pending: userDocs.filter((doc) => doc.status === "PENDING").length,
+        approved: userDocs.filter((doc) => doc.status === "APPROVED").length,
+        rejected: userDocs.filter((doc) => doc.status === "REJECTED").length,
+      };
+
+      return (
+        <section key={user.userId} className="rounded-3xl bg-white p-5 shadow-sm">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-black text-[#0B2A4A]">{user.fullName}</h3>
+              <p className="text-sm text-gray-500">{user.email}</p>
+            </div>
+            <p className="rounded-2xl bg-[#F4F6F9] px-4 py-2 text-sm font-bold text-[#0B2A4A]">
+              {counts.total} docs • {counts.pending} pending • {counts.approved} approved • {counts.rejected} rejected
+            </p>
+          </div>
+          <DocumentGrid
+            docs={userDocs}
+            openPreview={openPreview}
+            reuploadDoc={isUserAssignedToBank(user) ? null : reuploadDoc}
+          />
+        </section>
+      );
+    })}
+    {users.length === 0 && <EmptyState text="No user status found." />}
+  </div>
+);
+
+const SettingsTab = ({
+  profile,
+  setProfile,
+  saveProfile,
+  profileSaving,
+  passwordForm,
+  setPasswordForm,
+  changePassword,
+}) => (
+  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+    <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <SectionTitle title="Profile" />
+      <FormField label="Full Name" value={profile.fullName} onChange={(value) => setProfile({ ...profile, fullName: value })} />
+      <FormField label="Email" value={profile.email} readOnly />
+      <FormField label="Mobile" value={profile.mobileNumber} readOnly />
+      <FormField label="Dealer Code" value={profile.dealerCode} readOnly />
+      <FormField label="Role" value={profile.role} readOnly />
+      <button
+        onClick={saveProfile}
+        disabled={profileSaving}
+        className="mt-2 rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white disabled:opacity-60"
+      >
+        {profileSaving ? "Saving..." : "Save Name"}
+      </button>
+    </section>
+
+    <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <SectionTitle title="Change Password" />
+      <FormField
+        label="New Password"
+        type="password"
+        value={passwordForm.password}
+        onChange={(value) => setPasswordForm({ ...passwordForm, password: value })}
+      />
+      <FormField
+        label="Confirm Password"
+        type="password"
+        value={passwordForm.confirm}
+        onChange={(value) => setPasswordForm({ ...passwordForm, confirm: value })}
+      />
+      <button
+        onClick={changePassword}
+        className="mt-2 flex items-center gap-2 rounded-2xl bg-[#27D3C3] px-6 py-3 font-black text-[#0B2A4A]"
+      >
+        <FaLock /> Change Password
+      </button>
+    </section>
+  </div>
+);
+
+const FormField = ({ label, value, onChange, readOnly = false, type = "text" }) => (
+  <label className="mb-4 block">
+    <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">{label}</span>
+    <input
+      type={type}
+      value={value || ""}
+      readOnly={readOnly}
+      onChange={(event) => onChange?.(event.target.value)}
+      className={`w-full rounded-2xl border border-gray-200 px-4 py-3 outline-none ${
+        readOnly ? "bg-[#F4F6F9] text-gray-500" : "bg-white text-[#0B2A4A] focus:border-[#27D3C3]"
+      }`}
+    />
+  </label>
+);
+
+const WizardModal = ({
+  personalForm,
+  setPersonalForm,
+  employmentType,
+  setEmploymentType,
+  files,
+  setFiles,
+  onSubmit,
+  saving,
+  uploadedDocs,
+  openPreview,
+  onClose,
+}) => {
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [localPreview, setLocalPreview] = useState(null);
+
+  const incomeTypes =
+    employmentType === "Salaried"
+      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      : employmentType === "Self Employed"
+        ? ["ITR_RETURN", "BANK_STATEMENT"]
+        : [];
+
+  const setFile = (type, file) => setFiles((prev) => ({ ...prev, [type]: file }));
+  const updateForm = (key, value) => setPersonalForm({ ...personalForm, [key]: value });
+  const selectedDocuments = Object.entries(files)
+    .filter(([, file]) => Boolean(file))
+    .map(([type, file]) => ({ type, file }));
+
+  const validatePreview = () => {
+    const required = [
+      personalForm.fullName,
+      personalForm.email,
+      personalForm.mobileNumber,
+      personalForm.password,
+      personalForm.address,
+      personalForm.city,
+      personalForm.state,
+      personalForm.pincode,
+      personalForm.loanAmount,
+      employmentType,
+    ];
+
+    if (required.some((value) => String(value || "").trim() === "")) {
+      toast.error("Fill all fields before preview");
+      return false;
+    }
+    if (!files.PAN || !files.AADHAAR) {
+      toast.error("Upload PAN and Aadhaar");
+      return false;
+    }
+    if (!files.LIGHT_BILL && !files.RENTAL_AGREEMENT) {
+      toast.error("Upload Light Bill or Rental Agreement");
+      return false;
+    }
+    const missingIncome = incomeTypes.find((type) => !files[type]);
+    if (missingIncome) {
+      toast.error(`Upload ${docLabel(missingIncome)}`);
+      return false;
+    }
+    const missingVehicle = STEP_TYPES[5].find((type) => !files[type]);
+    if (missingVehicle) {
+      toast.error(`Upload ${docLabel(missingVehicle)}`);
+      return false;
+    }
+    return true;
+  };
+
+  const openSelectedFilePreview = (type, file) => {
+    if (localPreview?.url) URL.revokeObjectURL(localPreview.url);
+    setLocalPreview({ title: docLabel(type), url: URL.createObjectURL(file) });
+  };
+
+  const closeSelectedFilePreview = () => {
+    if (localPreview?.url) URL.revokeObjectURL(localPreview.url);
+    setLocalPreview(null);
+  };
+
+  const handleVerifySubmit = async () => {
+    const saved = await onSubmit();
+    if (saved) setReviewOpen(false);
+  };
+
+  return (
+    <Modal title="New User Loan Registration" onClose={onClose} wide>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (validatePreview()) setReviewOpen(true);
+        }}
+        className="space-y-6"
+      >
+        <section className="rounded-3xl bg-[#F4F6F9] p-5">
+          <h4 className="mb-4 font-black text-[#0B2A4A]">User Details</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FormField label="Full Name" value={personalForm.fullName} onChange={(value) => updateForm("fullName", value)} />
+            <FormField label="Email" type="email" value={personalForm.email} onChange={(value) => updateForm("email", value)} />
+            <FormField
+              label="Mobile Number"
+              value={personalForm.mobileNumber}
+              onChange={(value) => updateForm("mobileNumber", value.replace(/\D/g, "").slice(0, 10))}
+            />
+            <FormField
+              label="Password"
+              type="password"
+              value={personalForm.password}
+              onChange={(value) => updateForm("password", value)}
+            />
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-white p-5 shadow-sm">
+          <h4 className="mb-4 font-black text-[#0B2A4A]">Loan & Address Details</h4>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <FormField label="Address" value={personalForm.address} onChange={(value) => updateForm("address", value)} />
+            <FormField label="City" value={personalForm.city} onChange={(value) => updateForm("city", value)} />
+            <FormField label="State" value={personalForm.state} onChange={(value) => updateForm("state", value)} />
+            <FormField
+              label="Pincode"
+              value={personalForm.pincode}
+              onChange={(value) => updateForm("pincode", value.replace(/\D/g, "").slice(0, 6))}
+            />
+            <FormField
+              label="Loan Amount"
+              type="number"
+              value={personalForm.loanAmount}
+              onChange={(value) => updateForm("loanAmount", value)}
+            />
+            <label className="mb-4 block">
+              <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">Employment Type</span>
+              <select
+                value={employmentType}
+                onChange={(event) => setEmploymentType(event.target.value)}
+                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[#0B2A4A] outline-none focus:border-[#27D3C3]"
+              >
+                <option value="">Select Employment Type</option>
+                <option value="Salaried">Salaried</option>
+                <option value="Self Employed">Self Employed</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <UploadStep title="KYC Documents" types={STEP_TYPES[2]} files={files} setFile={setFile} />
+        <UploadStep title="Residential Proof" types={STEP_TYPES[3]} files={files} setFile={setFile} note="Upload Light Bill or Rental Agreement." />
+        {incomeTypes.length > 0 && <UploadStep title="Income Documents" types={incomeTypes} files={files} setFile={setFile} />}
+        <UploadStep title="Vehicle Documents" types={STEP_TYPES[5]} files={files} setFile={setFile} />
+
+        {uploadedDocs.length > 0 && (
+          <section className="space-y-4 rounded-3xl bg-[#F4F6F9] p-5">
+            <h4 className="font-black text-[#0B2A4A]">Uploaded Documents</h4>
+            <DocumentGrid docs={uploadedDocs} openPreview={openPreview} />
+          </section>
+        )}
+
+        <div className="flex justify-end gap-3 border-t border-gray-100 pt-5">
+          <button type="button" onClick={onClose} className="rounded-2xl bg-[#F4F6F9] px-5 py-3 font-bold text-[#0B2A4A]">
+            Close
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              if (validatePreview()) setReviewOpen(true);
+            }}
+            className="rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white disabled:opacity-60"
+          >
+            Preview Application
+          </button>
+        </div>
+      </form>
+
+      {reviewOpen && (
+        <ApplicationReviewModal
+          form={personalForm}
+          employmentType={employmentType}
+          documents={selectedDocuments}
+          saving={saving}
+          onClose={() => setReviewOpen(false)}
+          onPreviewFile={openSelectedFilePreview}
+          onVerifySubmit={handleVerifySubmit}
+        />
+      )}
+
+      {localPreview && (
+        <Modal title={localPreview.title} onClose={closeSelectedFilePreview} wide>
+          <div className="h-[75vh] overflow-hidden rounded-2xl border border-gray-100 bg-[#F4F6F9]">
+            <iframe title={localPreview.title} src={localPreview.url} className="h-full w-full" />
+          </div>
+        </Modal>
+      )}
+    </Modal>
+  );
+};
+
+const ApplicationReviewModal = ({
+  form,
+  employmentType,
+  documents,
+  saving,
+  onClose,
+  onPreviewFile,
+  onVerifySubmit,
+}) => (
+  <Modal title="Verify Loan Application" onClose={onClose} wide>
+    <div className="space-y-6">
+      <section className="rounded-3xl bg-[#F4F6F9] p-5">
+        <h4 className="mb-4 font-black text-[#0B2A4A]">Applicant Details</h4>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <InfoTile label="Full Name" value={form.fullName} />
+          <InfoTile label="Email" value={form.email} />
+          <InfoTile label="Mobile" value={form.mobileNumber} />
+          <InfoTile label="Address" value={form.address} />
+          <InfoTile label="City" value={form.city} />
+          <InfoTile label="State" value={form.state} />
+          <InfoTile label="Pincode" value={form.pincode} />
+          <InfoTile label="Loan Amount" value={form.loanAmount} />
+          <InfoTile label="Employment Type" value={employmentType} />
+        </div>
+      </section>
+
+      <section>
+        <h4 className="mb-4 font-black text-[#0B2A4A]">Documents Selected</h4>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {documents.map(({ type, file }) => (
+            <div key={type} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+              <p className="font-black text-[#0B2A4A]">{docLabel(type)}</p>
+              <p className="mt-1 truncate text-sm text-gray-500">{file.name}</p>
+              <button
+                type="button"
+                onClick={() => onPreviewFile(type, file)}
+                className="mt-4 flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
+              >
+                <FaEye /> Preview
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="rounded-3xl border border-[#27D3C3]/30 bg-[#EAFBF8] p-4 text-sm font-semibold text-[#0B2A4A]">
+        Verify & Submit will register this user with the dealer code, save loan details, and upload the selected
+        documents for admin processing.
+      </div>
+
+      <div className="flex justify-end gap-3 border-t border-gray-100 pt-5">
+        <button type="button" onClick={onClose} className="rounded-2xl bg-[#F4F6F9] px-5 py-3 font-bold text-[#0B2A4A]">
+          Back to Edit
+        </button>
+        <button
+          type="button"
+          onClick={onVerifySubmit}
+          disabled={saving}
+          className="rounded-2xl bg-[#27D3C3] px-6 py-3 font-black text-[#0B2A4A] disabled:opacity-60"
+        >
+          {saving ? "Submitting..." : "Verify & Submit"}
+        </button>
+      </div>
+    </div>
+  </Modal>
+);
+
+const UploadStep = ({ title, types, files, setFile, note }) => (
+  <div>
+    <h4 className="font-black text-[#0B2A4A]">{title}</h4>
+    {note && <p className="mt-1 text-sm text-gray-500">{note}</p>}
+    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {types.map((type) => (
+        <label key={type} className="block rounded-3xl border border-gray-100 bg-[#F4F6F9] p-5">
+          <span className="font-black text-[#0B2A4A]">{docLabel(type)}</span>
+          <input
+            type="file"
+            accept=".jpg,.jpeg,.png,.pdf"
+            onChange={(event) => setFile(type, event.target.files?.[0])}
+            className="mt-4 w-full text-sm"
+          />
+          {files[type] && <span className="mt-2 block truncate text-sm text-gray-500">{files[type].name}</span>}
+        </label>
+      ))}
+    </div>
+  </div>
+);
+
+const TrackingModal = ({ user, docs, counts, onClose }) => {
+  const steps = useMemo(() => {
+    const totalDocs = docs?.length || 0;
+    const pendingCount = docs?.filter((d) => d.status === "PENDING").length || 0;
+    const approvedCount = docs?.filter((d) => d.status === "APPROVED").length || 0;
+    const verifiedCount = docs?.filter((d) => d.status === "VERIFIED").length || 0;
+    const rejectedCount = docs?.filter((d) => d.status === "REJECTED").length || 0;
+
+    const hasDocs = totalDocs > 0;
+    const allApproved = hasDocs && approvedCount === totalDocs;
+    const underReview = hasDocs && (pendingCount > 0 || verifiedCount > 0);
+    const hasRejected = hasDocs && rejectedCount > 0;
+
+    const isSentToBank = !!localStorage.getItem(`user_bank_assignment_${user.userId}`);
+
+    // Step 1: Documents Submitted
+    let step1Status = "PENDING";
+    let step1Detail = "Please upload required documents to start your application.";
+    if (hasDocs) {
+      step1Status = "DONE";
+      step1Detail = "Your documents have been uploaded successfully.";
+    } else {
+      step1Status = "CURRENT";
+    }
+
+    // Step 2: Under Review
+    let step2Status = "PENDING";
+    let step2Detail = "Admin is verifying your documents.";
+    if (hasDocs) {
+      if (isSentToBank || allApproved) {
+        step2Status = "DONE";
+      } else if (underReview || hasRejected) {
+        step2Status = "CURRENT";
+        if (hasRejected) {
+          step2Detail = "Some documents were rejected. Please check and re-upload.";
+        }
+      }
+    }
+
+    // Step 3: Documents Approved
+    let step3Status = "PENDING";
+    let step3Detail = "All documents have been approved by admin.";
+    if (hasDocs) {
+      if (isSentToBank) {
+        step3Status = "DONE";
+      } else if (allApproved) {
+        step3Status = "CURRENT";
+      } else if (hasRejected) {
+        step3Detail = "Approval pending document correction.";
+      }
+    }
+
+    // Step 4: Sent to Bank
+    let step4Status = "PENDING";
+    let step4Detail = "Your application has been forwarded to the bank.";
+    if (isSentToBank) {
+      step4Status = "CURRENT";
+      step4Detail = "Your application has been forwarded to the bank.";
+    }
+
+    return [
+      { title: "Application Tracking", status: "DONE", detail: "Loan application created." },
+      { title: "Documents Submitted", status: step1Status, detail: step1Detail },
+      { title: "Under Review", status: step2Status, detail: step2Detail },
+      { title: "Documents Approved", status: step3Status, detail: step3Detail },
+      { title: "Sent to Bank", status: step4Status, detail: step4Detail },
+    ];
+  }, [docs, user.userId]);
+
+  return (
+    <Modal title="Application Tracking" onClose={onClose}>
+      <div className="space-y-6 p-1">
+        <div className="rounded-3xl bg-gradient-to-br from-[#0B2A4A] to-[#1a3d60] p-6 text-white shadow-lg">
+          <span className="text-xs font-bold uppercase tracking-wider text-[#27D3C3]">Applicant Details</span>
+          <h3 className="mt-1 text-2xl font-black">{user.fullName}</h3>
+          <p className="text-sm opacity-80">{user.email} • {user.mobileNumber}</p>
+          <div className="mt-4 border-t border-white/10 pt-4 flex justify-between items-center text-xs opacity-75">
+            <span>App ID: {user.applicationId || "N/A"}</span>
+            <span>Registered: {formatDate(user.createdAt)}</span>
+          </div>
+        </div>
+
+        <div className="relative pl-10 pr-2 py-4">
+          {steps.map((step, idx) => {
+            const isDone = step.status === "DONE";
+            const isCurrent = step.status === "CURRENT";
+            const isLast = idx === steps.length - 1;
+
+            let circleStyle = "bg-gray-100 text-gray-400 border-gray-200";
+            let titleStyle = "text-gray-400 font-medium";
+            let detailStyle = "text-gray-400";
+            let badgeStyle = "bg-gray-100 text-gray-500 border-gray-200";
+
+            if (isDone) {
+              circleStyle = "bg-green-500 text-white border-green-500 shadow-md shadow-green-100";
+              titleStyle = "text-[#0B2A4A] font-extrabold";
+              detailStyle = "text-gray-600";
+              badgeStyle = "bg-green-50 text-green-700 border-green-200";
+            } else if (isCurrent) {
+              circleStyle = "bg-[#27D3C3] text-[#0B2A4A] border-[#27D3C3] shadow-md shadow-[#27D3C3]/30 ring-4 ring-[#27D3C3]/20 animate-pulse";
+              titleStyle = "text-[#0B2A4A] font-black text-lg";
+              detailStyle = "text-gray-800 font-semibold";
+              badgeStyle = "bg-[#EAFBF8] text-[#0B2A4A] border-[#27D3C3]/30";
+            }
+
+            return (
+              <div key={idx} className="relative mb-8 last:mb-0 flex flex-col items-start transition-all duration-300 hover:scale-[1.01]">
+                {/* Connector line segment */}
+                {!isLast && (
+                  <div
+                    className={`absolute left-[-26px] top-8 bottom-[-32px] w-1 rounded-full ${
+                      isDone ? "bg-green-500" : "bg-gray-200"
+                    }`}
+                  ></div>
+                )}
+
+                {/* Circle step badge */}
+                <span
+                  className={`absolute -left-[40px] top-0.5 flex h-8 w-8 items-center justify-center rounded-full border text-sm font-black transition-all ${circleStyle}`}
+                >
+                  {isDone ? "✓" : idx + 1}
+                </span>
+
+                <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                  <h4 className={`text-base tracking-tight ${titleStyle}`}>{step.title}</h4>
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-2xs font-extrabold tracking-wide uppercase ${badgeStyle}`}>
+                    {step.status}
+                  </span>
+                </div>
+                <p className={`mt-1.5 text-sm ${detailStyle}`}>{step.detail}</p>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex justify-end border-t border-gray-100 pt-5">
+          <button
+            onClick={onClose}
+            className="rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white shadow-lg shadow-[#0B2A4A]/10 hover:bg-[#1a3d60] transition"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+};
+
+export default DealerDashboard;

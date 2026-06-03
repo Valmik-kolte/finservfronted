@@ -26,20 +26,24 @@ const Sidebar = ({
       icon: <FaTachometerAlt />,
     },
     {
-      name: "User",
+      name: "Users",
       icon: <FaUsers />,
     },
     {
-      name: "Dealer",
+      name: "Dealers",
       icon: <FaUserTie />,
+    },
+    {
+      name: "Documents",
+      icon: <FaClipboardCheck />,
+    },
+    {
+      name: "Banks",
+      icon: <FaUniversity />,
     },
     {
       name: "Reports",
       icon: <FaChartBar />,
-    },
-    {
-      name: "Bank",
-      icon: <FaUniversity />,
     },
     {
       name: "Settings",
