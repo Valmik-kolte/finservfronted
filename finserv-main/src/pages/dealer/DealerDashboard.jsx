@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FaBell,
+  FaBars,
   FaCheckCircle,
   FaClipboardList,
   FaCopy,
   FaEdit,
   FaEye,
+  FaEyeSlash,
   FaFileAlt,
   FaLock,
   FaRedo,
@@ -62,6 +64,9 @@ const STEP_TYPES = {
     "ODOMETER_READING",
   ],
 };
+
+const SALARIED_INCOME_TYPES = ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"];
+const SELF_EMPLOYED_INCOME_TYPES = ["ITR_RETURN", "BANK_STATEMENT"];
 
 const statusStyles = {
   PENDING: "bg-yellow-50 text-yellow-700 border-yellow-200",
@@ -269,7 +274,7 @@ const Badge = ({ status }) => {
 };
 
 const EmptyState = ({ text }) => (
-  <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+  <div className="rounded-3xl border border-dashed border-gray-200 bg-white p-5 sm:p-8 text-center text-sm text-gray-500">
     {text}
   </div>
 );
@@ -286,8 +291,8 @@ const Modal = ({ title, onClose, children, wide = false }) => (
         wide ? "max-w-6xl" : "max-w-3xl"
       }`}
     >
-      <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-        <h3 className="text-xl font-bold text-[#0B2A4A]">{title}</h3>
+      <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-4 sm:px-6 py-4">
+        <h3 className="text-lg sm:text-xl font-bold text-[#0B2A4A] break-words">{title}</h3>
         <button
           onClick={onClose}
           className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F4F6F9] text-[#0B2A4A]"
@@ -296,7 +301,7 @@ const Modal = ({ title, onClose, children, wide = false }) => (
           <FaTimes />
         </button>
       </div>
-      <div className="max-h-[calc(92vh-74px)] overflow-y-auto p-6">{children}</div>
+      <div className="max-h-[calc(92vh-74px)] overflow-y-auto p-4 sm:p-6">{children}</div>
     </div>
   </div>
 );
@@ -308,7 +313,9 @@ const DealerDashboard = () => {
   const storedDealerCode = session.dealerCode || localStorage.getItem("dealerCode") || "";
   const token = localStorage.getItem("token");
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === "undefined" ? true : window.innerWidth >= 768
+  );
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const normalizedMenu = activeMenu === "User" ? "Users" : activeMenu;
 
@@ -606,7 +613,9 @@ const DealerDashboard = () => {
       setPreview({
         url: URL.createObjectURL(blob),
         title: docLabel(doc.documentType),
-        isPdf: fileName.toLowerCase().endsWith(".pdf"),
+        isPdf: blob.type.includes("pdf") || fileName.toLowerCase().endsWith(".pdf"),
+        isImage:
+          blob.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName),
       });
     } catch (error) {
       showError(error, "Failed to preview document");
@@ -709,9 +718,9 @@ const DealerDashboard = () => {
   const requiredUploadTypes = () => {
     const income =
       employmentType === "Salaried"
-        ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+        ? SALARIED_INCOME_TYPES
         : employmentType === "Self Employed"
-          ? ["ITR_RETURN", "BANK_STATEMENT"]
+          ? SELF_EMPLOYED_INCOME_TYPES
           : [];
     return [...STEP_TYPES[2], ...income, ...STEP_TYPES[5]];
   };
@@ -945,13 +954,31 @@ const DealerDashboard = () => {
         setActiveMenu={setActiveMenu}
         handleLogout={handleLogout}
       />
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+        />
+      )}
 
       <main className="min-w-0 flex-1">
-        <div className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 px-6 py-4 backdrop-blur">
+        <div className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 px-4 md:px-6 py-4 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-black text-[#0B2A4A]">{title}</h1>
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] md:hidden"
+                aria-label="Open navigation"
+              >
+                <FaBars />
+              </button>
+              <div className="min-w-0">
+              <h1 className="truncate text-2xl font-black text-[#0B2A4A]">{title}</h1>
               <p className="text-sm font-medium text-gray-500">Dealer Panel</p>
+              </div>
             </div>
 
             <div className="flex items-center gap-3">
@@ -976,7 +1003,7 @@ const DealerDashboard = () => {
                   )}
                 </button>
                 {notifOpen && (
-                  <div className="absolute right-0 mt-3 w-80 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl">
+                  <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl">
                     <div className="border-b border-gray-100 px-4 py-3 font-bold text-[#0B2A4A]">Notifications</div>
                     <div className="max-h-96 overflow-y-auto">
                       {notifications.length === 0 ? (
@@ -1004,7 +1031,7 @@ const DealerDashboard = () => {
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 md:p-6">
           {loading ? (
             <EmptyState text="Loading dealer dashboard..." />
           ) : (
@@ -1101,13 +1128,7 @@ const DealerDashboard = () => {
 
       {preview && (
         <Modal title={preview.title} onClose={() => setPreview(null)} wide>
-          <div className="h-[75vh] overflow-hidden rounded-2xl border border-gray-100 bg-[#F4F6F9]">
-            {preview.isPdf ? (
-              <iframe title={preview.title} src={preview.url} className="h-full w-full" />
-            ) : (
-              <img src={preview.url} alt={preview.title} className="h-full w-full object-contain" />
-            )}
-          </div>
+          <FilePreviewFrame preview={preview} />
         </Modal>
       )}
     </div>
@@ -1192,7 +1213,7 @@ const DashboardTab = ({ stats, rejectedUsers, notifications, users, docs, markRe
 
       {users.length === 0 && <EmptyState text="No users found" />}
       {rejectedUsers.length > 0 && (
-        <div className="rounded-3xl border border-red-100 bg-red-50 p-5 text-red-700">
+        <div className="rounded-3xl border border-red-100 bg-red-50 p-4 sm:p-5 text-red-700">
           <p className="font-bold">Rejected documents need attention</p>
           <p className="mt-1 text-sm">{rejectedUsers.map((user) => user.fullName).join(", ")}</p>
         </div>
@@ -1220,7 +1241,7 @@ const DashboardTab = ({ stats, rejectedUsers, notifications, users, docs, markRe
                 <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
               </button>
             ))}
-            {notifications.length === 0 && <div className="p-5 text-sm text-gray-500">No notifications</div>}
+            {notifications.length === 0 && <div className="p-4 sm:p-5 text-sm text-gray-500">No notifications</div>}
           </div>
         </section>
       </div>
@@ -1229,11 +1250,11 @@ const DashboardTab = ({ stats, rejectedUsers, notifications, users, docs, markRe
 };
 
 const StatCard = ({ icon, label, value, onClick }) => (
-  <button type="button" onClick={onClick} className="w-full rounded-3xl bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+  <button type="button" onClick={onClick} className="w-full rounded-3xl bg-white p-4 sm:p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
     <div className="flex items-center justify-between gap-4">
       <div>
         <p className="text-sm font-semibold text-gray-500">{label}</p>
-        <p className="mt-2 text-3xl font-black text-[#0B2A4A]">{value}</p>
+        <p className="mt-2 text-2xl sm:text-3xl font-black text-[#0B2A4A]">{value}</p>
       </div>
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#EAFBF8] text-2xl text-[#0B2A4A]">
         {icon}
@@ -1245,7 +1266,7 @@ const StatCard = ({ icon, label, value, onClick }) => (
 const SimpleListOverlay = ({ title, items, onClose }) => (
   <Modal title={title} onClose={onClose}>
     {items.length === 0 ? (
-      <div className="rounded-3xl bg-[#F4F6F9] p-6 text-sm text-gray-500">No data found.</div>
+      <div className="rounded-3xl bg-[#F4F6F9] p-4 sm:p-6 text-sm text-gray-500">No data found.</div>
     ) : (
       <div className="space-y-3">
         {items.map((item, index) => (
@@ -1333,7 +1354,7 @@ const SettingsTab = ({
 
   return (
     <div className="max-w-5xl space-y-6">
-      <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <section className="rounded-3xl bg-white p-4 sm:p-6 shadow-sm">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-black text-[#0B2A4A]">Dealer Profile</h2>
@@ -1381,7 +1402,7 @@ const SettingsTab = ({
         </div>
       </section>
 
-      <section className="rounded-3xl bg-white p-6 shadow-sm">
+      <section className="rounded-3xl bg-white p-4 sm:p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAFBF8] text-[#0B2A4A]">
             <FaLock />
@@ -1426,7 +1447,7 @@ const UserModal = ({ user, info, docs, counts, onClose, openPreview, openWizard,
         <InfoTile label="Mobile" value={user.mobileNumber} />
       </div>
 
-      <div className="rounded-3xl bg-[#F4F6F9] p-5">
+      <div className="rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h4 className="font-black text-[#0B2A4A]">Personal Info</h4>
           {!locked && (
@@ -1451,7 +1472,7 @@ const UserModal = ({ user, info, docs, counts, onClose, openPreview, openWizard,
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
         {["pendingCount", "verifiedCount", "approvedCount", "rejectedCount"].map((key) => (
           <div key={key} className="rounded-2xl border border-gray-100 p-4">
             <p className="text-xs font-semibold uppercase text-gray-500">{key.replace("Count", "")}</p>
@@ -1475,7 +1496,7 @@ const InfoTile = ({ label, value }) => (
 const DocumentGrid = ({ docs, openPreview, reuploadDoc }) => (
   <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
     {docs.map((doc) => (
-      <div key={doc.documentId} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+      <div key={doc.documentId} className="rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="font-black text-[#0B2A4A]">{docLabel(doc.documentType)}</p>
@@ -1602,6 +1623,28 @@ const FormField = ({ label, value, onChange, readOnly = false, type = "text" }) 
   </label>
 );
 
+const PasswordField = ({ label, value, onChange, showPassword, setShowPassword }) => (
+  <label className="mb-4 block">
+    <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">{label}</span>
+    <div className="relative">
+      <input
+        type={showPassword ? "text" : "password"}
+        value={value || ""}
+        onChange={(event) => onChange?.(event.target.value)}
+        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 pr-12 text-[#0B2A4A] outline-none focus:border-[#27D3C3]"
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword((current) => !current)}
+        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0B2A4A]"
+        aria-label={showPassword ? "Hide password" : "Show password"}
+      >
+        {showPassword ? <FaEyeSlash /> : <FaEye />}
+      </button>
+    </div>
+  </label>
+);
+
 const WizardModal = ({
   personalForm,
   setPersonalForm,
@@ -1617,13 +1660,35 @@ const WizardModal = ({
 }) => {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const incomeTypes =
     employmentType === "Salaried"
-      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      ? SALARIED_INCOME_TYPES
       : employmentType === "Self Employed"
-        ? ["ITR_RETURN", "BANK_STATEMENT"]
+        ? SELF_EMPLOYED_INCOME_TYPES
         : [];
+
+  const hasSalariedIncomeDocs = Boolean(files.SALARY_SLIP || files.APPOINTMENT_LETTER);
+  const hasSelfEmployedIncomeDocs = Boolean(files.ITR_RETURN);
+  const hasSharedIncomeDocs = Boolean(files.BANK_STATEMENT);
+  const lockedEmploymentType = hasSalariedIncomeDocs
+    ? "Salaried"
+    : hasSelfEmployedIncomeDocs
+    ? "Self Employed"
+    : hasSharedIncomeDocs
+    ? employmentType
+    : "";
+
+  const changeEmploymentType = (type) => {
+    if (lockedEmploymentType && type !== lockedEmploymentType) {
+      toast.error(
+        `You already selected ${lockedEmploymentType} income documents. Remove those documents before switching employment type.`
+      );
+      return;
+    }
+    setEmploymentType(type);
+  };
 
   const setFile = (type, file) => setFiles((prev) => ({ ...prev, [type]: file }));
   const updateForm = (key, value) => setPersonalForm({ ...personalForm, [key]: value });
@@ -1672,7 +1737,14 @@ const WizardModal = ({
 
   const openSelectedFilePreview = (type, file) => {
     if (localPreview?.url) URL.revokeObjectURL(localPreview.url);
-    setLocalPreview({ title: docLabel(type), url: URL.createObjectURL(file) });
+    const fileName = file?.name || "";
+    const fileType = file?.type || "";
+    setLocalPreview({
+      title: docLabel(type),
+      url: URL.createObjectURL(file),
+      isPdf: fileType.includes("pdf") || fileName.toLowerCase().endsWith(".pdf"),
+      isImage: fileType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName),
+    });
   };
 
   const closeSelectedFilePreview = () => {
@@ -1698,7 +1770,7 @@ const WizardModal = ({
         }}
         className="space-y-6"
       >
-        <section className="rounded-3xl bg-[#F4F6F9] p-5">
+        <section className="rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
           <h4 className="mb-4 font-black text-[#0B2A4A]">User Details</h4>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField label="Full Name" value={personalForm.fullName} onChange={(value) => updateForm("fullName", value)} />
@@ -1708,16 +1780,17 @@ const WizardModal = ({
               value={personalForm.mobileNumber}
               onChange={(value) => updateForm("mobileNumber", value.replace(/\D/g, "").slice(0, 10))}
             />
-            <FormField
+            <PasswordField
               label="Password"
-              type="password"
               value={personalForm.password}
               onChange={(value) => updateForm("password", value)}
+              showPassword={showPassword}
+              setShowPassword={setShowPassword}
             />
           </div>
         </section>
 
-        <section className="rounded-3xl bg-white p-5 shadow-sm">
+        <section className="rounded-3xl bg-white p-4 sm:p-5 shadow-sm">
           <h4 className="mb-4 font-black text-[#0B2A4A]">Loan & Address Details</h4>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField label="Address" value={personalForm.address} onChange={(value) => updateForm("address", value)} />
@@ -1738,30 +1811,34 @@ const WizardModal = ({
               <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">Employment Type</span>
               <select
                 value={employmentType}
-                onChange={(event) => setEmploymentType(event.target.value)}
+                onChange={(event) => changeEmploymentType(event.target.value)}
                 className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[#0B2A4A] outline-none focus:border-[#27D3C3]"
               >
                 <option value="">Select Employment Type</option>
-                <option value="Salaried">Salaried</option>
-                <option value="Self Employed">Self Employed</option>
+                <option value="Salaried" disabled={!!lockedEmploymentType && lockedEmploymentType !== "Salaried"}>
+                  Salaried
+                </option>
+                <option value="Self Employed" disabled={!!lockedEmploymentType && lockedEmploymentType !== "Self Employed"}>
+                  Self Employed
+                </option>
               </select>
             </label>
           </div>
         </section>
 
-        <UploadStep title="KYC Documents" types={STEP_TYPES[2]} files={files} setFile={setFile} />
-        <UploadStep title="Residential Proof" types={STEP_TYPES[3]} files={files} setFile={setFile} note="Upload Light Bill or Rental Agreement." />
-        {incomeTypes.length > 0 && <UploadStep title="Income Documents" types={incomeTypes} files={files} setFile={setFile} />}
-        <UploadStep title="Vehicle Documents" types={STEP_TYPES[5]} files={files} setFile={setFile} />
+        <UploadStep title="KYC Documents" types={STEP_TYPES[2]} files={files} setFile={setFile} onPreviewFile={openSelectedFilePreview} />
+        <UploadStep title="Residential Proof" types={STEP_TYPES[3]} files={files} setFile={setFile} onPreviewFile={openSelectedFilePreview} note="Upload Light Bill or Rental Agreement." />
+        {incomeTypes.length > 0 && <UploadStep title="Income Documents" types={incomeTypes} files={files} setFile={setFile} onPreviewFile={openSelectedFilePreview} />}
+        <UploadStep title="Vehicle Documents" types={STEP_TYPES[5]} files={files} setFile={setFile} onPreviewFile={openSelectedFilePreview} />
 
         {uploadedDocs.length > 0 && (
-          <section className="space-y-4 rounded-3xl bg-[#F4F6F9] p-5">
+          <section className="space-y-4 rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
             <h4 className="font-black text-[#0B2A4A]">Uploaded Documents</h4>
             <DocumentGrid docs={uploadedDocs} openPreview={openPreview} />
           </section>
         )}
 
-        <div className="flex justify-end gap-3 border-t border-gray-100 pt-5">
+        <div className="flex flex-col sm:flex-row sm:justify-end gap-3 border-t border-gray-100 pt-5">
           <button type="button" onClick={onClose} className="rounded-2xl bg-[#F4F6F9] px-5 py-3 font-bold text-[#0B2A4A]">
             Close
           </button>
@@ -1792,9 +1869,7 @@ const WizardModal = ({
 
       {localPreview && (
         <Modal title={localPreview.title} onClose={closeSelectedFilePreview} wide>
-          <div className="h-[75vh] overflow-hidden rounded-2xl border border-gray-100 bg-[#F4F6F9]">
-            <iframe title={localPreview.title} src={localPreview.url} className="h-full w-full" />
-          </div>
+          <FilePreviewFrame preview={localPreview} />
         </Modal>
       )}
     </Modal>
@@ -1812,7 +1887,7 @@ const ApplicationReviewModal = ({
 }) => (
   <Modal title="Verify Loan Application" onClose={onClose} wide>
     <div className="space-y-6">
-      <section className="rounded-3xl bg-[#F4F6F9] p-5">
+      <section className="rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
         <h4 className="mb-4 font-black text-[#0B2A4A]">Applicant Details</h4>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <InfoTile label="Full Name" value={form.fullName} />
@@ -1831,7 +1906,7 @@ const ApplicationReviewModal = ({
         <h4 className="mb-4 font-black text-[#0B2A4A]">Documents Selected</h4>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {documents.map(({ type, file }) => (
-            <div key={type} className="rounded-3xl border border-gray-100 bg-white p-5 shadow-sm">
+            <div key={type} className="rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
               <p className="font-black text-[#0B2A4A]">{docLabel(type)}</p>
               <p className="mt-1 truncate text-sm text-gray-500">{file.name}</p>
               <button
@@ -1851,7 +1926,7 @@ const ApplicationReviewModal = ({
         documents for admin processing.
       </div>
 
-      <div className="flex justify-end gap-3 border-t border-gray-100 pt-5">
+      <div className="flex flex-col sm:flex-row sm:justify-end gap-3 border-t border-gray-100 pt-5">
         <button type="button" onClick={onClose} className="rounded-2xl bg-[#F4F6F9] px-5 py-3 font-bold text-[#0B2A4A]">
           Back to Edit
         </button>
@@ -1868,13 +1943,28 @@ const ApplicationReviewModal = ({
   </Modal>
 );
 
-const UploadStep = ({ title, types, files, setFile, note }) => (
+const FilePreviewFrame = ({ preview }) => (
+  <div className="flex h-[65vh] sm:h-[75vh] items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-[#F4F6F9]">
+    {preview.isPdf ? (
+      <iframe title={preview.title} src={preview.url} className="h-full w-full" />
+    ) : preview.isImage ? (
+      <img src={preview.url} alt={preview.title} className="max-h-full max-w-full object-contain" />
+    ) : (
+      <div className="p-6 text-center">
+        <p className="font-bold text-[#0B2A4A]">Preview unavailable</p>
+        <p className="mt-2 text-sm text-gray-500">This file type cannot be previewed inline.</p>
+      </div>
+    )}
+  </div>
+);
+
+const UploadStep = ({ title, types, files, setFile, onPreviewFile, note }) => (
   <div>
     <h4 className="font-black text-[#0B2A4A]">{title}</h4>
     {note && <p className="mt-1 text-sm text-gray-500">{note}</p>}
     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       {types.map((type) => (
-        <label key={type} className="block rounded-3xl border border-gray-100 bg-[#F4F6F9] p-5">
+        <div key={type} className="rounded-3xl border border-gray-100 bg-[#F4F6F9] p-4 sm:p-5">
           <span className="font-black text-[#0B2A4A]">{docLabel(type)}</span>
           <input
             type="file"
@@ -1882,8 +1972,19 @@ const UploadStep = ({ title, types, files, setFile, note }) => (
             onChange={(event) => setFile(type, event.target.files?.[0])}
             className="mt-4 w-full text-sm"
           />
-          {files[type] && <span className="mt-2 block truncate text-sm text-gray-500">{files[type].name}</span>}
-        </label>
+          {files[type] && (
+            <div className="mt-3 rounded-2xl bg-white p-3">
+              <span className="block truncate text-sm font-semibold text-gray-600">{files[type].name}</span>
+              <button
+                type="button"
+                onClick={() => onPreviewFile(type, files[type])}
+                className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
+              >
+                <FaEye /> Preview
+              </button>
+            </div>
+          )}
+        </div>
       ))}
     </div>
   </div>
@@ -1970,11 +2071,11 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
   return (
     <Modal title="Application Tracking" onClose={onClose}>
       <div className="space-y-6 p-1">
-        <div className="rounded-3xl bg-gradient-to-br from-[#0B2A4A] to-[#1a3d60] p-6 text-white shadow-lg">
+        <div className="rounded-3xl bg-gradient-to-br from-[#0B2A4A] to-[#1a3d60] p-4 sm:p-6 text-white shadow-lg">
           <span className="text-xs font-bold uppercase tracking-wider text-[#27D3C3]">Applicant Details</span>
           <h3 className="mt-1 text-2xl font-black">{tracking?.customerName || user.fullName}</h3>
           <p className="text-sm opacity-80">{user.email} â€¢ {user.mobileNumber}</p>
-          <div className="mt-4 border-t border-white/10 pt-4 flex justify-between items-center text-xs opacity-75">
+          <div className="mt-4 border-t border-white/10 pt-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center text-xs opacity-75">
             <span>App ID: {tracking?.applicationId || user.applicationId || "N/A"}</span>
             <span>Registered: {formatDate(user.createdAt)}</span>
           </div>
@@ -2038,10 +2139,10 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
           })}
         </div>
 
-        <div className="flex justify-end border-t border-gray-100 pt-5">
+        <div className="flex justify-stretch sm:justify-end border-t border-gray-100 pt-5">
           <button
             onClick={onClose}
-            className="rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white shadow-lg shadow-[#0B2A4A]/10 hover:bg-[#1a3d60] transition"
+            className="w-full sm:w-auto rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white shadow-lg shadow-[#0B2A4A]/10 hover:bg-[#1a3d60] transition"
           >
             Close
           </button>

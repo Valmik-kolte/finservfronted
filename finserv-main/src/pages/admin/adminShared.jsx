@@ -62,7 +62,7 @@ export const StatCard = ({ label, value, icon, onClick }) => (
     type="button"
     onClick={onClick}
     disabled={!onClick}
-    className={`w-full bg-white rounded-3xl p-6 shadow-sm text-left ${
+    className={`w-full bg-white rounded-3xl p-4 sm:p-6 shadow-sm text-left ${
       onClick ? "hover:-translate-y-0.5 hover:shadow-md transition" : ""
     }`}
   >
@@ -70,7 +70,7 @@ export const StatCard = ({ label, value, icon, onClick }) => (
       {icon}
     </div>
     <p className="text-sm text-slate-500">{label}</p>
-    <p className="text-3xl font-bold text-[#0B2A4A] mt-2">{value}</p>
+    <p className="text-2xl sm:text-3xl font-bold text-[#0B2A4A] mt-2">{value}</p>
   </button>
 );
 
@@ -94,7 +94,7 @@ export const ReadOnlyField = ({ label, value }) => (
 );
 
 export const ResponsiveTable = ({ children }) => (
-  <div className="overflow-x-auto">
+  <div className="w-full max-w-full overflow-x-auto">
     <table className="w-full min-w-[760px] text-sm">{children}</table>
   </div>
 );
@@ -126,9 +126,9 @@ export const DataTable = ({ headers, rows }) => (
 
 export const Modal = ({ title, onClose, children }) => (
   <div className="fixed inset-0 z-40 bg-black/50 p-4 flex items-center justify-center">
-    <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
-      <div className="flex items-center justify-between mb-5">
-        <h2 className="text-2xl font-bold text-[#0B2A4A]">{title}</h2>
+    <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+      <div className="flex items-start justify-between gap-4 mb-5">
+        <h2 className="text-xl sm:text-2xl font-bold text-[#0B2A4A] break-words">{title}</h2>
         <button onClick={onClose} className="text-slate-400 hover:text-red-600">
           <FaTimes />
         </button>
@@ -141,7 +141,7 @@ export const Modal = ({ title, onClose, children }) => (
 export const ListOverlay = ({ title, items, emptyText = "No data found.", onClose }) => (
   <Modal title={title} onClose={onClose}>
     {items.length === 0 ? (
-      <div className="bg-[#F4F6F9] rounded-2xl p-6 text-sm text-slate-500">{emptyText}</div>
+      <div className="bg-[#F4F6F9] rounded-2xl p-4 sm:p-6 text-sm text-slate-500">{emptyText}</div>
     ) : (
       <div className="space-y-3">
         {items.map((item, index) => (
@@ -157,9 +157,9 @@ export const ListOverlay = ({ title, items, emptyText = "No data found.", onClos
 
 export const PreviewModal = ({ preview, closePreview }) => (
   <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
-    <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] p-4 flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-[#0B2A4A]">Document Preview</h2>
+    <div className="bg-white rounded-3xl w-full max-w-5xl h-[78vh] sm:h-[85vh] p-4 flex flex-col">
+      <div className="flex items-center justify-between gap-4 mb-4">
+        <h2 className="text-lg sm:text-xl font-bold text-[#0B2A4A]">Document Preview</h2>
         <button
           onClick={closePreview}
           className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center"

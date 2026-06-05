@@ -26,6 +26,180 @@ const quoteLine1 =
 const quoteLine2 =
   "\u0935\u093f\u0936\u094d\u0935\u093e\u0938\u093e\u0930\u094d\u0939 \u0906\u0930\u094d\u0925\u093f\u0915 \u0938\u093e\u0925";
 
+const features = [
+  { label: "Car Loan", icon: <FaCar />, left: 53 },
+  { label: "Quick Approval", icon: <FaShieldAlt />, left: 140 },
+  { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 239  },
+];
+
+const BrandBlock = () => (
+  <div className="brand-group">
+    <img src={logo} alt="FinServ" className="brand-logo" />
+    <div className="brand-copy">
+      <h1 className="brand-name">FinServ</h1>
+      <p className="brand-tagline">Smart Finance, Simplified</p>
+    </div>
+  </div>
+);
+
+const FeatureCards = () => (
+  <>
+    {features.map((feature, index) => (
+      <div
+        key={feature.label}
+        className="feature-item"
+        style={{
+          left: `calc(${feature.left}px + var(--auth-left-nudge))`,
+          animationDelay: `${120 + index * 100}ms`,
+        }}
+      >
+        <div className="feature-card">{feature.icon}</div>
+        <p className="feature-label">{feature.label}</p>
+      </div>
+    ))}
+  </>
+);
+
+const LeftMarketingSection = () => (
+  <section className="left-section" aria-label="FinServ car loan intro">
+    <BrandBlock />
+
+    <h2 className="hero-heading">
+      Drive Your Dreams,
+      <br />
+      <span>Finance Your Journey</span>
+    </h2>
+
+    <p className="hero-subtitle">
+      Fast <span className="teal-dot">{bullet}</span> Secure{" "}
+      <span className="teal-dot">{bullet}</span> Trusted Car Loan
+    </p>
+    <div className="subtitle-underline" />
+
+    <FeatureCards />
+
+    <div className="quote-block">
+      <p className="quote-text">
+        <span className="quote-mark">{quoteOpen}</span>
+        <span className="quote-line">{quoteLine1}</span>
+        <br />
+        <span className="quote-line second">{quoteLine2}</span>
+        <span className="quote-mark"> {quoteClose}</span>
+      </p>
+    </div>
+  </section>
+);
+
+const LoginCard = ({
+  form,
+  handleChange,
+  handleSubmit,
+  loading,
+  onCreateAccount,
+  onForgotPassword,
+  showPassword,
+  togglePassword,
+}) => (
+  <section className="right-section" aria-label="Login form">
+    <form className="login-card" onSubmit={handleSubmit}>
+      <h2 className="card-title">Welcome Back {wave}</h2>
+      <p className="card-subtitle">Sign in to continue</p>
+      <div className="card-divider" />
+
+      <label className="form-label email" htmlFor="login-email">
+        Email
+      </label>
+      <div className="input-wrap email">
+        <FaEnvelope className="input-icon" />
+        <input
+          id="login-email"
+          type="email"
+          name="email"
+          placeholder="Enter your email"
+          value={form.email}
+          onChange={handleChange}
+          required
+          className="form-input"
+        />
+      </div>
+
+      <label className="form-label password" htmlFor="login-password">
+        Password
+      </label>
+      <div className="input-wrap password">
+        <FaLock className="input-icon" />
+        <input
+          id="login-password"
+          type={showPassword ? "text" : "password"}
+          name="password"
+          placeholder="Enter your password"
+          value={form.password}
+          onChange={handleChange}
+          required
+          className="form-input"
+        />
+        <button
+          type="button"
+          onClick={togglePassword}
+          className="password-toggle"
+          aria-label={showPassword ? "Hide password" : "Show password"}
+        >
+          {showPassword ? <FaEyeSlash /> : <FaEye />}
+        </button>
+      </div>
+
+      <button type="button" onClick={onForgotPassword} className="forgot-link">
+        Forgot Password?
+      </button>
+
+      <button type="submit" disabled={loading} className="signin-button">
+        {loading ? "Signing in..." : `Sign In ${rightArrow}`}
+      </button>
+
+      <p className="create-account">
+        Don&apos;t have an account?
+        <button type="button" onClick={onCreateAccount}>
+          Create Account
+        </button>
+      </p>
+
+      <div className="trust-row">
+        <div className="trust-item">
+          <FaLock /> Secure Login
+        </div>
+        <div className="trust-item middle">
+          <FaShieldAlt /> RBI Compliant
+        </div>
+        <div className="trust-item">
+          <FaUsers /> Trusted Service
+        </div>
+      </div>
+    </form>
+  </section>
+);
+
+const clearStoredSession = () => {
+  ["token", "role", "user", "userData", "dealerData", "adminData"].forEach((key) =>
+    localStorage.removeItem(key)
+  );
+};
+
+const firstValue = (...values) =>
+  values.find((value) => value !== undefined && value !== null && String(value).trim() !== "");
+
+const normalizeRole = (role) => {
+  const value = String(role || "USER").replace(/^ROLE_/, "").toUpperCase();
+  if (value === "ADMIN") return "ADMIN";
+  if (value === "DEALER") return "DEALER";
+  return "USER";
+};
+
+const getLoginData = (response) => {
+  const data = response?.data?.data || response?.data || response || {};
+  const nestedUser = data.user || data.admin || data.dealer || data.customer || data.profile || {};
+  return { ...data, ...nestedUser };
+};
+
 const Login = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({ email: "", password: "" });
@@ -41,6 +215,7 @@ const Login = () => {
     event.preventDefault();
     setLoading(true);
     try {
+      clearStoredSession();
       let res = null;
       try {
         res = await loginUser(form);
@@ -49,7 +224,8 @@ const Login = () => {
         return;
       }
 
-      const token = res?.token || res?.data?.token || res?.data?.data?.token;
+      const body = getLoginData(res);
+      const token = firstValue(body?.token, res?.token, res?.data?.token, res?.data?.data?.token);
       if (!token) {
         toast.error("Token not found in response");
         return;
@@ -57,24 +233,33 @@ const Login = () => {
 
       localStorage.setItem("token", token);
       const decoded = jwtDecode(token);
-      const role = decoded?.role || "USER";
-      const body = res?.data?.data || res?.data || res || {};
+      const role = normalizeRole(firstValue(body?.role, decoded?.role));
+      const id = firstValue(
+        body?.id,
+        body?.userId,
+        body?.adminId,
+        body?.dealerId,
+        decoded?.id,
+        decoded?.userId,
+        decoded?.adminId,
+        decoded?.dealerId
+      );
 
       const userObject = {
-        id: decoded?.id || body?.id || body?.userId || null,
-        name: decoded?.name || body?.fullName || "",
-        email: decoded?.sub || body?.email || "",
-        role: decoded?.role || body?.role || "",
-        dealerId: decoded?.dealerId || body?.dealerId || body?.id || null,
-        dealerCode: decoded?.dealerCode || body?.dealerCode || null,
+        id: id || null,
+        name: firstValue(body?.fullName, body?.name, decoded?.fullName, decoded?.name, form.email),
+        email: firstValue(body?.email, decoded?.email, decoded?.sub, form.email),
+        role,
+        dealerId:
+          role === "DEALER"
+            ? firstValue(body?.dealerId, body?.id, decoded?.dealerId, decoded?.id)
+            : firstValue(body?.dealerId, decoded?.dealerId, null),
+        dealerCode: firstValue(body?.dealerCode, decoded?.dealerCode, null),
         token,
         loginTime: new Date().toISOString(),
       };
 
       localStorage.setItem("role", role);
-      localStorage.removeItem("userData");
-      localStorage.removeItem("dealerData");
-      localStorage.removeItem("adminData");
 
       if (role === "ADMIN") {
         localStorage.setItem("adminData", JSON.stringify(userObject));
@@ -97,12 +282,6 @@ const Login = () => {
     }
   };
 
-  const features = [
-    { label: "Car Loan", icon: <FaCar />, left: 53 },
-    { label: "Quick Approval", icon: <FaShieldAlt />, left: 146 },
-    { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 239 },
-  ];
-
   return (
     <div className="finserv-login-page">
       <style>{`
@@ -122,22 +301,23 @@ const Login = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          overflow: hidden;
+          overflow-x: hidden;
+          overflow-y: auto;
+          padding: 8px;
           background: #02142d;
           color: #061842;
-          font-family: Inter, Poppins, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           letter-spacing: 0;
         }
 
-        .login-stage {
-          position: relative;
-          width: 908px;
-          height: 604px;
-          overflow: hidden;
-          border-radius: 8px;
-          background: #001a3a;
-          box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
-        }
+.login-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #001a3a;
+  --auth-left-nudge: 24px;
+}
 
         .login-bg {
           position: absolute;
@@ -157,10 +337,10 @@ const Login = () => {
 
         .left-section {
           position: absolute;
-          left: 0;
-          top: 0;
-          width: 455px;
-          height: 604px;
+  left: 0;
+  top: 0;
+  width: 52%;
+  height: 100%;
           color: #ffffff;
           animation: loginFadeLeft 650ms ease-out both;
         }
@@ -182,7 +362,7 @@ const Login = () => {
 
         .brand-group {
           position: absolute;
-          left: 50px;
+          left: calc(50px + var(--auth-left-nudge));
           top: 40px;
           z-index: 2;
           display: flex;
@@ -205,14 +385,17 @@ const Login = () => {
         .brand-name {
           margin: 0;
           color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 28px;
           font-weight: 700;
+          letter-spacing: -0.5px;
           line-height: 1;
         }
 
         .brand-tagline {
           margin: 7px 0 0;
           color: #8fa3c7;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 12px;
           font-weight: 400;
           line-height: 1;
@@ -221,14 +404,16 @@ const Login = () => {
 
         .hero-heading {
           position: absolute;
-          left: 49px;
-          top: 117px;
+          left: calc(49px + var(--auth-left-nudge));
+          top: 120px;
           z-index: 2;
           width: 380px;
           margin: 0;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 31px;
           font-weight: 800;
           line-height: 38px;
+          letter-spacing: -0.8px;
           color: #ffffff;
         }
 
@@ -238,14 +423,15 @@ const Login = () => {
 
         .hero-subtitle {
           position: absolute;
-          left: 50px;
-          top: 204px;
+          left: calc(50px + var(--auth-left-nudge));
+          top: 205px;
           z-index: 2;
           margin: 0;
           color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 18px;
           font-weight: 500;
-          line-height: 1;
+          line-height: 24px;
         }
 
         .teal-dot {
@@ -254,7 +440,7 @@ const Login = () => {
 
         .subtitle-underline {
           position: absolute;
-          left: 49px;
+          left: calc(49px + var(--auth-left-nudge));
           top: 233px;
           z-index: 2;
           width: 36px;
@@ -299,7 +485,8 @@ const Login = () => {
           left: 50%;
           margin: 0;
           transform: translateX(-50%);
-          color: rgba(255, 255, 255, 0.92);
+          color: rgba(255, 255, 255, 0.9);
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 11px;
           font-weight: 400;
           line-height: 1;
@@ -308,7 +495,7 @@ const Login = () => {
 
         .quote-block {
           position: absolute;
-          left: 47px;
+          left: calc(47px + var(--auth-left-nudge));
           top: 348px;
           z-index: 2;
           width: 310px;
@@ -325,6 +512,7 @@ const Login = () => {
         .quote-text {
           margin: 0;
           color: #ffffff;
+          font-family: "Noto Sans Devanagari", "Inter", sans-serif;
           font-size: 16px;
           font-weight: 500;
           line-height: 30px;
@@ -340,18 +528,25 @@ const Login = () => {
 
         .right-section {
           position: absolute;
-          left: 455px;
-          top: 0;
-          width: 453px;
-          height: 604px;
+  right: 0;
+  top: 0;
+  width: 48%;
+  height: 90%;
         }
 
+        .right-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+        
         .login-card {
-          position: absolute;
-          left: 11px;
+          
+          left: 0;
           top: 30px;
-          width: 414px;
-          height: 543px;
+          position: relative;
+  width: 414px;
+  height: 543px;
           border-radius: 10px;
           background: #ffffff;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
@@ -366,6 +561,7 @@ const Login = () => {
           margin: 0;
           text-align: center;
           color: #061842;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 23px;
           font-weight: 800;
           line-height: 24px;
@@ -379,6 +575,7 @@ const Login = () => {
           margin: 0;
           text-align: center;
           color: #667085;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
           line-height: 1;
@@ -399,6 +596,7 @@ const Login = () => {
           left: 37px;
           margin: 0;
           color: #061842;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 600;
           line-height: 1;
@@ -455,12 +653,14 @@ const Login = () => {
           outline: 0;
           background: transparent;
           color: #061842;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
         }
 
         .form-input::placeholder {
           color: #98a2b3;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-weight: 500;
         }
 
@@ -484,6 +684,7 @@ const Login = () => {
           padding: 0;
           background: transparent;
           color: #0047ff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 12px;
           font-weight: 500;
           line-height: 1;
@@ -504,6 +705,7 @@ const Login = () => {
           border-radius: 6px;
           background: linear-gradient(90deg, #14d8c4 0%, #0047d9 100%);
           color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 16px;
           font-weight: 700;
           cursor: pointer;
@@ -528,6 +730,7 @@ const Login = () => {
           margin: 0;
           text-align: center;
           color: #344054;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
           line-height: 1;
@@ -539,6 +742,7 @@ const Login = () => {
           padding: 0;
           background: transparent;
           color: #0047ff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
           cursor: pointer;
@@ -554,6 +758,7 @@ const Login = () => {
           grid-template-columns: 1fr 1fr 1fr;
           align-items: center;
           color: #061842;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 10px;
           font-weight: 500;
         }
@@ -596,6 +801,7 @@ const Login = () => {
           .right-section {
             position: relative;
             left: auto;
+            right: auto;
             top: auto;
             width: 100%;
             height: auto;
@@ -661,6 +867,69 @@ const Login = () => {
             left: auto;
             top: auto;
             width: min(100%, 414px);
+            max-width: 414px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .left-section {
+            min-height: 440px;
+            padding: 28px 20px 32px;
+          }
+
+          .brand-group {
+            gap: 10px;
+          }
+
+          .hero-heading {
+            font-size: 28px;
+            line-height: 35px;
+          }
+
+          .hero-subtitle {
+            font-size: 16px;
+          }
+
+          .feature-item {
+            margin-right: 26px;
+          }
+
+          .quote-text {
+            font-size: 15px;
+            line-height: 28px;
+          }
+
+          .right-section {
+            padding: 20px 16px 28px;
+          }
+
+          .login-card {
+            width: 100%;
+          }
+
+          .card-divider {
+            left: 50%;
+            transform: translateX(-50%);
+          }
+
+          .form-label,
+          .input-wrap,
+          .signin-button,
+          .trust-row {
+            left: 20px;
+            width: calc(100% - 40px);
+          }
+
+          .forgot-link {
+            right: 20px;
+          }
+
+          .trust-row {
+            font-size: 9px;
+          }
+
+          .trust-item {
+            gap: 5px;
           }
         }
       `}</style>
@@ -668,125 +937,17 @@ const Login = () => {
       <div className="login-stage" style={{ "--login-bg": `url(${heroImage})` }}>
         <div className="login-bg" />
 
-        <section className="left-section" aria-label="FinServ car loan intro">
-          <div className="brand-group">
-            <img src={logo} alt="FinServ" className="brand-logo" />
-            <div className="brand-copy">
-              <h1 className="brand-name">FinServ</h1>
-              <p className="brand-tagline">Smart Finance, Simplified</p>
-            </div>
-          </div>
-
-          <h2 className="hero-heading">
-            Drive Your Dreams,
-            <br />
-            <span>Finance Your Journey</span>
-          </h2>
-
-          <p className="hero-subtitle">
-            Fast <span className="teal-dot">{bullet}</span> Secure{" "}
-            <span className="teal-dot">{bullet}</span> Trusted Car Loan
-          </p>
-          <div className="subtitle-underline" />
-
-          {features.map((feature, index) => (
-            <div
-              key={feature.label}
-              className="feature-item"
-              style={{ left: `${feature.left}px`, animationDelay: `${120 + index * 100}ms` }}
-            >
-              <div className="feature-card">{feature.icon}</div>
-              <p className="feature-label">{feature.label}</p>
-            </div>
-          ))}
-
-          <div className="quote-block">
-            <p className="quote-text">
-              <span className="quote-mark">{quoteOpen}</span>
-              <span className="quote-line">{quoteLine1}</span>
-              <br />
-              <span className="quote-line second">{quoteLine2}</span>
-              <span className="quote-mark"> {quoteClose}</span>
-            </p>
-          </div>
-        </section>
-
-        <section className="right-section" aria-label="Login form">
-          <form className="login-card" onSubmit={handleSubmit}>
-            <h2 className="card-title">Welcome Back {wave}</h2>
-            <p className="card-subtitle">Sign in to continue</p>
-            <div className="card-divider" />
-
-            <label className="form-label email" htmlFor="login-email">
-              Email
-            </label>
-            <div className="input-wrap email">
-              <FaEnvelope className="input-icon" />
-              <input
-                id="login-email"
-                type="email"
-                name="email"
-                placeholder="Enter your email"
-                value={form.email}
-                onChange={handleChange}
-                required
-                className="form-input"
-              />
-            </div>
-
-            <label className="form-label password" htmlFor="login-password">
-              Password
-            </label>
-            <div className="input-wrap password">
-              <FaLock className="input-icon" />
-              <input
-                id="login-password"
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Enter your password"
-                value={form.password}
-                onChange={handleChange}
-                required
-                className="form-input"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="password-toggle"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <FaEyeSlash /> : <FaEye />}
-              </button>
-            </div>
-
-            <button type="button" onClick={() => navigate("/forgot-password")} className="forgot-link">
-              Forgot Password?
-            </button>
-
-            <button type="submit" disabled={loading} className="signin-button">
-              {loading ? "Signing in..." : `Sign In ${rightArrow}`}
-            </button>
-
-            <p className="create-account">
-              Don&apos;t have an account?
-              <button type="button" onClick={() => navigate("/register")}>
-                Create Account
-              </button>
-            </p>
-
-            <div className="trust-row">
-              <div className="trust-item">
-                <FaLock /> Secure Login
-              </div>
-              <div className="trust-item middle">
-                <FaShieldAlt /> RBI Compliant
-              </div>
-              <div className="trust-item">
-                <FaUsers /> Trusted Service
-              </div>
-            </div>
-          </form>
-        </section>
+        <LeftMarketingSection />
+        <LoginCard
+          form={form}
+          handleChange={handleChange}
+          handleSubmit={handleSubmit}
+          loading={loading}
+          onCreateAccount={() => navigate("/register")}
+          onForgotPassword={() => navigate("/forgot-password")}
+          showPassword={showPassword}
+          togglePassword={() => setShowPassword((prev) => !prev)}
+        />
       </div>
     </div>
   );

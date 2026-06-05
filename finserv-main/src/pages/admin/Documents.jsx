@@ -4,8 +4,70 @@ import { DOCUMENT_LABELS, formatDate, StatusBadge } from "./adminShared";
 
 const FILTER_TABS = ["All", "Pending", "Verified", "Approved", "Rejected"];
 
+const firstPresent = (...values) =>
+  values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") ?? "";
+
 const getDocumentOwnerId = (doc) =>
-  doc?.userId ?? doc?.user?.userId ?? doc?.customer?.userId ?? doc?.uploadedBy ?? doc?.user?.id ?? "";
+  firstPresent(
+    doc?.userId,
+    doc?.user?.userId,
+    doc?.customer?.userId,
+    doc?.customerId,
+    doc?.user?.id,
+    doc?.customer?.id,
+    doc?.uploadedByUserId,
+    doc?.uploadedBy
+  );
+
+const getDocumentGroupId = (doc) =>
+  String(
+    firstPresent(
+      getDocumentOwnerId(doc),
+      doc?.user?.email,
+      doc?.customer?.email,
+      doc?.email,
+      doc?.mobileNumber,
+      doc?.user?.mobileNumber,
+      doc?.customer?.mobileNumber,
+      "unknown"
+    )
+  );
+
+const mergeDocumentRecords = (current, next) => {
+  const currentOwnerId = getDocumentOwnerId(current);
+  const nextOwnerId = getDocumentOwnerId(next);
+  return {
+    ...(current || {}),
+    ...(next || {}),
+    user: next?.user || current?.user,
+    customer: next?.customer || current?.customer,
+    userId: nextOwnerId || currentOwnerId,
+  };
+};
+
+const getUserFromDocument = (doc, uid) => {
+  const embedded = doc?.user || doc?.customer || {};
+  return {
+    userId: getDocumentOwnerId(doc) || uid,
+    fullName: firstPresent(
+      embedded.fullName,
+      embedded.name,
+      doc?.fullName,
+      doc?.customerName,
+      doc?.userName,
+      doc?.uploadedByName
+    ),
+    email: firstPresent(embedded.email, doc?.email, doc?.customerEmail, doc?.userEmail),
+    mobileNumber: firstPresent(
+      embedded.mobileNumber,
+      embedded.mobile,
+      doc?.mobileNumber,
+      doc?.customerMobileNumber,
+      doc?.userMobileNumber
+    ),
+    dealerCode: firstPresent(embedded.dealerCode, doc?.dealerCode),
+  };
+};
 
 const getDocumentKey = (doc) => {
   if (doc?.documentId) return `id:${doc.documentId}`;
@@ -39,7 +101,7 @@ const Documents = ({
     const map = new Map();
     [...(allDocs || []), ...(docs || [])].filter(Boolean).forEach((doc) => {
       const key = getDocumentKey(doc);
-      map.set(key, { ...(map.get(key) || {}), ...doc });
+      map.set(key, mergeDocumentRecords(map.get(key), doc));
     });
     return Array.from(map.values());
   }, [allDocs, docs]);
@@ -51,8 +113,16 @@ const Documents = ({
       const id = u.userId ?? u.id;
       if (id !== undefined && id !== null) map[String(id)] = u;
     });
+    allDocuments.forEach((doc) => {
+      const uid = getDocumentGroupId(doc);
+      if (!uid || uid === "unknown" || map[uid]) return;
+      const user = getUserFromDocument(doc, uid);
+      if (user.fullName || user.email || user.mobileNumber || user.dealerCode) {
+        map[uid] = user;
+      }
+    });
     return map;
-  }, [users]);
+  }, [allDocuments, users]);
 
   // Filter docs by status tab
   const filteredDocs = useMemo(() => {
@@ -64,14 +134,7 @@ const Documents = ({
   const grouped = useMemo(() => {
     const map = {};
     filteredDocs.forEach((doc) => {
-      const uid = String(
-        doc.userId ??
-          doc.user?.userId ??
-          doc.customer?.userId ??
-          doc.uploadedBy ??
-          doc.user?.id ??
-          "unknown"
-      );
+      const uid = getDocumentGroupId(doc);
       if (!map[uid]) map[uid] = [];
       map[uid].push(doc);
     });
@@ -83,8 +146,8 @@ const Documents = ({
     return Object.keys(grouped).sort((a, b) => {
       const userA = userMap[a];
       const userB = userMap[b];
-      const nameA = a === "unknown" ? "Unknown User" : userA?.fullName || `User #${a}`;
-      const nameB = b === "unknown" ? "Unknown User" : userB?.fullName || `User #${b}`;
+      const nameA = a === "unknown" ? "Unknown User" : userA?.fullName || userA?.email || `User #${a}`;
+      const nameB = b === "unknown" ? "Unknown User" : userB?.fullName || userB?.email || `User #${b}`;
       return nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
     });
   }, [grouped, userMap]);
@@ -98,6 +161,7 @@ const Documents = ({
       return (
         u?.fullName?.toLowerCase().includes(q) ||
         u?.email?.toLowerCase().includes(q) ||
+        String(u?.mobileNumber || "").toLowerCase().includes(q) ||
         String(uid).includes(q)
       );
     });
@@ -150,13 +214,13 @@ const Documents = ({
 
       {/* User Groups */}
       {visibleUserIds.length === 0 ? (
-        <div className="bg-white rounded-3xl p-8 text-center text-slate-500 shadow-sm">
+        <div className="bg-white rounded-3xl p-5 sm:p-8 text-center text-slate-500 shadow-sm">
           No documents found.
         </div>
       ) : (
         visibleUserIds.map((uid) => {
-          const user = userMap[uid];
-          const userLabel = uid === "unknown" ? "Unknown User" : user?.fullName || `User #${uid}`;
+          const user = userMap[uid] || getUserFromDocument(grouped[uid]?.[0], uid);
+          const userLabel = uid === "unknown" ? "Unknown User" : user?.fullName || user?.email || `User #${uid}`;
           const userDocs = grouped[uid];
           const counts = statusCounts(userDocs);
           const isOpen = expanded[uid] === true;
@@ -177,17 +241,17 @@ const Documents = ({
               {/* User Header */}
               <button
                 onClick={() => toggleExpand(uid)}
-                className="w-full flex items-center justify-between px-6 py-5 hover:bg-slate-50 transition"
+                className="w-full flex items-start justify-between gap-4 px-4 sm:px-6 py-4 sm:py-5 hover:bg-slate-50 transition"
               >
-                <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
                   <div className="w-10 h-10 rounded-full bg-[#EAFBF8] flex items-center justify-center font-bold text-[#0B2A4A]">
-                    {user?.fullName?.[0]?.toUpperCase() || "U"}
+                    {(user?.fullName || user?.email || "U")?.[0]?.toUpperCase()}
                   </div>
-                  <div className="text-left">
+                  <div className="min-w-0 text-left">
                     <p className="font-bold text-[#0B2A4A]">
                       {userLabel}
                     </p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-slate-500 break-words">
                       {uid === "unknown"
                         ? "User details unavailable from document response"
                         : `${user?.email || "N/A"} · ${user?.mobileNumber || "N/A"} · Dealer: ${user?.dealerCode || "N/A"}`}
@@ -219,14 +283,14 @@ const Documents = ({
                     </span>
                   </div>
                 </div>
-                <span className="text-slate-400 ml-4">
+                <span className="shrink-0 text-slate-400">
                   {isOpen ? <FaChevronUp /> : <FaChevronDown />}
                 </span>
               </button>
 
               {/* Document Cards */}
               {isOpen && (
-                <div className="px-6 pb-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="px-4 sm:px-6 pb-4 sm:pb-6 grid grid-cols-1 xl:grid-cols-2 gap-4">
                   {userDocs.map((doc) => (
                     <DocumentCard
                       key={doc.documentId}
@@ -252,7 +316,7 @@ const Documents = ({
 
 const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark, openPreview }) => (
   <div
-    className={`rounded-2xl p-5 border ${
+    className={`rounded-2xl p-4 sm:p-5 border ${
       doc.status === "REJECTED"
         ? "bg-red-50 border-red-200"
         : doc.status === "APPROVED"
@@ -260,7 +324,7 @@ const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark
         : "bg-[#F8FAFC] border-slate-200"
     }`}
   >
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div>
         <p className="font-bold text-[#0B2A4A]">
           {DOCUMENT_LABELS[doc.documentType] || doc.documentType}
@@ -319,16 +383,16 @@ const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark
     </div>
 
     {/* Remark Input */}
-    <div className="mt-3 flex gap-2">
+    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
       <input
         value={remark}
         onChange={(e) => setRemark(e.target.value)}
         placeholder="Add admin remark..."
-        className="flex-1 rounded-2xl border border-slate-200 px-3 py-2 outline-none text-xs bg-white"
+        className="w-full flex-1 rounded-2xl border border-slate-200 px-3 py-2 outline-none text-xs bg-white"
       />
       <button
         onClick={() => saveRemark(doc.documentId)}
-        className="bg-[#0B2A4A] text-white rounded-2xl px-4 font-bold text-xs"
+        className="bg-[#0B2A4A] text-white rounded-2xl px-4 py-2 font-bold text-xs"
       >
         Save
       </button>

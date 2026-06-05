@@ -1,8 +1,6 @@
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 
-import AuthLayout from "../layouts/AuthLayout";
-
 import Landing from "../pages/landing/Landing";
 import LoanCalculator from "../pages/landing/LoanCalculator";
 import Faq from "../pages/landing/Faq";
@@ -38,11 +36,9 @@ const AppRoutes = () => (
     <Route path="/register/customer" element={<Register defaultRole="INDIVIDUAL" />} />
 
     {/* AUTH */}
-    <Route element={<AuthLayout />}>
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/verify-otp" element={<VerifyOtp />} />
-    </Route>
+    <Route path="/forgot-password" element={<ForgotPassword />} />
+    <Route path="/reset-password" element={<ResetPassword />} />
+    <Route path="/verify-otp" element={<VerifyOtp />} />
 
     <Route path="/unauthorized" element={<Unauthorized />} />
 

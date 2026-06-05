@@ -43,7 +43,7 @@ const DealerRegister = () => {
   };
 
   return (
-    <div className="bg-white w-full max-w-md p-10 rounded-2xl shadow-xl">
+    <div className="bg-white w-full max-w-md p-6 sm:p-10 rounded-2xl shadow-xl">
       <h2 className="text-2xl font-semibold text-center mb-1">Dealer Registration</h2>
       <p className="text-sm text-gray-500 text-center mb-6">Register as a dealer</p>
 

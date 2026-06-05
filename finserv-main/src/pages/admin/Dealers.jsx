@@ -11,7 +11,7 @@ const Dealers = ({
   closeDealer,
 }) => (
   <>
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
       <div className="mb-5">
         <h2 className="text-xl font-bold text-[#0B2A4A]">Dealers</h2>
         <p className="text-sm text-slate-500 mt-1">Review and update registered dealer details.</p>

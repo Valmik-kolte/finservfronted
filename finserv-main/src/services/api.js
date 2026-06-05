@@ -8,6 +8,11 @@ const api = axios.create({
 
 // Attach JWT token automatically
 api.interceptors.request.use((config) => {
+  if (config.skipAuth) {
+    delete config.skipAuth;
+    if (config.headers) delete config.headers.Authorization;
+    return config;
+  }
 
   const token = localStorage.getItem("token");
 

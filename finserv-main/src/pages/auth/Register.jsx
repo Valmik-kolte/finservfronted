@@ -48,17 +48,25 @@ const Register = ({ defaultRole }) => {
 
   const features = [
     { label: "Car Loan", icon: <FaCar />, left: 53 },
-    { label: "Quick Approval", icon: <FaShieldAlt />, left: 146 },
+    { label: "Quick Approval", icon: <FaShieldAlt />, left: 140 },
     { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 239 },
   ];
 
   const handleChange = (event) => {
     const { name, value } = event.target;
+    if (name === "mobile") {
+      setForm((prev) => ({ ...prev, mobile: value.replace(/\D/g, "").slice(0, 10) }));
+      return;
+    }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (!/^\d{10}$/.test(form.mobile)) {
+      toast.error("Mobile number should be 10 digits");
+      return;
+    }
     setLoading(true);
 
     const payload = {
@@ -115,21 +123,22 @@ const Register = ({ defaultRole }) => {
           display: flex;
           align-items: center;
           justify-content: center;
-          overflow: hidden;
-          background: #02142d;
+          overflow-x: hidden;
+          overflow-y: auto;
+          padding: 8px;
+          background: linear-gradient(135deg, #02142d 0%, #001a3a 58%, #041e4d 100%);
           color: #061842;
-          font-family: Inter, Poppins, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           letter-spacing: 0;
         }
 
         .register-stage {
           position: relative;
-          width: 908px;
-          height: 604px;
+          width: 100vw;
+          height: 100vh;
           overflow: hidden;
-          border-radius: 8px;
-          background: #001a3a;
-          box-shadow: 0 28px 90px rgba(0, 0, 0, 0.42);
+          background: linear-gradient(135deg, #02142d 0%, #001a3a 58%, #041e4d 100%);
+          --auth-left-nudge: 24px;
         }
 
         .register-bg {
@@ -152,8 +161,8 @@ const Register = ({ defaultRole }) => {
           position: absolute;
           left: 0;
           top: 0;
-          width: 455px;
-          height: 604px;
+          width: 52%;
+          height: 100%;
           color: #ffffff;
           animation: registerFadeLeft 650ms ease-out both;
         }
@@ -175,7 +184,7 @@ const Register = ({ defaultRole }) => {
 
         .register-brand {
           position: absolute;
-          left: 50px;
+          left: calc(50px + var(--auth-left-nudge));
           top: 40px;
           z-index: 2;
           display: flex;
@@ -198,14 +207,17 @@ const Register = ({ defaultRole }) => {
         .register-brand-name {
           margin: 0;
           color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 28px;
           font-weight: 700;
+          letter-spacing: -0.5px;
           line-height: 1;
         }
 
         .register-tagline {
           margin: 7px 0 0;
           color: #8fa3c7;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 12px;
           font-weight: 400;
           line-height: 1;
@@ -214,15 +226,17 @@ const Register = ({ defaultRole }) => {
 
         .register-heading {
           position: absolute;
-          left: 49px;
+          left: calc(49px + var(--auth-left-nudge));
           top: 117px;
           z-index: 2;
           width: 380px;
           margin: 0;
           color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 31px;
           font-weight: 800;
           line-height: 38px;
+          letter-spacing: -0.8px;
         }
 
         .register-heading span {
@@ -231,14 +245,15 @@ const Register = ({ defaultRole }) => {
 
         .register-subtitle {
           position: absolute;
-          left: 50px;
+          left: calc(50px + var(--auth-left-nudge));
           top: 204px;
           z-index: 2;
           margin: 0;
           color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 18px;
           font-weight: 500;
-          line-height: 1;
+          line-height: 24px;
         }
 
         .register-teal {
@@ -247,7 +262,7 @@ const Register = ({ defaultRole }) => {
 
         .register-underline {
           position: absolute;
-          left: 49px;
+          left: calc(49px + var(--auth-left-nudge));
           top: 233px;
           z-index: 2;
           width: 36px;
@@ -292,7 +307,8 @@ const Register = ({ defaultRole }) => {
           left: 50%;
           margin: 0;
           transform: translateX(-50%);
-          color: rgba(255, 255, 255, 0.92);
+          color: rgba(255, 255, 255, 0.9);
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 11px;
           font-weight: 400;
           line-height: 1;
@@ -301,7 +317,7 @@ const Register = ({ defaultRole }) => {
 
         .register-quote {
           position: absolute;
-          left: 47px;
+          left: calc(47px + var(--auth-left-nudge));
           top: 348px;
           z-index: 2;
           width: 310px;
@@ -310,6 +326,7 @@ const Register = ({ defaultRole }) => {
         .register-quote-text {
           margin: 0;
           color: #ffffff;
+          font-family: "Noto Sans Devanagari", "Inter", sans-serif;
           font-size: 16px;
           font-weight: 500;
           line-height: 30px;
@@ -332,15 +349,18 @@ const Register = ({ defaultRole }) => {
 
         .register-right {
           position: absolute;
-          left: 455px;
+          right: 0;
           top: 0;
-          width: 453px;
-          height: 604px;
+          width: 48%;
+          height: 90%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
         }
 
         .register-card {
-          position: absolute;
-          left: 11px;
+          position: relative;
+          left: 0;
           top: 30px;
           width: 414px;
           height: 543px;
@@ -358,6 +378,7 @@ const Register = ({ defaultRole }) => {
           margin: 0;
           text-align: center;
           color: #061842;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 23px;
           font-weight: 800;
           line-height: 24px;
@@ -371,6 +392,7 @@ const Register = ({ defaultRole }) => {
           margin: 0;
           text-align: center;
           color: #667085;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
           line-height: 1;
@@ -406,6 +428,7 @@ const Register = ({ defaultRole }) => {
           border-radius: 6px;
           background: transparent;
           color: #667085;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 700;
           cursor: pointer;
@@ -413,7 +436,7 @@ const Register = ({ defaultRole }) => {
         }
 
         .role-option.active {
-          background: linear-gradient(90deg, #14d8c4 0%, #0047d9 100%);
+          background: linear-gradient(90deg, #14d8c4 0%, #0a55d1 100%);
           color: #ffffff;
           box-shadow: 0 8px 18px rgba(10, 85, 209, 0.22);
         }
@@ -423,7 +446,8 @@ const Register = ({ defaultRole }) => {
           left: 37px;
           margin: 0;
           color: #061842;
-          font-size: 12px;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+          font-size: 13px;
           font-weight: 600;
           line-height: 1;
         }
@@ -473,12 +497,14 @@ const Register = ({ defaultRole }) => {
           outline: 0;
           background: transparent;
           color: #061842;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
         }
 
         .register-input::placeholder {
           color: #98a2b3;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-weight: 500;
         }
 
@@ -502,8 +528,9 @@ const Register = ({ defaultRole }) => {
           height: 43px;
           border: 0;
           border-radius: 6px;
-          background: linear-gradient(90deg, #14d8c4 0%, #0047d9 100%);
+          background: linear-gradient(90deg, #14d8c4 0%, #0a55d1 100%);
           color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 16px;
           font-weight: 700;
           cursor: pointer;
@@ -528,6 +555,7 @@ const Register = ({ defaultRole }) => {
           margin: 0;
           text-align: center;
           color: #344054;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
           line-height: 1;
@@ -539,6 +567,7 @@ const Register = ({ defaultRole }) => {
           padding: 0;
           background: transparent;
           color: #0047ff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
           cursor: pointer;
@@ -549,6 +578,7 @@ const Register = ({ defaultRole }) => {
             display: block;
             min-height: 100vh;
             overflow-y: auto;
+            padding: 0;
           }
 
           .register-stage {
@@ -627,6 +657,57 @@ const Register = ({ defaultRole }) => {
             left: auto;
             top: auto;
             width: min(100%, 414px);
+            max-width: 414px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .register-left {
+            min-height: 440px;
+            padding: 28px 20px 32px;
+          }
+
+          .register-brand {
+            gap: 10px;
+          }
+
+          .register-heading {
+            font-size: 28px;
+            line-height: 35px;
+          }
+
+          .register-subtitle {
+            font-size: 16px;
+          }
+
+          .register-feature {
+            margin-right: 26px;
+          }
+
+          .register-quote-text {
+            font-size: 15px;
+            line-height: 28px;
+          }
+
+          .register-right {
+            padding: 20px 16px 28px;
+          }
+
+          .register-card {
+            width: 100%;
+          }
+
+          .register-divider {
+            left: 50%;
+            transform: translateX(-50%);
+          }
+
+          .role-switch,
+          .register-label,
+          .register-input-wrap,
+          .register-submit {
+            left: 20px;
+            width: calc(100% - 40px);
           }
         }
       `}</style>
@@ -659,7 +740,10 @@ const Register = ({ defaultRole }) => {
             <div
               key={feature.label}
               className="register-feature"
-              style={{ left: `${feature.left}px`, animationDelay: `${120 + index * 100}ms` }}
+              style={{
+                left: `calc(${feature.left}px + var(--auth-left-nudge))`,
+                animationDelay: `${120 + index * 100}ms`,
+              }}
             >
               <div className="register-feature-card">{feature.icon}</div>
               <p className="register-feature-label">{feature.label}</p>
@@ -729,6 +813,8 @@ const Register = ({ defaultRole }) => {
                 placeholder="Enter mobile number"
                 value={form.mobile}
                 onChange={handleChange}
+                inputMode="numeric"
+                maxLength={10}
                 required
                 className="register-input"
               />

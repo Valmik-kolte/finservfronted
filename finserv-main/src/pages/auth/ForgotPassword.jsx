@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { FaEnvelope } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import AuthPageFrame from "./AuthPageFrame";
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
@@ -13,25 +15,35 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="bg-white w-full max-w-md p-10 rounded-2xl shadow-xl">
-      <h2 className="text-2xl font-semibold text-center mb-1">Forgot Password</h2>
-      <p className="text-sm text-gray-500 text-center mb-6">Enter your email to receive OTP</p>
+    <AuthPageFrame ariaLabel="Forgot password form">
       <form onSubmit={handleSubmit}>
-        <input
-          type="email"
-          placeholder="Enter email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border rounded-lg px-3 py-3 mb-4 bg-gray-50 outline-none text-sm"
-        />
-        <button type="submit" className="w-full py-3 bg-[#0b2a4a] text-white rounded-lg font-medium">
+        <h2 className="auth-simple-title">Forgot Password</h2>
+        <p className="auth-simple-subtitle">Enter your email to receive OTP</p>
+        <div className="auth-simple-divider" />
+
+        <label className="auth-simple-label first" htmlFor="forgot-email">
+          Email
+        </label>
+        <div className="auth-simple-input-wrap first">
+          <FaEnvelope className="auth-simple-icon" />
+          <input
+            id="forgot-email"
+            type="email"
+            placeholder="Enter email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="auth-simple-input"
+          />
+        </div>
+
+        <button type="submit" className="auth-simple-submit">
           Send OTP
         </button>
+        <button type="button" className="auth-simple-link" onClick={() => navigate("/")}>
+          Back to Login
+        </button>
       </form>
-      <p className="mt-4 text-sm text-center text-gray-500 cursor-pointer" onClick={() => navigate("/")}>
-        Back to Login
-      </p>
-    </div>
+    </AuthPageFrame>
   );
 };
 

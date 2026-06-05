@@ -43,18 +43,18 @@ const Users = ({
   deleteUser,
 }) => (
   <>
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
         <div>
           <h2 className="text-xl font-bold text-[#0B2A4A]">Users</h2>
           <p className="text-sm text-slate-500 mt-1">Manage customer profiles, documents, and bank assignment.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
           <input
             value={searchName}
             onChange={(event) => setSearchName(event.target.value)}
             placeholder="Search by name"
-            className="rounded-2xl border border-slate-200 px-4 py-3 outline-none"
+            className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none sm:w-64"
           />
           <button
             onClick={searchUsers}
@@ -67,7 +67,7 @@ const Users = ({
       </div>
 
       {users.length === 0 ? (
-        <div className="bg-[#F4F6F9] rounded-2xl p-6 text-sm text-slate-500">
+        <div className="bg-[#F4F6F9] rounded-2xl p-4 sm:p-6 text-sm text-slate-500">
           {userApiWarning ? (
             <>
               User API failed: <span className="font-semibold">{userApiWarning}</span>.
@@ -140,7 +140,7 @@ const Users = ({
         </div>
 
         {selectedUserCounts && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mt-5">
             {Object.entries(selectedUserCounts).map(([key, value]) => (
               <div key={key} className="bg-[#F4F6F9] rounded-2xl p-4">
                 <p className="text-xs text-slate-500">{key}</p>
@@ -158,7 +158,7 @@ const Users = ({
               {getAssignedBankName(selectedUser, banks) || "Not assigned"}
             </span>
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row">
             <select
               value={assignBankId}
               onChange={(event) => setAssignBankId(event.target.value)}
@@ -174,7 +174,7 @@ const Users = ({
             <button
               onClick={assignBank}
               disabled={assigningBank}
-              className="bg-[#0B2A4A] text-white rounded-2xl px-5 font-bold disabled:opacity-60"
+              className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
             >
               {assigningBank ? "Assigning..." : "Assign"}
             </button>
@@ -198,7 +198,7 @@ const Users = ({
             {selectedUserDocs.map((doc) => (
               <div
                 key={doc.documentId}
-                className="border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-3"
+                className="border border-slate-200 rounded-2xl p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div>
                   <p className="font-bold text-[#0B2A4A]">
@@ -206,7 +206,7 @@ const Users = ({
                   </p>
                   <p className="text-xs text-slate-500">{doc.fileName}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 self-start sm:self-auto">
                   <StatusBadge status={doc.status} />
                   <button onClick={() => openPreview(doc.documentId)} className="text-[#0B2A4A]">
                     <FaEye />

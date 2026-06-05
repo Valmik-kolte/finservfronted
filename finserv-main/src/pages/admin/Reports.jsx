@@ -26,7 +26,7 @@ const Reports = ({
       ))}
     </div>
 
-    <div className="bg-white rounded-3xl p-6 shadow-sm overflow-x-auto">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
       <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Personal Info</h2>
       <DataTable
         headers={["Name", "Email", "Mobile", "City", "State", "Loan Amount", "Created"]}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FaBell,
+  FaBars,
   FaCheck,
   FaExclamationTriangle,
   FaFileAlt,
@@ -20,6 +21,14 @@ import Bank from "./Bank";
 import Reports from "./Reports";
 import Settings from "./Settings";
 import { markPaymentSuccess } from "../../services/paymentService";
+import {
+  READY2DRIVE_BASE_AMOUNT,
+  READY2DRIVE_FEE_LABEL,
+  READY2DRIVE_GST_AMOUNT,
+  READY2DRIVE_GST_LABEL,
+  READY2DRIVE_TOTAL_AMOUNT,
+  formatINR,
+} from "../../constants/payment";
 import {
   DataTable,
   formatDate,
@@ -65,8 +74,32 @@ const asList = (response) => {
   return [];
 };
 
+const firstPresent = (...values) =>
+  values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") ?? "";
+
 const getDocumentOwnerId = (doc) =>
-  doc?.userId ?? doc?.user?.userId ?? doc?.customer?.userId ?? doc?.uploadedBy ?? doc?.user?.id ?? "";
+  firstPresent(
+    doc?.userId,
+    doc?.user?.userId,
+    doc?.customer?.userId,
+    doc?.customerId,
+    doc?.user?.id,
+    doc?.customer?.id,
+    doc?.uploadedByUserId,
+    doc?.uploadedBy
+  );
+
+const mergeDocumentRecords = (current, next) => {
+  const currentOwnerId = getDocumentOwnerId(current);
+  const nextOwnerId = getDocumentOwnerId(next);
+  return {
+    ...(current || {}),
+    ...(next || {}),
+    user: next?.user || current?.user,
+    customer: next?.customer || current?.customer,
+    userId: nextOwnerId || currentOwnerId,
+  };
+};
 
 const getDocumentKey = (doc) => {
   if (!doc) return "";
@@ -83,11 +116,8 @@ const uniqueDocuments = (documents) => {
   documents.filter(Boolean).forEach((doc) => {
     const key = getDocumentKey(doc);
     if (!key) return;
-    const normalized = {
-      ...doc,
-      userId: getDocumentOwnerId(doc),
-    };
-    map.set(key, { ...(map.get(key) || {}), ...normalized });
+    const normalized = mergeDocumentRecords(null, doc);
+    map.set(key, mergeDocumentRecords(map.get(key), normalized));
   });
   return Array.from(map.values());
 };
@@ -321,7 +351,9 @@ const Dashboard = () => {
   const admin = useMemo(getAdminSession, []);
   const adminId = admin?.id || 1;
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === "undefined" ? true : window.innerWidth >= 768
+  );
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
   const [permissionError, setPermissionError] = useState("");
@@ -375,6 +407,10 @@ const Dashboard = () => {
           status: readPaymentStatus(user.userId),
           personalInfo: personalInfos.find((info) => info.userId === user.userId),
           documentCount: allKnownDocs.filter((doc) => doc.userId === user.userId).length,
+          feeName: READY2DRIVE_FEE_LABEL,
+          feeBaseAmount: READY2DRIVE_BASE_AMOUNT,
+          gstAmount: READY2DRIVE_GST_AMOUNT,
+          payableAmount: READY2DRIVE_TOTAL_AMOUNT,
           updatedAt: "",
         }));
 
@@ -397,6 +433,10 @@ const Dashboard = () => {
             allKnownDocs.filter((doc) => String(doc.userId) === String(request.userId)).length ||
             request.documentCount ||
             0,
+          feeName: request.feeName || READY2DRIVE_FEE_LABEL,
+          feeBaseAmount: Number(request.feeBaseAmount) || READY2DRIVE_BASE_AMOUNT,
+          gstAmount: Number(request.gstAmount) || READY2DRIVE_GST_AMOUNT,
+          payableAmount: Number(request.payableAmount) || READY2DRIVE_TOTAL_AMOUNT,
           updatedAt: request.updatedAt || "",
         };
       });
@@ -1077,12 +1117,30 @@ const Dashboard = () => {
         setActiveMenu={setActiveMenu}
         handleLogout={handleLogout}
       />
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+        />
+      )}
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="bg-white px-6 md:px-8 py-5 shadow-sm flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-[#0B2A4A]">{activeMenu}</h1>
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="bg-white px-4 md:px-8 py-4 md:py-5 shadow-sm flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] md:hidden"
+              aria-label="Open navigation"
+            >
+              <FaBars />
+            </button>
+            <div className="min-w-0">
+            <h1 className="truncate text-2xl md:text-3xl font-bold text-[#0B2A4A]">{activeMenu}</h1>
             <p className="text-sm text-slate-500 mt-1">Welcome back, {admin?.name || "Admin"}</p>
+            </div>
           </div>
           <div className="relative">
             <button
@@ -1098,7 +1156,7 @@ const Dashboard = () => {
               )}
             </button>
             {showNotifications && (
-              <div className="absolute right-0 mt-3 w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
+              <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
                 <h3 className="font-bold text-[#0B2A4A] mb-3">Notifications</h3>
                 {notifications.length === 0 ? (
                   <p className="text-sm text-slate-500">No notifications.</p>
@@ -1127,7 +1185,7 @@ const Dashboard = () => {
           {permissionError ? (
             <PermissionWarning message={permissionError} onLogout={handleLogout} />
           ) : loading ? (
-            <div className="bg-white rounded-3xl p-8 font-bold text-[#0B2A4A]">Loading admin data...</div>
+            <div className="bg-white rounded-3xl p-5 sm:p-8 font-bold text-[#0B2A4A]">Loading admin data...</div>
           ) : (
             <>
               {apiWarnings.length > 0 && <ApiWarning failedApis={apiWarnings} />}
@@ -1143,7 +1201,7 @@ const Dashboard = () => {
 };
 
 const PermissionWarning = ({ message, onLogout }) => (
-  <div className="bg-white rounded-3xl p-8 shadow-sm max-w-3xl">
+  <div className="bg-white rounded-3xl p-5 sm:p-8 shadow-sm max-w-3xl">
     <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mb-5">
       <FaExclamationTriangle />
     </div>
@@ -1177,7 +1235,12 @@ const PAYMENT_BADGE_STYLES = {
   PAYMENT_REJECTED: "bg-red-100 text-red-700",
 };
 
-const PROCESSING_FEE_AMOUNT = 599;
+const getPaymentBreakdown = (request = {}) => ({
+  feeName: request.feeName || READY2DRIVE_FEE_LABEL,
+  feeBaseAmount: Number(request.feeBaseAmount) || READY2DRIVE_BASE_AMOUNT,
+  gstAmount: Number(request.gstAmount) || READY2DRIVE_GST_AMOUNT,
+  payableAmount: Number(request.payableAmount) || READY2DRIVE_TOTAL_AMOUNT,
+});
 
 const formatPaymentStatus = (status) =>
   (status || "")
@@ -1200,12 +1263,12 @@ const PaymentsPanel = ({ paymentRequests, approvePayment, rejectPayment }) => {
 
   return (
   <div className="space-y-6">
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
         <div>
           <h2 className="text-xl font-bold text-[#0B2A4A]">Payment Requests</h2>
           <p className="text-sm text-slate-500 mt-1">
-            Verify processing fee payments submitted by customers.
+            Verify Ready2Drive payments submitted by customers.
           </p>
         </div>
         <div className="bg-[#EAFBF8] text-[#0B2A4A] px-4 py-3 rounded-2xl text-sm font-bold">
@@ -1214,12 +1277,14 @@ const PaymentsPanel = ({ paymentRequests, approvePayment, rejectPayment }) => {
       </div>
 
       {paymentRequests.length === 0 ? (
-        <div className="bg-[#F4F6F9] rounded-2xl p-6 text-sm text-slate-500">
+        <div className="bg-[#F4F6F9] rounded-2xl p-4 sm:p-6 text-sm text-slate-500">
           No payment requests yet.
         </div>
       ) : (
         <div className="space-y-4">
-          {paymentRequests.map(({ user, status, personalInfo, documentCount, updatedAt }) => {
+          {paymentRequests.map((request) => {
+            const { user, status, personalInfo, documentCount, updatedAt } = request;
+            const paymentBreakdown = getPaymentBreakdown(request);
             const canReview =
               status === PAYMENT_STATUS.PAYMENT_PENDING ||
               status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING ||
@@ -1239,9 +1304,9 @@ const PaymentsPanel = ({ paymentRequests, approvePayment, rejectPayment }) => {
                   <p className="text-sm text-slate-500 mt-1 break-all">{user.email}</p>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
                     <div className="bg-[#F4F6F9] rounded-2xl p-3">
-                      <p className="text-xs font-bold uppercase text-slate-400">Loan Amount</p>
+                      <p className="text-xs font-bold uppercase text-slate-400">Ready2Drive Amount</p>
                       <p className="font-bold text-[#0B2A4A]">
-                        Rs {PROCESSING_FEE_AMOUNT.toLocaleString("en-IN")}
+                        {formatINR(paymentBreakdown.payableAmount)}
                       </p>
                     </div>
                     <div className="bg-[#F4F6F9] rounded-2xl p-3">
@@ -1257,7 +1322,7 @@ const PaymentsPanel = ({ paymentRequests, approvePayment, rejectPayment }) => {
 
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={() => setDetailRequest({ user, status, personalInfo, documentCount, updatedAt })}
+                    onClick={() => setDetailRequest(request)}
                     className="bg-[#F4F6F9] text-[#0B2A4A] px-4 py-3 rounded-2xl font-bold"
                   >
                     View Details
@@ -1295,10 +1360,11 @@ const PaymentsPanel = ({ paymentRequests, approvePayment, rejectPayment }) => {
 const PaymentDetailsModal = ({ request, onClose }) => {
   const { user, status, personalInfo, documentCount, updatedAt } = request;
   const approvedAt = status === PAYMENT_STATUS.PAYMENT_APPROVED ? updatedAt : "";
+  const paymentBreakdown = getPaymentBreakdown(request);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
-      <div className="bg-white rounded-3xl w-full max-w-2xl p-6 shadow-xl">
+      <div className="bg-white rounded-3xl w-full max-w-2xl p-4 sm:p-6 shadow-xl">
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
             <h2 className="text-xl font-bold text-[#0B2A4A]">Payment Details</h2>
@@ -1312,10 +1378,10 @@ const PaymentDetailsModal = ({ request, onClose }) => {
             ["Email", user.email || "N/A"],
             ["Mobile", user.mobileNumber || "N/A"],
             ["Payment Status", formatPaymentStatus(status)],
-            [
-              "Amount",
-              `Rs ${PROCESSING_FEE_AMOUNT.toLocaleString("en-IN")}`,
-            ],
+            ["Plan", paymentBreakdown.feeName],
+            ["Base Amount", formatINR(paymentBreakdown.feeBaseAmount)],
+            [READY2DRIVE_GST_LABEL, formatINR(paymentBreakdown.gstAmount)],
+            ["Total Amount", formatINR(paymentBreakdown.payableAmount)],
             ["Documents", documentCount || 0],
             ["Payment Requested", formatDate(updatedAt)],
             ["Payment Approved", approvedAt ? formatDate(approvedAt) : "Not approved yet"],
@@ -1411,7 +1477,7 @@ const DashboardOverview = ({
       )}
 
       {pendingPaymentRequests.length > 0 && (
-        <div className="bg-sky-50 border border-sky-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-sky-800">Payment requests need verification</h2>
             <p className="text-sm text-sky-700 mt-1">
@@ -1428,7 +1494,7 @@ const DashboardOverview = ({
       )}
 
       {pendingDocs.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-amber-800">Pending documents need review</h2>
             <p className="text-sm text-amber-700 mt-1">{pendingDocs.length} document(s) waiting.</p>
@@ -1442,7 +1508,7 @@ const DashboardOverview = ({
         </div>
       )}
 
-      <div className="bg-white rounded-3xl p-6 shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
         <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Recent Users</h2>
         <DataTable
           headers={["Name", "Email", "Mobile", "Dealer Code", "Registered Date"]}

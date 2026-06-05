@@ -14,11 +14,11 @@ const CustomerSettings = () => {
   }, []);
 
   return (
-    <div className="p-8 max-w-xl">
-      <h1 className="text-3xl font-bold text-[#0B2A4A]">Settings</h1>
+    <div className="w-full max-w-xl p-4 sm:p-6 md:p-8">
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A]">Settings</h1>
       <p className="text-gray-500 mt-2 mb-6">Manage your profile and security</p>
 
-      <div className="bg-white rounded-xl shadow p-6 space-y-4">
+      <div className="bg-white rounded-xl shadow p-4 sm:p-6 space-y-4">
         <div>
           <label className="text-xs text-gray-400 uppercase">Full Name</label>
           <p className="text-gray-800 font-medium">{user.fullName || "—"}</p>

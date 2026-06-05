@@ -11,8 +11,8 @@ const emptyBank = {
 
 const Bank = ({ banks, setBankModal, setBankForm, bankModal, bankForm, saveBank, deleteBank, closeBankModal }) => (
   <>
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
-      <div className="flex items-center justify-between mb-5">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-5">
         <div>
           <h2 className="text-xl font-bold text-[#0B2A4A]">Banks</h2>
           <p className="text-sm text-slate-500 mt-1">Manage partner banks and representatives.</p>
@@ -22,14 +22,14 @@ const Bank = ({ banks, setBankModal, setBankForm, bankModal, bankForm, saveBank,
             setBankForm(emptyBank);
             setBankModal({ mode: "add" });
           }}
-          className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold flex items-center gap-2"
+          className="w-full sm:w-auto bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold flex items-center justify-center gap-2"
         >
           <FaPlus /> Add Bank
         </button>
       </div>
 
       {banks.length === 0 ? (
-        <div className="bg-[#F4F6F9] rounded-2xl p-6 text-sm text-slate-500">
+        <div className="bg-[#F4F6F9] rounded-2xl p-4 sm:p-6 text-sm text-slate-500">
           No banks found. Use <span className="font-semibold">Add Bank</span> or check the backend response for{" "}
           <span className="font-semibold">/api/admin/banks</span>.
         </div>

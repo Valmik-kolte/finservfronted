@@ -7,7 +7,15 @@ import {
   FaCog,
   FaSignOutAlt,
   FaBars,
+  FaUserCircle,
 } from "react-icons/fa";
+
+const menuItems = [
+  { name: "Dashboard", icon: <FaTachometerAlt /> },
+  { name: "Documents", icon: <FaFileAlt /> },
+  { name: "Status", icon: <FaClipboardCheck /> },
+  { name: "Settings", icon: <FaCog /> },
+];
 
 const Sidebar = ({
   sidebarOpen,
@@ -16,72 +24,100 @@ const Sidebar = ({
   setActiveMenu,
   handleLogout,
 }) => {
-
-  const menuItems = [
-    { name: "Dashboard", icon: <FaTachometerAlt /> },
-    { name: "Documents", icon: <FaFileAlt /> },
-    { name: "Status", icon: <FaClipboardCheck /> },
-    { name: "Settings", icon: <FaCog /> },
-  ];
+  const handleMenuSelect = (name) => {
+    setActiveMenu(name);
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setSidebarOpen(false);
+    }
+  };
 
   return (
-    <div
-      className={`bg-[#0B2A4A] text-white transition-all duration-300 flex flex-col ${
-        sidebarOpen ? "w-72" : "w-24"
+    <aside
+      className={`fixed inset-y-0 left-0 z-50 flex h-dvh flex-col bg-[#0B2A4A] text-white transition-all duration-300 md:sticky md:top-0 md:h-screen md:translate-x-0 ${
+        sidebarOpen
+          ? "w-[calc(100vw-1rem)] translate-x-0 sm:w-72 md:w-72"
+          : "w-[calc(100vw-1rem)] -translate-x-full sm:w-72 md:w-24 md:translate-x-0"
       }`}
     >
-      {/* LOGO */}
-      <div className="flex items-center justify-between px-6 py-6 border-b border-white/10">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-[#27D3C3] flex items-center justify-center text-2xl">
-            👤
-          </div>
+      <div
+        className={`flex border-b border-white/10 ${
+          sidebarOpen
+            ? "items-center justify-between px-5 py-5 sm:px-6 sm:py-6"
+            : "items-center justify-center px-3 py-5 md:flex-col md:gap-4"
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            if (!sidebarOpen) setSidebarOpen(true);
+          }}
+          className={`flex min-w-0 items-center rounded-2xl text-left ${
+            sidebarOpen ? "gap-4" : "justify-center hover:bg-white/10"
+          }`}
+          aria-label={sidebarOpen ? "Customer home" : "Expand navigation"}
+        >
+          <span
+            className={`flex shrink-0 items-center justify-center rounded-2xl bg-[#27D3C3] text-[#0B2A4A] ${
+              sidebarOpen ? "h-14 w-14 text-2xl" : "h-12 w-12 text-xl"
+            }`}
+          >
+            <FaUserCircle />
+          </span>
+
           {sidebarOpen && (
-            <div>
-              <h1 className="text-2xl font-bold">Caryanam</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-bold">Caryanam</h1>
               <p className="text-sm text-gray-300">FinServ</p>
             </div>
           )}
-        </div>
-        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-xl">
-          <FaBars />
         </button>
+
+        {sidebarOpen && (
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xl hover:bg-white/10"
+            aria-label="Collapse navigation"
+          >
+            <FaBars />
+          </button>
+        )}
       </div>
 
-      {/* MENU */}
-      <div className="flex-1 mt-8 px-4">
+      <nav className="mt-6 flex-1 overflow-y-auto px-3 sm:px-4">
         {menuItems.map((item) => (
           <button
             key={item.name}
-            onClick={() => setActiveMenu(item.name)}
-            className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl mb-4 transition-all duration-200 ${
+            onClick={() => handleMenuSelect(item.name)}
+            title={!sidebarOpen ? item.name : undefined}
+            className={`mb-3 flex w-full items-center rounded-2xl py-4 transition-all duration-200 ${
+              sidebarOpen ? "justify-start gap-4 px-4 sm:px-5" : "justify-center px-0"
+            } ${
               activeMenu === item.name
                 ? "bg-[#27D3C3] text-[#0B2A4A] font-bold"
                 : "hover:bg-white/10"
             }`}
           >
-            <span className="text-lg">
-              {item.icon}
-            </span>
-
-            {sidebarOpen && (
-              <span className="text-sm">{item.name}</span>
-            )}
+            <span className="text-lg">{item.icon}</span>
+            {sidebarOpen && <span className="text-sm">{item.name}</span>}
           </button>
         ))}
-      </div>
+      </nav>
 
-      {/* LOGOUT */}
-      <div className="p-4 border-t border-white/10 mt-auto">
+      <div className="mt-auto border-t border-white/10 p-4">
         <button
+          type="button"
           onClick={handleLogout}
-          className="w-full flex items-center gap-4 px-5 py-4 rounded-2xl bg-red-500 hover:bg-red-600 transition-all text-white font-medium"
+          title={!sidebarOpen ? "Logout" : undefined}
+          className={`flex w-full items-center rounded-2xl bg-red-500 py-4 font-medium text-white transition-all hover:bg-red-600 ${
+            sidebarOpen ? "justify-start gap-4 px-5" : "justify-center px-0"
+          }`}
         >
           <FaSignOutAlt className="text-lg" />
           {sidebarOpen && <span>Logout</span>}
         </button>
       </div>
-    </div>
+    </aside>
   );
 };
 

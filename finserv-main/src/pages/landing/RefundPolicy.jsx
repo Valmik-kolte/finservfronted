@@ -6,9 +6,9 @@ const RefundPolicy = () => (
   <div className="bg-[#1ECFC3]/5">
     <Header />
 
-    <div className="max-w-4xl mx-auto px-6 py-20">
+    <div className="max-w-4xl mx-auto px-4 py-12 sm:px-6 sm:py-16 lg:py-20">
 
-      <h1 className="text-3xl font-bold text-[#0B2A4A] mb-8">
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A] mb-8">
         No Refund Policy
       </h1>
 

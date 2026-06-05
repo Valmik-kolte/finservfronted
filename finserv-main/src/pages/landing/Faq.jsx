@@ -33,9 +33,9 @@ const faqItems = [
 const Faq = () => (
     < div className="bg-[#1ECFC3]/5">
     <Header />
-  <div className="px-8 py-20  max-w-5xl mx-auto space-y-8">
+  <div className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20 max-w-5xl mx-auto space-y-8">
     <div>
-      <h1 className="text-3xl font-bold text-[#0B2A4A]">Frequently Asked Questions</h1>
+      <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A]">Frequently Asked Questions</h1>
       <p className="text-gray-600 mt-3 leading-relaxed">
         Find answers to the most common questions about our vehicle loan application process, eligibility, and partner services.
       </p>
@@ -43,8 +43,8 @@ const Faq = () => (
 
     <div className="space-y-4">
       {faqItems.map((item, idx) => (
-        <details key={idx} className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-[#1ECFC3]/40">
-          <summary className="cursor-pointer text-lg font-semibold text-[#0B2A4A] list-none">
+        <details key={idx} className="group rounded-3xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:border-[#1ECFC3]/40">
+          <summary className="cursor-pointer text-base sm:text-lg font-semibold text-[#0B2A4A] list-none">
             {item.question}
           </summary>
           <p className="mt-3 text-gray-600 leading-relaxed">{item.answer}</p>

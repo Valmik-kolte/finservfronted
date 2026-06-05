@@ -27,16 +27,16 @@ const LoanCalculator = () => {
   return (
     < div className="bg-[#1ECFC3]/5">
     <Header />
-    <div className="px-8 py-20  max-w-5xl mx-auto space-y-8">
+    <div className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20 max-w-5xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-[#0B2A4A]">Loan Calculator</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A]">Loan Calculator</h1>
         <p className="text-gray-600 mt-2 leading-relaxed">
           Estimate your monthly EMI and total interest before applying for a vehicle loan. Adjust the amount, term, and rate to compare offers.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <label className="block text-sm font-semibold text-[#0B2A4A]">Loan Amount</label>
           <input
             type="range"
@@ -50,7 +50,7 @@ const LoanCalculator = () => {
           <p className="mt-4 text-xl font-bold text-[#112B5A]">{formatCurrency(loanAmount)}</p>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <label className="block text-sm font-semibold text-[#0B2A4A]">Loan Term</label>
           <input
             type="range"
@@ -64,7 +64,7 @@ const LoanCalculator = () => {
           <p className="mt-4 text-xl font-bold text-[#112B5A]">{loanTerm} months</p>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
           <label className="block text-sm font-semibold text-[#0B2A4A]">Interest Rate</label>
           <input
             type="range"
@@ -80,21 +80,21 @@ const LoanCalculator = () => {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-3xl border border-[#1ECFC3]/20 bg-[#f8fdfc] p-6 shadow-sm">
+        <div className="rounded-3xl border border-[#1ECFC3]/20 bg-[#f8fdfc] p-4 sm:p-6 shadow-sm">
           <p className="text-sm font-semibold text-[#0B2A4A]">Estimated EMI</p>
-          <p className="mt-4 text-3xl font-bold text-[#1ECFC3]">{formatCurrency(monthlyPayment)}</p>
+          <p className="mt-4 text-2xl sm:text-3xl font-bold text-[#1ECFC3]">{formatCurrency(monthlyPayment)}</p>
         </div>
-        <div className="rounded-3xl border border-[#1ECFC3]/20 bg-[#f8fdfc] p-6 shadow-sm">
+        <div className="rounded-3xl border border-[#1ECFC3]/20 bg-[#f8fdfc] p-4 sm:p-6 shadow-sm">
           <p className="text-sm font-semibold text-[#0B2A4A]">Total Interest</p>
-          <p className="mt-4 text-3xl font-bold text-[#1ECFC3]">{formatCurrency(totalInterest)}</p>
+          <p className="mt-4 text-2xl sm:text-3xl font-bold text-[#1ECFC3]">{formatCurrency(totalInterest)}</p>
         </div>
-        <div className="rounded-3xl border border-[#1ECFC3]/20 bg-[#f8fdfc] p-6 shadow-sm">
+        <div className="rounded-3xl border border-[#1ECFC3]/20 bg-[#f8fdfc] p-4 sm:p-6 shadow-sm">
           <p className="text-sm font-semibold text-[#0B2A4A]">Total Repayment</p>
-          <p className="mt-4 text-3xl font-bold text-[#1ECFC3]">{formatCurrency(totalPayment)}</p>
+          <p className="mt-4 text-2xl sm:text-3xl font-bold text-[#1ECFC3]">{formatCurrency(totalPayment)}</p>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-3xl border border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
         <h2 className="text-xl font-semibold text-[#0B2A4A]">How to use this calculator</h2>
         <ul className="mt-4 list-disc space-y-2 pl-5 text-gray-600">
           <li>Adjust the loan amount, tenure, and interest rate to see an instant estimate.</li>

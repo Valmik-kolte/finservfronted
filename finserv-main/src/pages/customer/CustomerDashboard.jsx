@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FaBell,
+  FaBars,
   FaCheckCircle,
   FaCloudUploadAlt,
   FaEye,
@@ -17,6 +18,15 @@ import {
 import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
 import qrCode from "../../assets/upi_1780494820795.png";
+import {
+  READY2DRIVE_BASE_AMOUNT,
+  READY2DRIVE_FEE_LABEL,
+  READY2DRIVE_GST_AMOUNT,
+  READY2DRIVE_GST_LABEL,
+  READY2DRIVE_GST_PERCENT,
+  READY2DRIVE_TOTAL_AMOUNT,
+  formatINR,
+} from "../../constants/payment";
 
 const DOCUMENT_LABELS = {
   AADHAAR: "Aadhaar",
@@ -55,6 +65,9 @@ const OPTIONAL_DOCUMENT_TYPES = new Set([
   "ODOMETER_READING",
 ]);
 
+const SALARIED_INCOME_TYPES = ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"];
+const SELF_EMPLOYED_INCOME_TYPES = ["ITR_RETURN", "BANK_STATEMENT"];
+
 const STEPS = [
   { id: 1, title: "Personal Information" },
   { id: 2, title: "KYC Documents", types: ["PAN", "AADHAAR"] },
@@ -85,6 +98,19 @@ const getUserSession = () => {
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? null;
 
+const formatDate = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const emptyProfile = {
   userId: "",
   fullName: "",
@@ -105,6 +131,22 @@ const emptyPersonalInfo = {
   pincode: "",
   loanAmount: "",
 };
+
+const PERSONAL_INFO_REQUIRED_FIELDS = [
+  ["fullName", "Full Name"],
+  ["email", "Email"],
+  ["mobileNumber", "Mobile Number"],
+  ["address", "Address"],
+  ["city", "City"],
+  ["state", "State"],
+  ["pincode", "Pincode"],
+  ["loanAmount", "Loan Amount"],
+];
+
+const getMissingPersonalInfoFields = (personalInfo) =>
+  PERSONAL_INFO_REQUIRED_FIELDS.filter(
+    ([key]) => String(personalInfo?.[key] || "").trim() === ""
+  ).map(([, label]) => label);
 
 const getPersonalInfoDraft = (userId, session) => {
   try {
@@ -144,6 +186,36 @@ const hasSavedPersonalInfoDraft = (userId) => {
 const hasUsableDocument = (docsByType, type) => {
   const doc = docsByType[type];
   return !!doc && doc.status !== "REJECTED";
+};
+
+const getDocumentType = (doc) => doc?.documentType || doc?.type || "";
+
+const getDocumentSortValue = (doc) => {
+  const dateValue = doc?.updatedAt || doc?.uploadedAt || doc?.createdAt;
+  if (dateValue) {
+    const time = new Date(dateValue).getTime();
+    if (!Number.isNaN(time)) return time;
+  }
+  return Number(doc?.documentId || doc?.id || 0);
+};
+
+const pickLatestDocument = (current, next) => {
+  if (!current) return next;
+  const currentValue = getDocumentSortValue(current);
+  const nextValue = getDocumentSortValue(next);
+  if (nextValue !== currentValue) return nextValue > currentValue ? next : current;
+  if (current.status === "REJECTED" && next.status !== "REJECTED") return next;
+  return current;
+};
+
+const latestDocumentsByType = (documents) => {
+  const byType = new Map();
+  documents.filter(Boolean).forEach((doc) => {
+    const type = getDocumentType(doc);
+    if (!type) return;
+    byType.set(type, pickLatestDocument(byType.get(type), doc));
+  });
+  return Array.from(byType.values()).sort((a, b) => getDocumentSortValue(b) - getDocumentSortValue(a));
 };
 
 const missingLabel = (type) =>
@@ -202,6 +274,11 @@ const upsertPaymentRequest = ({ userId, status, profile, personalInfo, documents
       email: profile?.email || personalInfo?.email || "",
       mobileNumber: profile?.mobileNumber || personalInfo?.mobileNumber || "",
       loanAmount: personalInfo?.loanAmount || "",
+      feeName: READY2DRIVE_FEE_LABEL,
+      feeBaseAmount: READY2DRIVE_BASE_AMOUNT,
+      gstRatePercent: READY2DRIVE_GST_PERCENT,
+      gstAmount: READY2DRIVE_GST_AMOUNT,
+      payableAmount: READY2DRIVE_TOTAL_AMOUNT,
       documentCount: documents?.length || 0,
       documents:
         documents?.map((doc) => ({
@@ -229,6 +306,11 @@ const upsertPaymentRequest = ({ userId, status, profile, personalInfo, documents
           email: profile?.email || "",
           mobileNumber: profile?.mobileNumber || "",
           loanAmount: personalInfo?.loanAmount || "",
+          feeName: READY2DRIVE_FEE_LABEL,
+          feeBaseAmount: READY2DRIVE_BASE_AMOUNT,
+          gstRatePercent: READY2DRIVE_GST_PERCENT,
+          gstAmount: READY2DRIVE_GST_AMOUNT,
+          payableAmount: READY2DRIVE_TOTAL_AMOUNT,
           documentCount: documents?.length || 0,
           documents:
             documents?.map((doc) => ({
@@ -292,18 +374,62 @@ const markLocalCustomerNotificationRead = (notificationId) => {
   }
 };
 
+const getNotificationId = (item) => item?.id ?? item?.notificationId ?? item?.notification_id ?? "";
+
+const getNotificationMessage = (item) =>
+  item?.message ?? item?.notification ?? item?.title ?? item?.description ?? "Notification update";
+
+const getNotificationCreatedAt = (item) =>
+  item?.createdAt ?? item?.created_at ?? item?.timestamp ?? item?.date ?? new Date().toISOString();
+
+const getNotificationRead = (item) => Boolean(item?.read ?? item?.isRead ?? item?.readStatus ?? false);
+
+const normalizeNotification = (item, fallbackId) => {
+  if (!item) return null;
+  const id = getNotificationId(item) || fallbackId;
+  return {
+    ...item,
+    id: String(id),
+    message: getNotificationMessage(item),
+    createdAt: getNotificationCreatedAt(item),
+    read: getNotificationRead(item),
+  };
+};
+
+const notificationListFromResponse = (response) => {
+  const data = unwrap(response);
+  if (Array.isArray(data)) return data;
+  if (!data || typeof data !== "object") return [];
+  return [
+    data.notifications,
+    data.content,
+    data.items,
+    data.records,
+    data.result,
+    data.results,
+    data.data,
+  ].find(Array.isArray) || [];
+};
+
 const mergeNotifications = (...lists) =>
-  lists
+  Array.from(
+    lists
     .flat()
     .filter(Boolean)
-    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      .map((item, index) => normalizeNotification(item, `customer-notification-${index}`))
+      .filter(Boolean)
+      .reduce((map, item) => map.set(item.id, item), new Map())
+      .values()
+  ).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
 const CustomerDashboard = () => {
   const navigate = useNavigate();
   const session = useMemo(getUserSession, []);
   const userId = session?.id;
 
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() =>
+    typeof window === "undefined" ? true : window.innerWidth >= 768
+  );
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -359,8 +485,9 @@ const CustomerDashboard = () => {
 
   const docsByType = useMemo(() => {
     return documents.reduce((acc, doc) => {
-      const type = doc.documentType || doc.type;
-      if (!acc[type] || doc.status === "REJECTED") acc[type] = doc;
+      const type = getDocumentType(doc);
+      if (!type) return acc;
+      acc[type] = pickLatestDocument(acc[type], doc);
       return acc;
     }, {});
   }, [documents]);
@@ -435,7 +562,7 @@ const CustomerDashboard = () => {
         }
 
         if (docsRes.status === "fulfilled") {
-          const loadedDocuments = unwrap(docsRes.value) || [];
+          const loadedDocuments = latestDocumentsByType(unwrap(docsRes.value) || []);
           const localAssignedBank = readLocalAssignedBank(userId);
           const user = userRes.status === "fulfilled" ? unwrap(userRes.value) || {} : {};
           const hasAssignedBank = !!(
@@ -487,10 +614,13 @@ const CustomerDashboard = () => {
 
         if (notificationsRes.status === "fulfilled") {
           setNotifications(
-            mergeNotifications(readLocalCustomerNotifications(userId), unwrap(notificationsRes.value) || [])
+            mergeNotifications(
+              readLocalCustomerNotifications(userId),
+              notificationListFromResponse(notificationsRes.value)
+            )
           );
         } else {
-          setNotifications(readLocalCustomerNotifications(userId));
+          setNotifications(mergeNotifications(readLocalCustomerNotifications(userId)));
         }
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to load dashboard.");
@@ -551,6 +681,12 @@ const CustomerDashboard = () => {
   };
 
   const savePersonalInfo = async () => {
+    const missingFields = getMissingPersonalInfoFields(personalInfo);
+    if (missingFields.length > 0) {
+      toast.error(`Please fill ${missingFields.join(", ")} before continuing.`);
+      return;
+    }
+
     const payload = {
       userId,
       address: personalInfo.address,
@@ -596,16 +732,29 @@ const CustomerDashboard = () => {
 
     setUploadingType(type);
     try {
-      if (existing?.status === "REJECTED") {
-        await api.delete(`/documents/${existing.documentId}`);
+      const existingDocumentId = existing?.documentId || existing?.id;
+      const wasRejected = existing?.status === "REJECTED";
+
+      if (existingDocumentId) {
+        try {
+          await api.delete(`/documents/${existingDocumentId}`);
+        } catch (deleteError) {
+          if (deleteError?.response?.status !== 404) {
+            throw deleteError;
+          }
+        }
       }
       await api.post("/documents/upload", formData);
-      if (existing?.status === "REJECTED") {
+      if (existingDocumentId) {
         addLocalAdminNotification(
-          `${profile.fullName || "Customer"} reuploaded ${DOCUMENT_LABELS[type] || type}.`
+          `${profile.fullName || "Customer"} ${wasRejected ? "reuploaded" : "replaced"} ${
+            DOCUMENT_LABELS[type] || type
+          }.`
         );
       }
-      toast.success(`${DOCUMENT_LABELS[type]} uploaded.`);
+      toast.success(
+        `${DOCUMENT_LABELS[type] || type} ${existingDocumentId ? "replaced" : "uploaded"}.`
+      );
       await fetchDashboardData(false);
     } catch (error) {
       toast.error(error?.response?.data?.message || "Upload failed.");
@@ -657,7 +806,7 @@ const CustomerDashboard = () => {
     if (String(notificationId).startsWith("local-customer-")) {
       markLocalCustomerNotificationRead(notificationId);
       setNotifications((prev) =>
-        prev.map((item) => (item.id === notificationId ? { ...item, read: true } : item))
+        prev.map((item) => (item.id === String(notificationId) ? { ...item, read: true } : item))
       );
       return;
     }
@@ -665,7 +814,7 @@ const CustomerDashboard = () => {
       await api.put(`/notifications/read/${notificationId}`);
       setNotifications((prev) =>
         prev.map((item) =>
-          item.id === notificationId ? { ...item, read: true } : item
+          item.id === String(notificationId) ? { ...item, read: true } : item
         )
       );
     } catch {
@@ -725,8 +874,8 @@ const CustomerDashboard = () => {
 
   const incomeTypes =
     employmentType === "Salaried"
-      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
-      : ["ITR_RETURN", "BANK_STATEMENT"];
+      ? SALARIED_INCOME_TYPES
+      : SELF_EMPLOYED_INCOME_TYPES;
 
   const missingRequiredTypes = useMemo(
     () => {
@@ -823,19 +972,38 @@ const CustomerDashboard = () => {
         setActiveMenu={setActiveMenu}
         handleLogout={handleLogout}
       />
+      {sidebarOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+        />
+      )}
 
-      <main className="flex-1 overflow-y-auto">
-        <div className="p-5 md:p-8 max-w-7xl mx-auto">
+      <main className="min-w-0 flex-1 overflow-y-auto">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
           <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-[#0B2A4A] shadow-sm md:hidden"
+                aria-label="Open navigation"
+              >
+                <FaBars />
+              </button>
+              <div className="min-w-0">
               <p className="text-sm font-semibold text-[#27D3C3]">{activeMenu}</p>
-              <h1 className="text-3xl font-bold text-[#0B2A4A]">
+              <h1 className="truncate text-2xl md:text-3xl font-bold text-[#0B2A4A]">
                 Welcome, {profile.fullName || "Customer"}
               </h1>
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="relative">
                 <button
+                  type="button"
                   onClick={() => setShowNotifications((prev) => !prev)}
                   className="relative h-11 w-11 rounded-2xl bg-white text-[#0B2A4A] shadow-sm flex items-center justify-center"
                   aria-label="Notifications"
@@ -848,7 +1016,7 @@ const CustomerDashboard = () => {
                   )}
                 </button>
                 {showNotifications && (
-                  <div className="absolute right-0 z-30 mt-3 w-80 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl">
+                  <div className="absolute right-0 z-30 mt-3 w-[calc(100vw-2rem)] sm:w-80 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl">
                     <h3 className="mb-3 font-bold text-[#0B2A4A]">Notifications</h3>
                     {notifications.length === 0 ? (
                       <p className="text-sm text-slate-500">No notifications.</p>
@@ -856,6 +1024,7 @@ const CustomerDashboard = () => {
                       <div className="max-h-80 space-y-2 overflow-y-auto">
                         {notifications.slice(0, 8).map((item) => (
                           <button
+                            type="button"
                             key={item.id}
                             onClick={() => !item.read && markNotificationRead(item.id)}
                             className={`w-full rounded-2xl p-3 text-left text-sm ${
@@ -872,6 +1041,7 @@ const CustomerDashboard = () => {
                 )}
               </div>
               <button
+                type="button"
                 onClick={() => fetchDashboardData(true)}
                 className="self-start md:self-auto bg-white px-5 py-3 rounded-2xl text-sm font-semibold text-[#0B2A4A] shadow-sm"
               >
@@ -881,7 +1051,7 @@ const CustomerDashboard = () => {
           </header>
 
           {loading ? (
-            <div className="bg-white rounded-3xl p-8 text-[#0B2A4A] font-semibold">
+            <div className="bg-white rounded-3xl p-5 sm:p-8 text-[#0B2A4A] font-semibold">
               Loading dashboard...
             </div>
           ) : (
@@ -1021,12 +1191,12 @@ const CustomerDashboard = () => {
 
 const PaymentPromptModal = ({ onClose, onPayNow }) => (
   <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
-    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+    <div className="bg-white rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#0B2A4A]">Application Submitted Successfully</h2>
           <p className="text-sm font-semibold text-amber-700 mt-3">
-            Please complete processing fee payment to proceed.
+            Please complete {READY2DRIVE_FEE_LABEL} payment before your documents go to admin review.
           </p>
         </div>
         <button
@@ -1037,12 +1207,26 @@ const PaymentPromptModal = ({ onClose, onPayNow }) => (
           <FaTimes />
         </button>
       </div>
+      <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-semibold text-amber-800">Ready2Drive fee</span>
+          <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_BASE_AMOUNT)}</span>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-sm">
+          <span className="font-semibold text-amber-800">{READY2DRIVE_GST_LABEL}</span>
+          <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_GST_AMOUNT)}</span>
+        </div>
+        <div className="mt-3 border-t border-amber-200 pt-3 flex items-center justify-between">
+          <span className="text-sm font-bold text-[#0B2A4A]">Total payable</span>
+          <span className="text-xl font-black text-[#0B2A4A]">{formatINR(READY2DRIVE_TOTAL_AMOUNT)}</span>
+        </div>
+      </div>
       <div className="mt-6 flex flex-col sm:flex-row gap-3">
         <button
           onClick={onPayNow}
           className="flex-1 bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
         >
-          Pay Now
+          Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
         </button>
         <button
           onClick={onClose}
@@ -1057,11 +1241,10 @@ const PaymentPromptModal = ({ onClose, onPayNow }) => (
 
 const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPayment }) => (
   <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
-    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+    <div className="bg-white rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl">
       <div className="flex items-center justify-between gap-4 mb-5">
         <div>
-          <h2 className="text-xl font-bold text-[#0B2A4A]">Processing Fee Payment</h2>
-          <p className="text-sm text-slate-500 mt-1">Scan the QR code and complete payment.</p>
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Ready2Drive Payment</h2>
         </div>
         <button
           onClick={onClose}
@@ -1072,7 +1255,22 @@ const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPaymen
         </button>
       </div>
 
-      <div className="bg-[#F4F6F9] rounded-2xl border border-slate-100 p-5 min-h-[260px] flex items-center justify-center">
+      <div className="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-slate-500">Processing fee</span>
+          <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_BASE_AMOUNT)}</span>
+        </div>
+        <div className="mt-2 flex items-center justify-between text-sm">
+          <span className="text-slate-500">{READY2DRIVE_GST_LABEL}</span>
+          <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_GST_AMOUNT)}</span>
+        </div>
+        <div className="mt-3 border-t border-slate-200 pt-3 flex items-center justify-between">
+          <span className="font-bold text-[#0B2A4A]">Total payable</span>
+          <span className="text-lg font-black text-[#0B2A4A]">{formatINR(READY2DRIVE_TOTAL_AMOUNT)}</span>
+        </div>
+      </div>
+
+      <div className="bg-[#F4F6F9] rounded-2xl border border-slate-100 p-4 sm:p-5 min-h-[220px] sm:min-h-[260px] flex items-center justify-center">
         {qrImageError ? (
           <div className="text-center">
             <p className="text-sm font-bold text-[#0B2A4A]">QR image placeholder</p>
@@ -1083,7 +1281,7 @@ const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPaymen
         ) : (
           <img
             src={qrCode}
-            alt="Processing fee QR code"
+            alt="Ready2Drive payment QR code"
             onError={() => setQrImageError(true)}
             className="max-h-60 w-full object-contain"
           />
@@ -1094,7 +1292,7 @@ const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPaymen
         onClick={onVerifyPayment}
         className="mt-5 w-full bg-[#27D3C3] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold"
       >
-        Verify Payment
+        Verify Payment of {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
       </button>
     </div>
   </div>
@@ -1102,15 +1300,15 @@ const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPaymen
 
 const SimpleListOverlay = ({ title, items, onClose }) => (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-4 sm:p-6 shadow-2xl">
       <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-[#0B2A4A]">{title}</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-[#0B2A4A]">{title}</h2>
         <button onClick={onClose} className="text-slate-400 hover:text-red-600" aria-label="Close">
           <FaTimes />
         </button>
       </div>
       {items.length === 0 ? (
-        <div className="rounded-2xl bg-[#F4F6F9] p-6 text-sm text-slate-500">No data found.</div>
+        <div className="rounded-2xl bg-[#F4F6F9] p-4 sm:p-6 text-sm text-slate-500">No data found.</div>
       ) : (
         <div className="space-y-3">
           {items.map((item, index) => (
@@ -1203,24 +1401,25 @@ const DashboardTab = ({
   return (
     <div className="space-y-6">
       {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-amber-800">Payment required to process application</h2>
+            <h2 className="text-xl font-bold text-amber-800">Payment required</h2>
             <p className="text-sm text-amber-700 mt-1">
-              Your documents are saved. Complete the processing fee payment to send the request for admin review.
+              Your documents are saved. Pay processing fee total payable is{" "}
+              <span className="font-bold">{formatINR(READY2DRIVE_TOTAL_AMOUNT)}</span> before admin review.
             </p>
           </div>
           <button
             onClick={onPayNow}
             className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
           >
-            Pay Now
+            Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
           </button>
         </div>
       )}
 
       {paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING && (
-        <div className="bg-sky-50 border border-sky-200 rounded-3xl p-6">
+        <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 sm:p-6">
           <h2 className="text-xl font-bold text-sky-800">Payment verification pending</h2>
           <p className="text-sm text-sky-700 mt-1">
             Admin will verify your payment. Documents will be submitted for approval after payment is approved.
@@ -1229,7 +1428,7 @@ const DashboardTab = ({
       )}
 
       {paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-4 sm:p-6">
           <h2 className="text-xl font-bold text-emerald-800">Payment verified successfully</h2>
           <p className="text-sm text-emerald-700 mt-1">
             Your documents have been submitted for admin review.
@@ -1238,7 +1437,7 @@ const DashboardTab = ({
       )}
 
       {!hasPersonalInfo && (
-        <div className="bg-[#0B2A4A] text-white rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="bg-[#0B2A4A] text-white rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold">Complete your profile to get started</h2>
             <p className="text-white/70 text-sm mt-1">
@@ -1255,7 +1454,7 @@ const DashboardTab = ({
       )}
 
       {rejectedDocuments.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="bg-red-50 border border-red-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-red-700">Documents need re-upload</h2>
             <p className="text-sm text-red-600 mt-1">
@@ -1277,7 +1476,7 @@ const DashboardTab = ({
             type="button"
             key={card.label}
             onClick={() => setStatOverlay(card)}
-            className={`rounded-3xl p-6 shadow-sm text-left hover:-translate-y-0.5 hover:shadow-md transition ${card.highlight ? "bg-[#EAFBF8] border border-[#27D3C3]/40" : "bg-white"}`}
+            className={`rounded-3xl p-4 sm:p-6 shadow-sm text-left hover:-translate-y-0.5 hover:shadow-md transition ${card.highlight ? "bg-[#EAFBF8] border border-[#27D3C3]/40" : "bg-white"}`}
           >
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-5 ${card.highlight ? "bg-[#27D3C3]/20 text-[#0B2A4A]" : "bg-[#EAFBF8] text-[#0B2A4A]"}`}>
               {card.icon}
@@ -1300,7 +1499,7 @@ const DashboardTab = ({
         />
       )}
 
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Notifications</h2>
         {notifications.length === 0 ? (
           <p className="text-sm text-slate-500">No notifications yet.</p>
@@ -1315,7 +1514,7 @@ const DashboardTab = ({
                 }`}
               >
                 <p className="text-sm font-semibold text-[#0B2A4A]">{item.message}</p>
-                <p className="text-xs text-slate-500 mt-1">{item.createdAt || ""}</p>
+                <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>
               </button>
             ))}
           </div>
@@ -1347,19 +1546,88 @@ const DocumentsTab = ({
   openPreview,
   paymentStatus,
   onPayNow,
-}) => (
+}) => {
+  const hasSalariedIncomeDocs =
+    hasUsableDocument(docsByType, "SALARY_SLIP") || hasUsableDocument(docsByType, "APPOINTMENT_LETTER");
+  const hasSelfEmployedIncomeDocs = hasUsableDocument(docsByType, "ITR_RETURN");
+  const hasSharedIncomeDocs = hasUsableDocument(docsByType, "BANK_STATEMENT");
+  const lockedEmploymentType = hasSalariedIncomeDocs
+    ? "Salaried"
+    : hasSelfEmployedIncomeDocs
+    ? "Self Employed"
+    : hasSharedIncomeDocs
+    ? employmentType
+    : "";
+
+  const changeEmploymentType = (type) => {
+    if (assignedBank) return;
+    if (lockedEmploymentType && type !== lockedEmploymentType) {
+      toast.error(
+        `You already uploaded ${lockedEmploymentType} income documents. Remove or replace those documents before switching employment type.`
+      );
+      return;
+    }
+    setEmploymentType(type);
+  };
+
+  const requiredTypesForStep = () => {
+    if (currentStep === 2) return ["PAN", "AADHAAR"];
+    if (currentStep === 3) return ["RESIDENTIAL_PROOF"];
+    if (currentStep === 4) return employmentType === "Salaried"
+      ? SALARIED_INCOME_TYPES
+      : SELF_EMPLOYED_INCOME_TYPES;
+    if (currentStep === 5) return ["RC", "INSURANCE"];
+    return [];
+  };
+
+  const missingForCurrentStep = () => {
+    if (currentStep === 1) return getMissingPersonalInfoFields(personalInfo);
+    return requiredTypesForStep().filter((type) => {
+      if (type === "RESIDENTIAL_PROOF") {
+        return !(
+          hasUsableDocument(docsByType, "LIGHT_BILL") ||
+          hasUsableDocument(docsByType, "RENTAL_AGREEMENT")
+        );
+      }
+      return !hasUsableDocument(docsByType, type);
+    });
+  };
+
+  const showStepBlockedToast = (missing) => {
+    if (currentStep === 1) {
+      toast.error(`Please fill ${missing.join(", ")} before continuing.`);
+      return;
+    }
+    toast.error(`Please upload ${missing.map(missingLabel).join(", ")} before continuing.`);
+  };
+
+  const goToStep = (stepId) => {
+    if (assignedBank || stepId <= currentStep) {
+      setCurrentStep(stepId);
+      return;
+    }
+
+    const missing = missingForCurrentStep();
+    if (missing.length > 0) {
+      showStepBlockedToast(missing);
+      return;
+    }
+    setCurrentStep(stepId);
+  };
+
+  return (
   <div className="space-y-6">
     {assignedBank && (
-      <div className="bg-[#EAFBF8] border border-[#27D3C3]/40 rounded-3xl p-5 text-sm font-semibold text-[#0B2A4A]">
+      <div className="bg-[#EAFBF8] border border-[#27D3C3]/40 rounded-3xl p-4 sm:p-5 text-sm font-semibold text-[#0B2A4A]">
         This application has been forwarded to {assignedBank.bankName}. Documents and application details are locked.
       </div>
     )}
-    <div className="bg-white rounded-3xl p-5 shadow-sm overflow-x-auto">
+    <div className="bg-white rounded-3xl p-3 sm:p-5 shadow-sm overflow-x-auto">
       <div className="flex gap-3 min-w-max">
         {STEPS.map((step) => (
           <button
             key={step.id}
-            onClick={() => setCurrentStep(step.id)}
+            onClick={() => goToStep(step.id)}
             className={`px-5 py-3 rounded-2xl text-sm font-bold ${
               currentStep === step.id
                 ? "bg-[#0B2A4A] text-white"
@@ -1373,7 +1641,7 @@ const DocumentsTab = ({
     </div>
 
     {currentStep === 1 ? (
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Personal Information</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <Field label="Full Name" value={personalInfo.fullName} readOnly />
@@ -1421,7 +1689,7 @@ const DocumentsTab = ({
         onPayNow={onPayNow}
       />
     ) : (
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
           <h2 className="text-xl font-bold text-[#0B2A4A]">
             {STEPS.find((step) => step.id === currentStep)?.title}
@@ -1431,11 +1699,11 @@ const DocumentsTab = ({
               {["Salaried", "Self Employed"].map((type) => (
                 <button
                   key={type}
-                  disabled={!!assignedBank}
-                  onClick={() => setEmploymentType(type)}
+                  disabled={!!assignedBank || (!!lockedEmploymentType && type !== lockedEmploymentType)}
+                  onClick={() => changeEmploymentType(type)}
                   className={`px-4 py-2 rounded-xl text-sm font-bold ${
                     employmentType === type ? "bg-white text-[#0B2A4A] shadow-sm" : "text-slate-500"
-                  }`}
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
                 >
                   {type}
                 </button>
@@ -1454,7 +1722,7 @@ const DocumentsTab = ({
         {!assignedBank && (
           <div className="mt-6 flex justify-end">
             <button
-              onClick={() => setCurrentStep(Math.min(currentStep + 1, 6))}
+              onClick={() => goToStep(Math.min(currentStep + 1, 6))}
               className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold"
             >
               Next
@@ -1464,7 +1732,8 @@ const DocumentsTab = ({
       </div>
     )}
   </div>
-);
+  );
+};
 
 const VerifySubmitStep = ({
   applicationNumber,
@@ -1481,7 +1750,7 @@ const VerifySubmitStep = ({
   onPayNow,
 }) => (
   <div className="space-y-6">
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
       <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
         <div>
           <h2 className="text-xl font-bold text-[#0B2A4A]">Verify Details Before Submit</h2>
@@ -1529,7 +1798,7 @@ const VerifySubmitStep = ({
       )}
     </div>
 
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
         <div>
           <h2 className="text-xl font-bold text-[#0B2A4A]">Uploaded Documents</h2>
@@ -1590,24 +1859,24 @@ const VerifySubmitStep = ({
     </div>
 
     {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
-      <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-amber-800">Processing fee payment pending</h2>
+          <h2 className="text-xl font-bold text-amber-800">Ready2Drive payment pending</h2>
           <p className="text-sm text-amber-700 mt-1">
-            Your application is saved. Complete payment to move it to admin verification.
+            Your application is saved. Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)} to move it to admin verification.
           </p>
         </div>
         <button
           onClick={onPayNow}
           className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold"
         >
-          Pay Now
+          Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
         </button>
       </div>
     )}
 
     {paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING && (
-      <div className="bg-sky-50 border border-sky-200 rounded-3xl p-6">
+      <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 sm:p-6">
         <h2 className="text-xl font-bold text-sky-800">Payment verification pending</h2>
         <p className="text-sm text-sky-700 mt-1">
           Admin will verify your QR payment before documents are submitted for approval.
@@ -1615,7 +1884,7 @@ const VerifySubmitStep = ({
       </div>
     )}
 
-    <div className="bg-[#0B2A4A] rounded-3xl p-6 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="bg-[#0B2A4A] rounded-3xl p-4 sm:p-6 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div>
         <h2 className="text-xl font-bold">
           {locked
@@ -1634,7 +1903,7 @@ const VerifySubmitStep = ({
             : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
             ? "Documents will go to admin after payment is approved."
             : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
-            ? "Complete the processing fee payment to proceed."
+            ? `Complete ${READY2DRIVE_FEE_LABEL} payment. Total payable is ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}.`
             : "Final submit saves your details and asks you to complete payment."}
         </p>
       </div>
@@ -1657,7 +1926,7 @@ const VerifySubmitStep = ({
           : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
           ? "Verification Pending"
           : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
-          ? "Pay Now"
+          ? `Pay ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}`
           : "Final Submit"}
       </button>
     </div>
@@ -1668,7 +1937,7 @@ const TRACKING_STEPS = [
   {
     key: "payment_pending",
     label: "Payment Pending",
-    sub: "Complete processing fee payment to proceed.",
+    sub: `Complete ${READY2DRIVE_FEE_LABEL} payment. Total payable is ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}.`,
     icon: <FaRupeeSign />,
   },
   {
@@ -1712,12 +1981,12 @@ const TRACKING_STEPS = [
 const getActiveTrackingStep = (documents, counts, assignedBank, paymentStatus) => {
   if (!documents.length) return -1;
   if (assignedBank) return 6;
-  if (counts.approvedCount > 0 && counts.pendingCount === 0 && counts.rejectedCount === 0) return 5;
-  if (counts.verifiedCount > 0 || counts.pendingCount > 0) return 4;
-  if (paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED) return 3;
-  if (paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING) return 1;
   if (paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING) return 0;
-  return -1;
+  if (paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING) return 1;
+  if (paymentStatus !== PAYMENT_STATUS.PAYMENT_APPROVED) return -1;
+  if (counts.approvedCount > 0 && counts.pendingCount === 0 && counts.rejectedCount === 0) return 5;
+  if (counts.verifiedCount > 0 || counts.pendingCount > 0 || counts.rejectedCount > 0) return 4;
+  return 3;
 };
 
 const StatusTab = ({
@@ -1736,21 +2005,23 @@ const StatusTab = ({
   return (
     <div className="space-y-6">
       {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-amber-800">Processing fee payment pending</h2>
-            <p className="text-sm text-amber-700 mt-1">Pay now to continue your application.</p>
+            <h2 className="text-xl font-bold text-amber-800">Ready2Drive payment pending</h2>
+            <p className="text-sm text-amber-700 mt-1">
+              Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)} to continue your application.
+            </p>
           </div>
           <button
             onClick={onPayNow}
             className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
           >
-            Pay Now
+            Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
           </button>
         </div>
       )}
 
-      <div className="bg-white rounded-3xl p-6 shadow-sm">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-lg font-bold text-[#0B2A4A] mb-6">Application Tracking</h2>
         {documents.length === 0 ? (
           <p className="text-sm text-slate-500">No documents uploaded yet. Upload documents to start tracking.</p>
@@ -1797,14 +2068,14 @@ const StatusTab = ({
         )}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           ["Pending", counts.pendingCount || 0],
           ["Verified", counts.verifiedCount || 0],
           ["Approved", counts.approvedCount || 0],
           ["Rejected", counts.rejectedCount || 0],
         ].map(([label, value]) => (
-          <div key={label} className="bg-white rounded-3xl p-5 shadow-sm">
+          <div key={label} className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm">
             <p className="text-sm text-slate-500">{label}</p>
             <p className="text-2xl font-bold text-[#0B2A4A] mt-2">{value}</p>
           </div>
@@ -1813,7 +2084,7 @@ const StatusTab = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {documents.length === 0 ? (
-          <div className="bg-white rounded-3xl p-6 text-slate-500">No documents uploaded yet.</div>
+          <div className="bg-white rounded-3xl p-4 sm:p-6 text-slate-500">No documents uploaded yet.</div>
         ) : (
           documents.map((doc) => (
             <DocumentCard
@@ -1843,7 +2114,7 @@ const SettingsTab = ({
   assignedBank,
 }) => (
   <div className="max-w-4xl space-y-6">
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
       <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Profile Settings</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Field
@@ -1868,7 +2139,7 @@ const SettingsTab = ({
       </button>
     </div>
 
-    <div className="bg-white rounded-3xl p-6 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
       <div className="flex items-center gap-3 mb-5">
         <div className="w-10 h-10 rounded-2xl bg-[#EAFBF8] text-[#0B2A4A] flex items-center justify-center">
           <FaLock />
@@ -1937,7 +2208,7 @@ const DocumentUploadTile = ({ doc, openPreview, type, uploadingType, uploadForTy
   const optional = OPTIONAL_DOCUMENT_TYPES.has(type);
 
   return (
-    <div className="border border-slate-200 rounded-3xl p-5 bg-white">
+    <div className="border border-slate-200 rounded-3xl p-4 sm:p-5 bg-white">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -2004,7 +2275,7 @@ const DocumentCard = ({ doc, openPreview, uploadForType, uploadingType, locked }
   const inputId = `status-reupload-${doc.documentId}`;
 
   return (
-    <div className="bg-white rounded-3xl p-5 shadow-sm">
+    <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-bold text-[#0B2A4A]">{DOCUMENT_LABELS[type] || type}</h3>

@@ -1,6 +1,8 @@
 import React, { useState } from "react";
+import { FaKey } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import AuthPageFrame from "./AuthPageFrame";
 
 const VerifyOtp = () => {
   const navigate = useNavigate();
@@ -13,14 +15,32 @@ const VerifyOtp = () => {
   };
 
   return (
-    <div className="bg-white w-full max-w-md p-10 rounded-2xl shadow-xl">
-      <h2 className="text-2xl font-semibold text-center mb-1">Verify OTP</h2>
-      <p className="text-sm text-gray-500 text-center mb-6">Enter the OTP sent to your email</p>
+    <AuthPageFrame ariaLabel="Verify OTP form">
       <form onSubmit={handleSubmit}>
-        <input type="text" placeholder="Enter OTP" value={otp} onChange={(e) => setOtp(e.target.value)} className="w-full border rounded-lg px-3 py-3 mb-4 bg-gray-50 outline-none text-sm" />
-        <button type="submit" className="w-full py-3 bg-[#0b2a4a] text-white rounded-lg font-medium">Verify OTP</button>
+        <h2 className="auth-simple-title">Verify OTP</h2>
+        <p className="auth-simple-subtitle">Enter the OTP sent to your email</p>
+        <div className="auth-simple-divider" />
+
+        <label className="auth-simple-label first" htmlFor="verify-otp">
+          OTP
+        </label>
+        <div className="auth-simple-input-wrap first">
+          <FaKey className="auth-simple-icon" />
+          <input
+            id="verify-otp"
+            type="text"
+            placeholder="Enter OTP"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value)}
+            className="auth-simple-input"
+          />
+        </div>
+
+        <button type="submit" className="auth-simple-submit">
+          Verify OTP
+        </button>
       </form>
-    </div>
+    </AuthPageFrame>
   );
 };
 

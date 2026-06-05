@@ -41,7 +41,7 @@ const Landing = () => {
           backgroundSize: "cover",
           backgroundPosition: "right center",
           backgroundRepeat: "no-repeat",
-          backgroundAttachment: "fixed",
+          backgroundAttachment: "scroll",
         }}
       >
         {/* Enhanced dark overlay */}
@@ -124,11 +124,11 @@ const Landing = () => {
       </section>
 
       {/* Partners Section */}
-      <section id="our-banks" className="px-6 py-20 lg:px-10 bg-[#1ECFC3]/5">
+      <section id="our-banks" className="px-4 sm:px-6 py-14 sm:py-20 lg:px-10 bg-[#1ECFC3]/5">
         <div className="mx-auto max-w-7xl">
           <div className="text-center mb-12 fade-up">
             <span className="text-sm font-semibold uppercase tracking-[0.35em] text-[#1ECFC3]">Our Banking Partners</span>
-            <h2 className="mt-4 text-4xl font-bold text-[#112B5A]">
+            <h2 className="mt-4 text-3xl sm:text-4xl font-bold text-[#112B5A]">
               Trusted by the best banks in India
             </h2>
             <p className="mt-4 max-w-2xl mx-auto text-gray-600">
@@ -155,23 +155,23 @@ const Landing = () => {
       </section>
 
       {/* Stats Section */}
-      <section id="how-it-works" className="bg-gradient-to-r from-[#112B5A] to-[#1a3f7a] px-6 py-16 lg:px-10 ">
+      <section id="how-it-works" className="bg-gradient-to-r from-[#112B5A] to-[#1a3f7a] px-4 sm:px-6 py-14 sm:py-16 lg:px-10 ">
         <div className="mx-auto max-w-7xl">
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             <div className="text-center">
-              <p className="text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">5000+</p>
+              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">5000+</p>
               <p className="mt-2 text-sm font-medium text-gray-200">Loan Applications</p>
             </div>
             <div className="text-center">
-              <p className="text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">50+</p>
+              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">50+</p>
               <p className="mt-2 text-sm font-medium text-gray-200">Banking Partners</p>
             </div>
             <div className="text-center">
-              <p className="text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">95%</p>
+              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">95%</p>
               <p className="mt-2 text-sm font-medium text-gray-200">Approval Success</p>
             </div>
             <div className="text-center">
-              <p className="text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">10000+</p>
+              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">10000+</p>
               <p className="mt-2 text-sm font-medium text-gray-200">Happy Customers</p>
             </div>
           </div>
@@ -179,10 +179,10 @@ const Landing = () => {
       </section>
 
       {/* How It Works Section */}
-      <section className="px-6 py-20 lg:px-10 bg-[#1ECFC3]/5">
+      <section className="px-4 sm:px-6 py-14 sm:py-20 lg:px-10 bg-[#1ECFC3]/5">
         <div className="mx-auto max-w-7xl">
           <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold text-[#112B5A] mb-4">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#112B5A] mb-4">
               How It Works
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
@@ -198,7 +198,7 @@ const Landing = () => {
               { step: "4", title: "Get Approved", desc: "Receive loan approval and start your vehicle journey", icon: "🎉" },
             ].map((item, idx) => (
               <div key={idx} className="relative">
-                <div className="rounded-2xl bg-[#1ECFC3]/20 p-8 border border-[#1ECFC3]/20 h-full">
+                <div className="rounded-2xl bg-[#1ECFC3]/20 p-5 sm:p-8 border border-[#1ECFC3]/20 h-full">
                   <div className="text-5xl mb-4">{item.icon}</div>
                   <div className="absolute -top-6 -left-6 w-12 h-12 rounded-full bg-gradient-to-br from-[#1ECFC3] to-[#00D4AF] flex items-center justify-center text-white font-bold text-lg">
                     {item.step}
@@ -214,10 +214,10 @@ const Landing = () => {
       </section>
 
       {/* About Us & Features Section */}
-      <section id="about-us" className="px-6 py-20 lg:px-10 bg-gradient-to-r from-[#112B5A] to-[#1a3f7a]">
+      <section id="about-us" className="px-4 sm:px-6 py-14 sm:py-20 lg:px-10 bg-gradient-to-r from-[#112B5A] to-[#1a3f7a]">
         <div className="mx-auto max-w-7xl">
           <div className="text-center mb-16">
-            <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
               Why Choose Us?
             </h2>
             <p className="text-lg text-gray-200">Experience the easiest way to get a vehicle loan</p>
@@ -230,7 +230,7 @@ const Landing = () => {
               { icon: <FaFileAlt className="text-2xl text-[#1ECFC3]" />, title: "Minimal Docs", desc: "Paperless process with easy online document upload" },
               { icon: <FaShieldAlt className="text-2xl text-[#1ECFC3]" />, title: "100% Secure", desc: "Bank-level security for all your personal information" },
             ].map((item, idx) => (
-              <div key={idx} className="group rounded-2xl bg-white/10 backdrop-blur-sm p-8 border border-[#1ECFC3]/20 hover:border-[#1ECFC3]/50 hover:shadow-xl transition-all duration-300">
+              <div key={idx} className="group rounded-2xl bg-white/10 backdrop-blur-sm p-5 sm:p-8 border border-[#1ECFC3]/20 hover:border-[#1ECFC3]/50 hover:shadow-xl transition-all duration-300">
                 <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[#1ECFC3]/20 group-hover:bg-[#1ECFC3]/30 transition-all">
                   {item.icon}
                 </div>
@@ -243,7 +243,7 @@ const Landing = () => {
       </section>
 
      {/* Mobile App Section */}
-<section className="bg-[#1ECFC3]/5 px-6 py-20 lg:px-10">
+<section className="bg-[#1ECFC3]/5 px-4 sm:px-6 py-14 sm:py-20 lg:px-10">
   <div className="mx-auto max-w-7xl">
 
     {/* UPDATED GRID (left small, right large) */}
@@ -269,7 +269,7 @@ const Landing = () => {
       {/* RIGHT SIDE - LARGE CONTENT */}
       <div className="space-y-6 text-[#112B5A]">
 
-        <h2 className="text-4xl font-bold leading-tight lg:text-5xl">
+        <h2 className="text-3xl sm:text-4xl font-bold leading-tight lg:text-5xl">
           Manage Your Loan <br />
           <span className="bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">
             Anytime, Anywhere
