@@ -28,7 +28,9 @@ const AppRoutes = () => (
     <Route path="/loan-calculator" element={<LoanCalculator />} />
     <Route path="/faq" element={<Faq />} />
     <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+    <Route path="/terms-and-conditions" element={<TermsCondition />} />
     <Route path="/terms-condition" element={<TermsCondition />} />
+    <Route path="/terms-conditions" element={<TermsCondition />} />
     <Route path="/refund-policy" element={<RefundPolicy />} />
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
