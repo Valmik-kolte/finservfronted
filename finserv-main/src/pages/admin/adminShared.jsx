@@ -57,14 +57,21 @@ export const StatusBadge = ({ status }) => (
   </span>
 );
 
-export const StatCard = ({ label, value, icon }) => (
-  <div className="bg-white rounded-3xl p-6 shadow-sm">
+export const StatCard = ({ label, value, icon, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={!onClick}
+    className={`w-full bg-white rounded-3xl p-6 shadow-sm text-left ${
+      onClick ? "hover:-translate-y-0.5 hover:shadow-md transition" : ""
+    }`}
+  >
     <div className="w-12 h-12 rounded-2xl bg-[#EAFBF8] text-[#0B2A4A] flex items-center justify-center mb-4">
       {icon}
     </div>
     <p className="text-sm text-slate-500">{label}</p>
     <p className="text-3xl font-bold text-[#0B2A4A] mt-2">{value}</p>
-  </div>
+  </button>
 );
 
 export const Field = ({ label, value, onChange, type = "text" }) => (
@@ -129,6 +136,23 @@ export const Modal = ({ title, onClose, children }) => (
       {children}
     </div>
   </div>
+);
+
+export const ListOverlay = ({ title, items, emptyText = "No data found.", onClose }) => (
+  <Modal title={title} onClose={onClose}>
+    {items.length === 0 ? (
+      <div className="bg-[#F4F6F9] rounded-2xl p-6 text-sm text-slate-500">{emptyText}</div>
+    ) : (
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={`${item.title}-${index}`} className="rounded-2xl border border-slate-100 bg-[#F8FAFC] p-4">
+            <p className="font-bold text-[#0B2A4A]">{item.title}</p>
+            {item.subtitle && <p className="mt-1 text-sm text-slate-500">{item.subtitle}</p>}
+          </div>
+        ))}
+      </div>
+    )}
+  </Modal>
 );
 
 export const PreviewModal = ({ preview, closePreview }) => (

@@ -16,6 +16,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
+import qrCode from "../../assets/upi_1780494820795.png";
 
 const DOCUMENT_LABELS = {
   AADHAAR: "Aadhaar",
@@ -150,6 +151,153 @@ const missingLabel = (type) =>
     ? "Light Bill or Rental Agreement"
     : DOCUMENT_LABELS[type] || type;
 
+const PAYMENT_STATUS = {
+  DRAFT: "DRAFT",
+  PAYMENT_PENDING: "PAYMENT_PENDING",
+  PAYMENT_VERIFICATION_PENDING: "PAYMENT_VERIFICATION_PENDING",
+  PAYMENT_APPROVED: "PAYMENT_APPROVED",
+};
+
+const PAYMENT_REQUESTS_KEY = "customer_payment_requests";
+const ADMIN_NOTIFICATIONS_KEY = "admin_activity_notifications";
+const CUSTOMER_NOTIFICATIONS_KEY = "customer_activity_notifications";
+
+const getPaymentStorageKey = (userId) => `customer_payment_status_${userId || "guest"}`;
+
+const getStoredPaymentStatus = (userId) => {
+  try {
+    return localStorage.getItem(getPaymentStorageKey(userId)) || PAYMENT_STATUS.DRAFT;
+  } catch {
+    return PAYMENT_STATUS.DRAFT;
+  }
+};
+
+const getAssignedBankDetailKey = (userId) => `user_bank_assignment_detail_${userId}`;
+
+const readLocalAssignedBank = (userId) => {
+  try {
+    const detail = JSON.parse(localStorage.getItem(getAssignedBankDetailKey(userId)) || "null");
+    if (detail) return detail;
+  } catch {
+    // Ignore malformed local assignment data.
+  }
+
+  const bankId = localStorage.getItem(`user_bank_assignment_${userId}`);
+  return bankId ? { bankId, assignedBankId: bankId, bankName: "Assigned" } : null;
+};
+
+const inferPaymentStatus = (user) =>
+  user?.paymentDone
+    ? PAYMENT_STATUS.PAYMENT_APPROVED
+    : getStoredPaymentStatus(user?.userId || user?.id);
+
+const upsertPaymentRequest = ({ userId, status, profile, personalInfo, documents }) => {
+  if (!userId) return;
+  try {
+    const requests = JSON.parse(localStorage.getItem(PAYMENT_REQUESTS_KEY) || "[]");
+    const nextRequest = {
+      userId,
+      status,
+      fullName: profile?.fullName || personalInfo?.fullName || "Customer",
+      email: profile?.email || personalInfo?.email || "",
+      mobileNumber: profile?.mobileNumber || personalInfo?.mobileNumber || "",
+      loanAmount: personalInfo?.loanAmount || "",
+      documentCount: documents?.length || 0,
+      documents:
+        documents?.map((doc) => ({
+          ...doc,
+          userId: doc.userId || userId,
+          status: doc.status || "PENDING",
+        })) || [],
+      updatedAt: new Date().toISOString(),
+    };
+    const exists = requests.some((request) => String(request.userId) === String(userId));
+    const nextRequests = exists
+      ? requests.map((request) =>
+          String(request.userId) === String(userId) ? { ...request, ...nextRequest } : request
+        )
+      : [nextRequest, ...requests];
+    localStorage.setItem(PAYMENT_REQUESTS_KEY, JSON.stringify(nextRequests));
+  } catch {
+    localStorage.setItem(
+      PAYMENT_REQUESTS_KEY,
+      JSON.stringify([
+        {
+          userId,
+          status,
+          fullName: profile?.fullName || "Customer",
+          email: profile?.email || "",
+          mobileNumber: profile?.mobileNumber || "",
+          loanAmount: personalInfo?.loanAmount || "",
+          documentCount: documents?.length || 0,
+          documents:
+            documents?.map((doc) => ({
+              ...doc,
+              userId: doc.userId || userId,
+              status: doc.status || "PENDING",
+            })) || [],
+          updatedAt: new Date().toISOString(),
+        },
+      ])
+    );
+  }
+};
+
+const addLocalAdminNotification = (message) => {
+  try {
+    const notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || "[]");
+    localStorage.setItem(
+      ADMIN_NOTIFICATIONS_KEY,
+      JSON.stringify([
+        {
+          id: `local-admin-${Date.now()}`,
+          message,
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+        ...notifications,
+      ])
+    );
+  } catch {
+    localStorage.setItem(
+      ADMIN_NOTIFICATIONS_KEY,
+      JSON.stringify([{ id: `local-admin-${Date.now()}`, message, read: false, createdAt: new Date().toISOString() }])
+    );
+  }
+};
+
+const readLocalCustomerNotifications = (userId) => {
+  try {
+    return JSON.parse(localStorage.getItem(CUSTOMER_NOTIFICATIONS_KEY) || "[]").filter(
+      (item) => String(item.userId) === String(userId)
+    );
+  } catch {
+    return [];
+  }
+};
+
+const markLocalCustomerNotificationRead = (notificationId) => {
+  try {
+    const notifications = JSON.parse(localStorage.getItem(CUSTOMER_NOTIFICATIONS_KEY) || "[]");
+    localStorage.setItem(
+      CUSTOMER_NOTIFICATIONS_KEY,
+      JSON.stringify(
+        notifications.map((item) =>
+          item.id === notificationId ? { ...item, read: true } : item
+        )
+      )
+    );
+  } catch {
+    // Ignore malformed local notification data.
+  }
+};
+
+const mergeNotifications = (...lists) =>
+  lists
+    .flat()
+    .filter(Boolean)
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
 const CustomerDashboard = () => {
   const navigate = useNavigate();
   const session = useMemo(getUserSession, []);
@@ -161,10 +309,16 @@ const CustomerDashboard = () => {
   const [saving, setSaving] = useState(false);
   const [uploadingType, setUploadingType] = useState("");
   const [preview, setPreview] = useState(null);
+  const [paymentPromptOpen, setPaymentPromptOpen] = useState(false);
+  const [qrPaymentOpen, setQrPaymentOpen] = useState(false);
+  const [qrImageError, setQrImageError] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const [employmentType, setEmploymentType] = useState("Salaried");
   const [applicationNumber, setApplicationNumber] = useState("");
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState(() =>
+    getStoredPaymentStatus(userId)
+  );
   const [profile, setProfile] = useState({
     ...emptyProfile,
     userId,
@@ -186,6 +340,7 @@ const CustomerDashboard = () => {
     rejectedCount: 0,
   });
   const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
   const [assignedBank, setAssignedBank] = useState(null);
   const [settingsForm, setSettingsForm] = useState({
     fullName: session?.name || "",
@@ -220,6 +375,7 @@ const CustomerDashboard = () => {
 
       if (showSpinner) setLoading(true);
       try {
+        setPaymentStatus(getStoredPaymentStatus(userId));
         const [userRes, docsRes, countsRes, notificationsRes] =
           await Promise.allSettled([
             api.get(`/user/${userId}`),
@@ -230,6 +386,7 @@ const CustomerDashboard = () => {
 
         if (userRes.status === "fulfilled") {
           const user = unwrap(userRes.value) || {};
+          setPaymentStatus(inferPaymentStatus(user));
           const nextProfile = {
             ...emptyProfile,
             ...user,
@@ -255,36 +412,85 @@ const CustomerDashboard = () => {
             setApplicationNumber(user.applicationId);
           }
           const bankId = user.bankId || user.assignedBankId;
+          const backendBankName = user.assignedBankName || user.bankName;
+          const localAssignedBank = readLocalAssignedBank(userId);
           if (bankId) {
             try {
               const banksRes = await api.get("/admin/banks");
               const bankList = Array.isArray(banksRes.data) ? banksRes.data : banksRes.data?.data || [];
               const bank = bankList.find((b) => String(b.bankId) === String(bankId));
-              setAssignedBank(bank || { bankId, bankName: "Assigned" });
+              setAssignedBank(bank || { ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
             } catch {
-              setAssignedBank({ bankId, bankName: "Assigned" });
+              setAssignedBank({ ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
             }
+          } else if (backendBankName || localAssignedBank) {
+            setAssignedBank({
+              ...(localAssignedBank || {}),
+              bankName: backendBankName || localAssignedBank?.bankName || "Assigned",
+              assignedBankName: backendBankName || localAssignedBank?.assignedBankName || localAssignedBank?.bankName || "Assigned",
+            });
           } else {
             setAssignedBank(null);
           }
         }
 
         if (docsRes.status === "fulfilled") {
-          setDocuments(unwrap(docsRes.value) || []);
+          const loadedDocuments = unwrap(docsRes.value) || [];
+          const localAssignedBank = readLocalAssignedBank(userId);
+          const user = userRes.status === "fulfilled" ? unwrap(userRes.value) || {} : {};
+          const hasAssignedBank = !!(
+            user.bankId ||
+            user.assignedBankId ||
+            user.assignedBankName ||
+            user.bankName ||
+            localAssignedBank
+          );
+          setDocuments(
+            hasAssignedBank
+              ? loadedDocuments.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }))
+              : loadedDocuments
+          );
         }
 
         if (countsRes.status === "fulfilled") {
-          setCounts({
+          const loadedCounts = {
             pendingCount: 0,
             verifiedCount: 0,
             approvedCount: 0,
             rejectedCount: 0,
             ...(unwrap(countsRes.value) || {}),
-          });
+          };
+          const localAssignedBank = readLocalAssignedBank(userId);
+          const user = userRes.status === "fulfilled" ? unwrap(userRes.value) || {} : {};
+          const hasAssignedBank = !!(
+            user.bankId ||
+            user.assignedBankId ||
+            user.assignedBankName ||
+            user.bankName ||
+            localAssignedBank
+          );
+          setCounts(
+            hasAssignedBank
+              ? {
+                  ...loadedCounts,
+                  pendingCount: 0,
+                  verifiedCount: 0,
+                  rejectedCount: 0,
+                  approvedCount:
+                    loadedCounts.totalCount ||
+                    loadedCounts.documentsCount ||
+                    loadedCounts.approvedCount,
+                }
+              : loadedCounts
+          );
         }
 
         if (notificationsRes.status === "fulfilled") {
-          setNotifications(unwrap(notificationsRes.value) || []);
+          setNotifications(
+            mergeNotifications(readLocalCustomerNotifications(userId), unwrap(notificationsRes.value) || [])
+          );
+        } else {
+          setNotifications(readLocalCustomerNotifications(userId));
         }
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to load dashboard.");
@@ -308,6 +514,11 @@ const CustomerDashboard = () => {
     if (!userId) return;
     localStorage.setItem(`personal_info_draft_${userId}`, JSON.stringify(personalInfo));
   }, [personalInfo, userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    localStorage.setItem(getPaymentStorageKey(userId), paymentStatus);
+  }, [paymentStatus, userId]);
 
   const handleLogout = () => {
     localStorage.removeItem("role");
@@ -389,6 +600,11 @@ const CustomerDashboard = () => {
         await api.delete(`/documents/${existing.documentId}`);
       }
       await api.post("/documents/upload", formData);
+      if (existing?.status === "REJECTED") {
+        addLocalAdminNotification(
+          `${profile.fullName || "Customer"} reuploaded ${DOCUMENT_LABELS[type] || type}.`
+        );
+      }
       toast.success(`${DOCUMENT_LABELS[type]} uploaded.`);
       await fetchDashboardData(false);
     } catch (error) {
@@ -398,7 +614,10 @@ const CustomerDashboard = () => {
     }
   };
 
-  const openPreview = async (documentId) => {
+  const openPreview = async (document) => {
+    const documentId = typeof document === "object" ? document?.documentId : document;
+    if (!documentId) return;
+
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
@@ -410,7 +629,20 @@ const CustomerDashboard = () => {
       if (!response.ok) throw new Error("Preview failed");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      setPreview({ url, type: blob.type });
+      const fileName = typeof document === "object" ? document?.fileName || "" : "";
+      const contentType = blob.type || response.headers.get("content-type") || "";
+      const lowerFileName = fileName.toLowerCase();
+      const isImage =
+        contentType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(lowerFileName);
+      const isPdf = contentType.includes("pdf") || lowerFileName.endsWith(".pdf");
+
+      if (preview?.url) URL.revokeObjectURL(preview.url);
+      setPreview({
+        url,
+        fileName,
+        isImage,
+        isPdf,
+      });
     } catch {
       toast.error("Unable to preview this document.");
     }
@@ -422,6 +654,13 @@ const CustomerDashboard = () => {
   };
 
   const markNotificationRead = async (notificationId) => {
+    if (String(notificationId).startsWith("local-customer-")) {
+      markLocalCustomerNotificationRead(notificationId);
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === notificationId ? { ...item, read: true } : item))
+      );
+      return;
+    }
     try {
       await api.put(`/notifications/read/${notificationId}`);
       setNotifications((prev) =>
@@ -529,10 +768,17 @@ const CustomerDashboard = () => {
       };
 
       await persistPersonalInfo(personalPayload);
-      toast.success("Documents and details submitted to admin for approval.");
+      setPaymentStatus(PAYMENT_STATUS.PAYMENT_PENDING);
+      upsertPaymentRequest({
+        userId,
+        status: PAYMENT_STATUS.PAYMENT_PENDING,
+        profile,
+        personalInfo,
+        documents,
+      });
       setApplicationSubmitted(true);
-      setActiveMenu("Status");
-      await fetchDashboardData(false);
+      setPaymentPromptOpen(true);
+      toast.success("Application saved. Complete payment to proceed.");
     } catch (error) {
       toast.error(
         error?.response?.data?.message ||
@@ -544,8 +790,29 @@ const CustomerDashboard = () => {
     }
   };
 
+  const openQrPayment = () => {
+    setQrImageError(false);
+    setPaymentPromptOpen(false);
+    setQrPaymentOpen(true);
+  };
+
+  const verifyPayment = () => {
+    setPaymentStatus(PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING);
+    upsertPaymentRequest({
+      userId,
+      status: PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING,
+      profile,
+      personalInfo,
+      documents,
+    });
+    setQrPaymentOpen(false);
+    setActiveMenu("Status");
+    toast.success("Payment verification request sent to admin.");
+  };
+
   const currentDocumentTypes =
     currentStep === 4 ? incomeTypes : STEPS.find((step) => step.id === currentStep)?.types || [];
+  const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] flex text-slate-800">
@@ -566,12 +833,51 @@ const CustomerDashboard = () => {
                 Welcome, {profile.fullName || "Customer"}
               </h1>
             </div>
-            <button
-              onClick={() => fetchDashboardData(true)}
-              className="self-start md:self-auto bg-white px-5 py-3 rounded-2xl text-sm font-semibold text-[#0B2A4A] shadow-sm"
-            >
-              Refresh
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications((prev) => !prev)}
+                  className="relative h-11 w-11 rounded-2xl bg-white text-[#0B2A4A] shadow-sm flex items-center justify-center"
+                  aria-label="Notifications"
+                >
+                  <FaBell />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] text-white">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+                {showNotifications && (
+                  <div className="absolute right-0 z-30 mt-3 w-80 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl">
+                    <h3 className="mb-3 font-bold text-[#0B2A4A]">Notifications</h3>
+                    {notifications.length === 0 ? (
+                      <p className="text-sm text-slate-500">No notifications.</p>
+                    ) : (
+                      <div className="max-h-80 space-y-2 overflow-y-auto">
+                        {notifications.slice(0, 8).map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => !item.read && markNotificationRead(item.id)}
+                            className={`w-full rounded-2xl p-3 text-left text-sm ${
+                              item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
+                            }`}
+                          >
+                            <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
+                            <p className="mt-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={() => fetchDashboardData(true)}
+                className="self-start md:self-auto bg-white px-5 py-3 rounded-2xl text-sm font-semibold text-[#0B2A4A] shadow-sm"
+              >
+                Refresh
+              </button>
+            </div>
           </header>
 
           {loading ? (
@@ -589,6 +895,8 @@ const CustomerDashboard = () => {
                   personalInfo={personalInfo}
                   rejectedDocuments={rejectedDocuments}
                   assignedBank={assignedBank}
+                  paymentStatus={paymentStatus}
+                  onPayNow={openQrPayment}
                   setActiveMenu={setActiveMenu}
                   markNotificationRead={markNotificationRead}
                 />
@@ -615,6 +923,8 @@ const CustomerDashboard = () => {
                   savePersonalInfo={savePersonalInfo}
                   submitForApproval={submitForApproval}
                   openPreview={openPreview}
+                  paymentStatus={paymentStatus}
+                  onPayNow={openQrPayment}
                 />
               )}
 
@@ -627,6 +937,8 @@ const CustomerDashboard = () => {
                   openPreview={openPreview}
                   uploadForType={uploadForType}
                   uploadingType={uploadingType}
+                  paymentStatus={paymentStatus}
+                  onPayNow={openQrPayment}
                 />
               )}
 
@@ -649,9 +961,14 @@ const CustomerDashboard = () => {
 
       {preview && (
         <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
-          <div className="bg-white rounded-3xl w-full max-w-5xl h-[85vh] p-4 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-[#0B2A4A]">Document Preview</h2>
+          <div className="bg-white rounded-2xl w-full max-w-3xl h-[72vh] max-h-[640px] p-4 flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between gap-4 mb-3">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold text-[#0B2A4A]">Document Preview</h2>
+                {preview.fileName && (
+                  <p className="text-xs text-slate-500 truncate">{preview.fileName}</p>
+                )}
+              </div>
               <button
                 onClick={closePreview}
                 className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center"
@@ -660,25 +977,153 @@ const CustomerDashboard = () => {
                 <FaTimes />
               </button>
             </div>
-            {preview.type?.startsWith("image/") ? (
+            {preview.isImage ? (
               <img
                 src={preview.url}
                 alt="Document preview"
-                className="flex-1 min-h-0 object-contain bg-slate-50 rounded-2xl"
+                className="flex-1 min-h-0 w-full object-contain bg-slate-50 rounded-xl border border-slate-100"
               />
-            ) : (
+            ) : preview.isPdf ? (
               <iframe
                 src={preview.url}
                 title="Document preview"
-                className="flex-1 min-h-0 rounded-2xl bg-slate-50"
+                className="flex-1 min-h-0 w-full rounded-xl bg-slate-50 border border-slate-100"
               />
+            ) : (
+              <div className="flex-1 min-h-0 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-center p-6">
+                <p className="text-sm font-semibold text-slate-500">
+                  Preview is available for PDF, JPG and PNG files.
+                </p>
+              </div>
             )}
           </div>
         </div>
       )}
+
+      {paymentPromptOpen && (
+        <PaymentPromptModal
+          onClose={() => setPaymentPromptOpen(false)}
+          onPayNow={openQrPayment}
+        />
+      )}
+
+      {qrPaymentOpen && (
+        <QrPaymentModal
+          qrImageError={qrImageError}
+          setQrImageError={setQrImageError}
+          onClose={() => setQrPaymentOpen(false)}
+          onVerifyPayment={verifyPayment}
+        />
+      )}
     </div>
   );
 };
+
+const PaymentPromptModal = ({ onClose, onPayNow }) => (
+  <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
+    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Application Submitted Successfully</h2>
+          <p className="text-sm font-semibold text-amber-700 mt-3">
+            Please complete processing fee payment to proceed.
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center shrink-0"
+          aria-label="Close payment prompt"
+        >
+          <FaTimes />
+        </button>
+      </div>
+      <div className="mt-6 flex flex-col sm:flex-row gap-3">
+        <button
+          onClick={onPayNow}
+          className="flex-1 bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
+        >
+          Pay Now
+        </button>
+        <button
+          onClick={onClose}
+          className="flex-1 bg-[#F4F6F9] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold"
+        >
+          Later
+        </button>
+      </div>
+    </div>
+  </div>
+);
+
+const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPayment }) => (
+  <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
+    <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+      <div className="flex items-center justify-between gap-4 mb-5">
+        <div>
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Processing Fee Payment</h2>
+          <p className="text-sm text-slate-500 mt-1">Scan the QR code and complete payment.</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center shrink-0"
+          aria-label="Close QR payment"
+        >
+          <FaTimes />
+        </button>
+      </div>
+
+      <div className="bg-[#F4F6F9] rounded-2xl border border-slate-100 p-5 min-h-[260px] flex items-center justify-center">
+        {qrImageError ? (
+          <div className="text-center">
+            <p className="text-sm font-bold text-[#0B2A4A]">QR image placeholder</p>
+            <p className="text-xs text-slate-500 mt-2">
+              Add your QR image in src/assets.
+            </p>
+          </div>
+        ) : (
+          <img
+            src={qrCode}
+            alt="Processing fee QR code"
+            onError={() => setQrImageError(true)}
+            className="max-h-60 w-full object-contain"
+          />
+        )}
+      </div>
+
+      <button
+        onClick={onVerifyPayment}
+        className="mt-5 w-full bg-[#27D3C3] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold"
+      >
+        Verify Payment
+      </button>
+    </div>
+  </div>
+);
+
+const SimpleListOverlay = ({ title, items, onClose }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="mb-5 flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-[#0B2A4A]">{title}</h2>
+        <button onClick={onClose} className="text-slate-400 hover:text-red-600" aria-label="Close">
+          <FaTimes />
+        </button>
+      </div>
+      {items.length === 0 ? (
+        <div className="rounded-2xl bg-[#F4F6F9] p-6 text-sm text-slate-500">No data found.</div>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item, index) => (
+            <div key={`${item.title}-${index}`} className="rounded-2xl border border-slate-100 bg-[#F8FAFC] p-4">
+              <p className="font-bold text-[#0B2A4A]">{item.title}</p>
+              {item.subtitle && <p className="mt-1 text-sm text-slate-500">{item.subtitle}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+);
 
 const DashboardTab = ({
   counts,
@@ -688,9 +1133,12 @@ const DashboardTab = ({
   personalInfo,
   rejectedDocuments,
   assignedBank,
+  paymentStatus,
+  onPayNow,
   setActiveMenu,
   markNotificationRead,
 }) => {
+  const [statOverlay, setStatOverlay] = useState(null);
   const cards = [
     {
       label: "Loan Amount",
@@ -698,20 +1146,97 @@ const DashboardTab = ({
         ? `Rs ${Number(personalInfo.loanAmount).toLocaleString("en-IN")}`
         : "Not set",
       icon: <FaRupeeSign />,
+      items: [
+        {
+          title: personalInfo.fullName || "Loan application",
+          subtitle: personalInfo.loanAmount
+            ? `Rs ${Number(personalInfo.loanAmount).toLocaleString("en-IN")}`
+            : "Loan amount not set",
+        },
+      ],
     },
-    { label: "Documents Uploaded", value: documents.length, icon: <FaFileAlt /> },
-    { label: "Pending", value: counts.pendingCount || 0, icon: <FaBell /> },
-    { label: "Approved", value: counts.approvedCount || 0, icon: <FaCheckCircle /> },
+    {
+      label: "Documents Uploaded",
+      value: documents.length,
+      icon: <FaFileAlt />,
+      items: documents.map((doc) => ({
+        title: DOCUMENT_LABELS[doc.documentType] || doc.documentType || doc.fileName || "Document",
+        subtitle: doc.status || "PENDING",
+      })),
+    },
+    {
+      label: "Pending",
+      value: counts.pendingCount || 0,
+      icon: <FaBell />,
+      items: documents
+        .filter((doc) => doc.status === "PENDING")
+        .map((doc) => ({
+          title: DOCUMENT_LABELS[doc.documentType] || doc.documentType || doc.fileName || "Document",
+          subtitle: doc.fileName,
+        })),
+    },
+    {
+      label: "Approved",
+      value: counts.approvedCount || 0,
+      icon: <FaCheckCircle />,
+      items: documents
+        .filter((doc) => doc.status === "APPROVED")
+        .map((doc) => ({
+          title: DOCUMENT_LABELS[doc.documentType] || doc.documentType || doc.fileName || "Document",
+          subtitle: doc.fileName,
+        })),
+    },
     {
       label: "Assigned Bank",
       value: assignedBank ? assignedBank.bankName : "Yet to assign",
       icon: <FaUniversity />,
       highlight: !!assignedBank,
+      items: [
+        {
+          title: assignedBank ? assignedBank.bankName : "Bank not assigned",
+          subtitle: assignedBank?.representativeName || assignedBank?.email || "",
+        },
+      ],
     },
   ];
 
   return (
     <div className="space-y-6">
+      {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-amber-800">Payment required to process application</h2>
+            <p className="text-sm text-amber-700 mt-1">
+              Your documents are saved. Complete the processing fee payment to send the request for admin review.
+            </p>
+          </div>
+          <button
+            onClick={onPayNow}
+            className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
+          >
+            Pay Now
+          </button>
+        </div>
+      )}
+
+      {paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING && (
+        <div className="bg-sky-50 border border-sky-200 rounded-3xl p-6">
+          <h2 className="text-xl font-bold text-sky-800">Payment verification pending</h2>
+          <p className="text-sm text-sky-700 mt-1">
+            Admin will verify your payment. Documents will be submitted for approval after payment is approved.
+          </p>
+        </div>
+      )}
+
+      {paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6">
+          <h2 className="text-xl font-bold text-emerald-800">Payment verified successfully</h2>
+          <p className="text-sm text-emerald-700 mt-1">
+            Your documents have been submitted for admin review.
+          </p>
+        </div>
+      )}
+
       {!hasPersonalInfo && (
         <div className="bg-[#0B2A4A] text-white rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
@@ -748,7 +1273,12 @@ const DashboardTab = ({
 
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
         {cards.map((card) => (
-          <div key={card.label} className={`rounded-3xl p-6 shadow-sm ${card.highlight ? "bg-[#EAFBF8] border border-[#27D3C3]/40" : "bg-white"}`}>
+          <button
+            type="button"
+            key={card.label}
+            onClick={() => setStatOverlay(card)}
+            className={`rounded-3xl p-6 shadow-sm text-left hover:-translate-y-0.5 hover:shadow-md transition ${card.highlight ? "bg-[#EAFBF8] border border-[#27D3C3]/40" : "bg-white"}`}
+          >
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-5 ${card.highlight ? "bg-[#27D3C3]/20 text-[#0B2A4A]" : "bg-[#EAFBF8] text-[#0B2A4A]"}`}>
               {card.icon}
             </div>
@@ -759,9 +1289,16 @@ const DashboardTab = ({
                 {assignedBank ? "ASSIGNED" : "PENDING"}
               </span>
             )}
-          </div>
+          </button>
         ))}
       </div>
+      {statOverlay && (
+        <SimpleListOverlay
+          title={statOverlay.label}
+          items={statOverlay.items}
+          onClose={() => setStatOverlay(null)}
+        />
+      )}
 
       <div className="bg-white rounded-3xl p-6 shadow-sm">
         <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Notifications</h2>
@@ -808,6 +1345,8 @@ const DocumentsTab = ({
   savePersonalInfo,
   submitForApproval,
   openPreview,
+  paymentStatus,
+  onPayNow,
 }) => (
   <div className="space-y-6">
     {assignedBank && (
@@ -878,6 +1417,8 @@ const DocumentsTab = ({
         submitForApproval={submitForApproval}
         openPreview={openPreview}
         locked={!!assignedBank}
+        paymentStatus={paymentStatus}
+        onPayNow={onPayNow}
       />
     ) : (
       <div className="bg-white rounded-3xl p-6 shadow-sm">
@@ -936,6 +1477,8 @@ const VerifySubmitStep = ({
   submitForApproval,
   openPreview,
   locked,
+  paymentStatus,
+  onPayNow,
 }) => (
   <div className="space-y-6">
     <div className="bg-white rounded-3xl p-6 shadow-sm">
@@ -1034,7 +1577,7 @@ const VerifySubmitStep = ({
                   </p>
                 )}
                 <button
-                  onClick={() => openPreview(doc.documentId)}
+                  onClick={() => openPreview(doc)}
                   className="mt-4 px-4 py-2 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] text-sm font-bold flex items-center gap-2"
                 >
                   <FaEye /> Preview
@@ -1046,26 +1589,76 @@ const VerifySubmitStep = ({
       )}
     </div>
 
+    {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
+      <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-amber-800">Processing fee payment pending</h2>
+          <p className="text-sm text-amber-700 mt-1">
+            Your application is saved. Complete payment to move it to admin verification.
+          </p>
+        </div>
+        <button
+          onClick={onPayNow}
+          className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold"
+        >
+          Pay Now
+        </button>
+      </div>
+    )}
+
+    {paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING && (
+      <div className="bg-sky-50 border border-sky-200 rounded-3xl p-6">
+        <h2 className="text-xl font-bold text-sky-800">Payment verification pending</h2>
+        <p className="text-sm text-sky-700 mt-1">
+          Admin will verify your QR payment before documents are submitted for approval.
+        </p>
+      </div>
+    )}
+
     <div className="bg-[#0B2A4A] rounded-3xl p-6 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
       <div>
         <h2 className="text-xl font-bold">
-          {locked ? "Forwarded to bank" : applicationSubmitted ? "Submitted to admin" : "Ready for admin approval"}
+          {locked
+            ? "Forwarded to bank"
+            : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
+            ? "Waiting for payment approval"
+            : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
+            ? "Application saved"
+            : applicationSubmitted
+            ? "Application saved"
+            : "Ready to submit application"}
         </h2>
         <p className="text-sm text-white/70 mt-1">
           {locked
             ? "Your application is locked because it has been assigned to a bank."
-            : applicationSubmitted
-            ? "Your application is already in the approval workflow."
-            : "Final submit sends your details and documents to admin for verification."}
+            : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
+            ? "Documents will go to admin after payment is approved."
+            : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
+            ? "Complete the processing fee payment to proceed."
+            : "Final submit saves your details and asks you to complete payment."}
         </p>
       </div>
       <button
-        onClick={submitForApproval}
-        disabled={locked || saving || applicationSubmitted || missingRequiredTypes.length > 0}
+        onClick={paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING ? onPayNow : submitForApproval}
+        disabled={
+          locked ||
+          saving ||
+          paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING ||
+          paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED ||
+          missingRequiredTypes.length > 0
+        }
         className="bg-[#27D3C3] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold disabled:opacity-50 flex items-center justify-center gap-2"
       >
         <FaPaperPlane />
-        {locked ? "Locked" : saving ? "Submitting..." : applicationSubmitted ? "Submitted" : "Submit for Approval"}
+        {locked
+          ? "Locked"
+          : saving
+          ? "Saving..."
+          : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
+          ? "Verification Pending"
+          : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
+          ? "Pay Now"
+          : "Final Submit"}
       </button>
     </div>
   </div>
@@ -1073,9 +1666,27 @@ const VerifySubmitStep = ({
 
 const TRACKING_STEPS = [
   {
-    key: "submitted",
-    label: "Documents Submitted",
-    sub: "Your documents have been uploaded successfully.",
+    key: "payment_pending",
+    label: "Payment Pending",
+    sub: "Complete processing fee payment to proceed.",
+    icon: <FaRupeeSign />,
+  },
+  {
+    key: "payment_verification_pending",
+    label: "Payment Verification Pending",
+    sub: "Admin is verifying your payment.",
+    icon: <FaFileAlt />,
+  },
+  {
+    key: "payment_verified",
+    label: "Payment Verified",
+    sub: "Payment approved. Documents can move to admin review.",
+    icon: <FaCheckCircle />,
+  },
+  {
+    key: "documents_submitted",
+    label: "Documents Submitted For Approval",
+    sub: "Your details and documents are submitted to admin.",
     icon: <FaCloudUploadAlt />,
   },
   {
@@ -1098,19 +1709,47 @@ const TRACKING_STEPS = [
   },
 ];
 
-const getActiveTrackingStep = (documents, counts, assignedBank) => {
+const getActiveTrackingStep = (documents, counts, assignedBank, paymentStatus) => {
   if (!documents.length) return -1;
-  if (assignedBank) return 3;
-  if (counts.approvedCount > 0 && counts.pendingCount === 0 && counts.rejectedCount === 0) return 2;
-  if (counts.verifiedCount > 0 || counts.pendingCount > 0) return 1;
-  return 0;
+  if (assignedBank) return 6;
+  if (counts.approvedCount > 0 && counts.pendingCount === 0 && counts.rejectedCount === 0) return 5;
+  if (counts.verifiedCount > 0 || counts.pendingCount > 0) return 4;
+  if (paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED) return 3;
+  if (paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING) return 1;
+  if (paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING) return 0;
+  return -1;
 };
 
-const StatusTab = ({ counts, documents, docsByType, assignedBank, openPreview, uploadForType, uploadingType }) => {
-  const activeStep = getActiveTrackingStep(documents, counts, assignedBank);
+const StatusTab = ({
+  counts,
+  documents,
+  docsByType,
+  assignedBank,
+  openPreview,
+  uploadForType,
+  uploadingType,
+  paymentStatus,
+  onPayNow,
+}) => {
+  const activeStep = getActiveTrackingStep(documents, counts, assignedBank, paymentStatus);
 
   return (
     <div className="space-y-6">
+      {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-bold text-amber-800">Processing fee payment pending</h2>
+            <p className="text-sm text-amber-700 mt-1">Pay now to continue your application.</p>
+          </div>
+          <button
+            onClick={onPayNow}
+            className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
+          >
+            Pay Now
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-3xl p-6 shadow-sm">
         <h2 className="text-lg font-bold text-[#0B2A4A] mb-6">Application Tracking</h2>
         {documents.length === 0 ? (
@@ -1327,7 +1966,7 @@ const DocumentUploadTile = ({ doc, openPreview, type, uploadingType, uploadForTy
       <div className="flex flex-wrap gap-3 mt-5">
         {doc && (
           <button
-            onClick={() => openPreview(doc.documentId)}
+            onClick={() => openPreview(doc)}
             className="px-4 py-2 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] text-sm font-bold flex items-center gap-2"
           >
             <FaEye /> Preview
@@ -1380,7 +2019,7 @@ const DocumentCard = ({ doc, openPreview, uploadForType, uploadingType, locked }
       )}
       <div className="mt-5 flex flex-wrap gap-3">
         <button
-          onClick={() => openPreview(doc.documentId)}
+          onClick={() => openPreview(doc)}
           className="px-4 py-2 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] text-sm font-bold flex items-center gap-2"
         >
           <FaEye /> Preview

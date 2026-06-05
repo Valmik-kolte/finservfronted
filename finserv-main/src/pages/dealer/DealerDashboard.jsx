@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -6,6 +6,7 @@ import {
   FaCheckCircle,
   FaClipboardList,
   FaCopy,
+  FaEdit,
   FaEye,
   FaFileAlt,
   FaLock,
@@ -16,6 +17,15 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
+import {
+  getDealerDashboardSummary,
+  getDealerNotifications,
+  getDealerProfile,
+  getDealerUserDocuments,
+  getDealerUserTracking,
+  getDealerUsers,
+  markDealerNotificationRead,
+} from "../../services/dealerDashboardService";
 
 const DOCUMENT_TYPES = {
   AADHAAR: "Aadhaar",
@@ -89,6 +99,7 @@ const getMessage = (error, fallback) =>
   error?.response?.data?.message || error?.response?.data || error?.message || fallback;
 
 const showError = (error, fallback) => toast.error(getMessage(error, fallback));
+const isNotificationRead = (item) => item.read ?? item.isRead ?? false;
 
 const readDealerSession = () => {
   try {
@@ -99,12 +110,142 @@ const readDealerSession = () => {
   }
 };
 
+const DEALER_NOTIFICATIONS_KEY = "dealer_assignment_notifications";
+const DEALER_REGISTERED_USERS_KEY = "dealer_registered_users";
+const DEALER_REGISTERED_PERSONAL_INFO_KEY = "dealer_registered_personal_info";
+const ADMIN_NOTIFICATIONS_KEY = "admin_activity_notifications";
+
+const readLocalDealerNotifications = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DEALER_NOTIFICATIONS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
+
+const getLocalDealerNotifications = (dealerId, dealerCode) =>
+  readLocalDealerNotifications().filter(
+    (item) =>
+      (dealerId && sameId(item.dealerId, dealerId)) ||
+      (dealerCode && sameCode(item.dealerCode, dealerCode))
+  );
+
+const markLocalDealerNotificationRead = (notificationId) => {
+  const notifications = readLocalDealerNotifications();
+  localStorage.setItem(
+    DEALER_NOTIFICATIONS_KEY,
+    JSON.stringify(
+      notifications.map((item) =>
+        item.id === notificationId ? { ...item, read: true } : item
+      )
+    )
+  );
+};
+
+const readLocalDealerUsers = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DEALER_REGISTERED_USERS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
+
+const upsertLocalDealerUser = (user) => {
+  if (!user?.userId) return;
+  const users = readLocalDealerUsers();
+  const exists = users.some((item) => String(item.userId) === String(user.userId));
+  const nextUsers = exists
+    ? users.map((item) => (String(item.userId) === String(user.userId) ? { ...item, ...user } : item))
+    : [{ ...user, createdAt: user.createdAt || new Date().toISOString() }, ...users];
+  localStorage.setItem(DEALER_REGISTERED_USERS_KEY, JSON.stringify(nextUsers));
+};
+
+const getLocalDealerUsers = (dealerId, dealerCode) =>
+  readLocalDealerUsers().filter(
+    (user) =>
+      (dealerId && (sameId(user.dealerId, dealerId) || sameId(user.assignedDealerId, dealerId))) ||
+      (dealerCode && sameCode(user.dealerCode, dealerCode))
+  );
+
+const mergeUsersById = (...lists) => {
+  const map = new Map();
+  lists.flat().filter(Boolean).forEach((user) => {
+    const id = user.userId || user.id;
+    if (!id) return;
+    map.set(String(id), { ...(map.get(String(id)) || {}), ...user, userId: id });
+  });
+  return Array.from(map.values());
+};
+
+const addLocalAdminNotification = (message) => {
+  try {
+    const notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || "[]");
+    localStorage.setItem(
+      ADMIN_NOTIFICATIONS_KEY,
+      JSON.stringify([
+        {
+          id: `local-admin-${Date.now()}`,
+          message,
+          read: false,
+          createdAt: new Date().toISOString(),
+        },
+        ...notifications,
+      ])
+    );
+  } catch {
+    localStorage.setItem(
+      ADMIN_NOTIFICATIONS_KEY,
+      JSON.stringify([{ id: `local-admin-${Date.now()}`, message, read: false, createdAt: new Date().toISOString() }])
+    );
+  }
+};
+
+const readLocalDealerPersonalInfos = () => {
+  try {
+    return JSON.parse(localStorage.getItem(DEALER_REGISTERED_PERSONAL_INFO_KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
+
+const upsertLocalDealerPersonalInfo = (info) => {
+  if (!info?.userId) return;
+  const infos = readLocalDealerPersonalInfos();
+  const exists = infos.some((item) => String(item.userId) === String(info.userId));
+  const nextInfos = exists
+    ? infos.map((item) => (String(item.userId) === String(info.userId) ? { ...item, ...info } : item))
+    : [{ ...info, createdAt: info.createdAt || new Date().toISOString() }, ...infos];
+  localStorage.setItem(DEALER_REGISTERED_PERSONAL_INFO_KEY, JSON.stringify(nextInfos));
+};
+
 const sameId = (a, b) => String(a || "") === String(b || "");
 const sameCode = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+const getDocumentKey = (doc) => {
+  if (doc?.documentId) return `id:${doc.documentId}`;
+  return [
+    "fallback",
+    doc?.userId ?? doc?.user?.userId ?? doc?.customer?.userId ?? doc?.uploadedBy ?? "",
+    doc?.documentType || doc?.type || "",
+    doc?.fileName || doc?.originalFileName || doc?.name || "",
+    doc?.createdAt || doc?.uploadedAt || "",
+  ].join(":");
+};
+const uniqueDocuments = (documents) => {
+  const map = new Map();
+  documents.filter(Boolean).forEach((doc) => {
+    const key = getDocumentKey(doc);
+    map.set(key, { ...(map.get(key) || {}), ...doc });
+  });
+  return Array.from(map.values());
+};
 const isUserAssignedToBank = (user) =>
   !!(
     user?.bankId ||
     user?.assignedBankId ||
+    user?.assignedBankName ||
+    user?.bankName ||
+    user?.bankStatus === "BANK_ASSIGNED" ||
+    user?.bankStatus === "SENT_TO_BANK" ||
     localStorage.getItem(`user_bank_assignment_${user?.userId}`)
   );
 
@@ -176,6 +317,7 @@ const DealerDashboard = () => {
   const [personalInfos, setPersonalInfos] = useState([]);
   const [docs, setDocs] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [profile, setProfile] = useState({
     dealerId,
     fullName: session.name || "",
@@ -192,6 +334,7 @@ const DealerDashboard = () => {
   const [trackingUser, setTrackingUser] = useState(null);
   const [trackingDocs, setTrackingDocs] = useState([]);
   const [trackingCounts, setTrackingCounts] = useState(null);
+  const [trackingData, setTrackingData] = useState(null);
   const [preview, setPreview] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [personalForm, setPersonalForm] = useState(initialPersonalForm);
@@ -215,12 +358,14 @@ const DealerDashboard = () => {
 
   const stats = useMemo(
     () => ({
-      users: users.length,
-      docs: docs.length,
-      pending: docs.filter((doc) => doc.status === "PENDING").length,
-      approved: docs.filter((doc) => doc.status === "APPROVED").length,
+      users: dashboardSummary?.usersCount ?? users.length,
+      docs: dashboardSummary?.documentsCount ?? docs.length,
+      pending: dashboardSummary?.pendingDocsCount ?? docs.filter((doc) => doc.status === "PENDING").length,
+      approved: dashboardSummary?.approvedDocsCount ?? docs.filter((doc) => doc.status === "APPROVED").length,
+      rejected: dashboardSummary?.rejectedDocsCount ?? docs.filter((doc) => doc.status === "REJECTED").length,
+      bankAssigned: dashboardSummary?.bankAssignedCount ?? users.filter(isUserAssignedToBank).length,
     }),
-    [docs, users.length]
+    [dashboardSummary, docs, users]
   );
 
   const rejectedUsers = useMemo(() => {
@@ -230,7 +375,7 @@ const DealerDashboard = () => {
 
   const dealerCode = profile.dealerCode;
   const notificationDealerId = profile.dealerId || dealerId;
-  const unreadCount = notifications.filter((item) => !item.read).length;
+  const unreadCount = notifications.filter((item) => !isNotificationRead(item)).length;
 
   const fetchDocsForUsers = useCallback(async (ids) => {
     if (!ids || ids.length === 0) return []; // No user IDs, return empty docs
@@ -249,19 +394,30 @@ const DealerDashboard = () => {
       );
       responses.forEach((list) => allDocs.push(...list));
     }
-    return allDocs;
+    return uniqueDocuments(allDocs);
   }, []);
 
   const fetchNotifications = useCallback(async () => {
-    if (!notificationDealerId) return [];
-    const res = await api.get(`/notifications/${notificationDealerId}`);
-    const list = Array.isArray(res.data) ? res.data : [];
-    const sorted = [...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const localList = getLocalDealerNotifications(notificationDealerId, dealerCode);
+    let list = [];
+    try {
+      list = await getDealerNotifications();
+    } catch {
+      if (!notificationDealerId) return localList;
+      const res = await api.get(`/notifications/${notificationDealerId}`);
+      list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+    }
+    const sorted = [...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     setNotifications(sorted);
     return sorted;
-  }, [notificationDealerId]);
+  }, [dealerCode, notificationDealerId]);
 
   const fetchDealerProfile = useCallback(async () => {
+    try {
+      return await getDealerProfile();
+    } catch {
+      // Fall back to the older admin-style endpoint until /dealer/me is available.
+    }
     try {
       const res = await api.get("/dealer/all");
       const dealers = res.data?.data || [];
@@ -283,10 +439,8 @@ const DealerDashboard = () => {
     if (showLoader) setLoading(true);
     try {
       const dealerProfile = await fetchDealerProfile();
-      console.log("[DEALER] fetchDealerProfile result:", JSON.stringify(dealerProfile, null, 2));
       const resolvedDealerId = dealerProfile?.dealerId || dealerProfile?.id || dealerId;
       const resolvedCode = dealerProfile?.dealerCode || storedDealerCode;
-      console.log("[DEALER] resolvedDealerId:", resolvedDealerId, "resolvedCode:", resolvedCode);
 
       setProfile((prev) => ({
         dealerId: resolvedDealerId || prev.dealerId,
@@ -297,17 +451,56 @@ const DealerDashboard = () => {
         role: dealerProfile?.role || prev.role || "DEALER",
       }));
 
-      const [userRes, personalRes] = await Promise.all([
+      try {
+        const dealerUsers = await getDealerUsers();
+        const [summary, notificationList] = await Promise.all([
+          getDealerDashboardSummary().catch(() => null),
+          getDealerNotifications().catch(() => []),
+        ]);
+        const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
+        const normalizedUsers = mergeUsersById(Array.isArray(dealerUsers) ? dealerUsers : [], localDealerUsers);
+        const dealerDocs = [];
+        const documentResponses = await Promise.all(
+          normalizedUsers.map((user) =>
+            getDealerUserDocuments(user.userId)
+              .then((list) => list.map((doc) => ({ ...doc, userId: doc.userId || user.userId })))
+              .catch(() => [])
+          )
+        );
+        documentResponses.forEach((list) => dealerDocs.push(...list));
+        const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
+        setDashboardSummary(summary);
+        setUsers(normalizedUsers);
+        setPersonalInfos(
+          normalizedUsers.map((user) => ({
+            userId: user.userId,
+            loanAmount: user.loanAmount,
+            applicationId: user.applicationId,
+          }))
+        );
+        setDocs(uniqueDocuments(dealerDocs));
+        setNotifications(
+          [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        );
+        return;
+      } catch (error) {
+        if (![403, 404, 500].includes(error?.response?.status)) {
+          showError(error, "Dealer-specific dashboard API failed. Loading fallback data.");
+        }
+        setDashboardSummary(null);
+      }
+
+      const [userRes, personalRes] = await Promise.allSettled([
         api.get("/user/all"),
         api.get("/personal-info/all"),
       ]);
 
-      const allUsers = userRes.data?.data || [];
-      console.log("[DEALER] total users from API:", allUsers.length);
-      console.log("[DEALER] first user sample:", JSON.stringify(allUsers[0], null, 2));
-
-        // Build filtered list of users belonging to the logged‑in dealer
-        // Match on dealerCode (if present) OR dealerId / assignedDealerId
+      const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
+      const allUsers = mergeUsersById(
+        userRes.status === "fulfilled" ? userRes.value.data?.data || [] : [],
+        localDealerUsers
+      );
+        // Build filtered list of users belonging to the logged-in dealer.
         const myUsers = allUsers.filter((u) => {
           // Prefer dealerCode match when we have it
           if (resolvedCode && u.dealerCode) {
@@ -321,10 +514,12 @@ const DealerDashboard = () => {
           }
           return false;
         });
-        console.log("[DEALER] users matched after robust filter:", myUsers.length);
 
       const ids = new Set(myUsers.map((u) => u.userId));
-      const myInfos = (personalRes.data?.data || []).filter((info) => ids.has(info.userId));
+      const localInfos = readLocalDealerPersonalInfos().filter((info) => ids.has(info.userId));
+      const apiPersonalInfos =
+        personalRes.status === "fulfilled" ? personalRes.value.data?.data || [] : [];
+      const myInfos = [...apiPersonalInfos.filter((info) => ids.has(info.userId)), ...localInfos];
       const myDocs = await fetchDocsForUsers([...ids]);
 
       myUsers.sort((a, b) =>
@@ -332,15 +527,16 @@ const DealerDashboard = () => {
       );
       setUsers(myUsers);
       setPersonalInfos(myInfos);
-      setDocs(myDocs);
+      setDocs(uniqueDocuments(myDocs));
 
       if (resolvedDealerId) {
         try {
           const notifRes = await api.get(`/notifications/${resolvedDealerId}`);
           const list = Array.isArray(notifRes.data) ? notifRes.data : [];
-          setNotifications([...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
+          setNotifications([...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
         } catch {
-          // notifications failure is non-critical
+          setNotifications(getLocalDealerNotifications(resolvedDealerId, resolvedCode));
         }
       }
     } catch (error) {
@@ -371,8 +567,19 @@ const DealerDashboard = () => {
   }, [preview]);
 
   const markRead = async (notificationId) => {
+    if (String(notificationId).startsWith("local-bank-")) {
+      markLocalDealerNotificationRead(notificationId);
+      setNotifications((prev) =>
+        prev.map((item) => (item.id === notificationId ? { ...item, read: true } : item))
+      );
+      return;
+    }
     try {
-      await api.put(`/notifications/read/${notificationId}`);
+      try {
+        await markDealerNotificationRead(notificationId);
+      } catch {
+        await api.put(`/notifications/read/${notificationId}`);
+      }
       setNotifications((prev) =>
         prev.map((item) => (item.id === notificationId ? { ...item, read: true } : item))
       );
@@ -411,12 +618,23 @@ const DealerDashboard = () => {
     setSelectedCounts(null);
     setSelectedUserDocs(docsByUser[user.userId] || []);
     try {
-      const [docsRes, countRes] = await Promise.all([
-        api.get(`/documents/user/${user.userId}`),
-        api.get(`/documents/count/${user.userId}`),
-      ]);
-      setSelectedUserDocs(docsRes.data?.data || []);
-      setSelectedCounts(countRes.data?.data || null);
+      try {
+        setSelectedUserDocs(await getDealerUserDocuments(user.userId));
+        setSelectedCounts({
+          documentCount: user.documentCount || 0,
+          pendingDocsCount: user.pendingDocsCount || 0,
+          verifiedDocsCount: user.verifiedDocsCount || 0,
+          approvedDocsCount: user.approvedDocsCount || 0,
+          rejectedDocsCount: user.rejectedDocsCount || 0,
+        });
+      } catch {
+        const [docsRes, countRes] = await Promise.all([
+          api.get(`/documents/user/${user.userId}`),
+          api.get(`/documents/count/${user.userId}`),
+        ]);
+        setSelectedUserDocs(docsRes.data?.data || []);
+        setSelectedCounts(countRes.data?.data || null);
+      }
     } catch (error) {
       showError(error, "Failed to load user details");
     }
@@ -425,14 +643,31 @@ const DealerDashboard = () => {
   const openTrackingModal = async (user) => {
     setTrackingUser(user);
     setTrackingCounts(null);
+    setTrackingData(null);
     setTrackingDocs(docsByUser[user.userId] || []);
     try {
-      const [docsRes, countRes] = await Promise.all([
-        api.get(`/documents/user/${user.userId}`),
-        api.get(`/documents/count/${user.userId}`),
-      ]);
-      setTrackingDocs(docsRes.data?.data || []);
-      setTrackingCounts(countRes.data?.data || null);
+      try {
+        const [tracking, userDocs] = await Promise.all([
+          getDealerUserTracking(user.userId),
+          getDealerUserDocuments(user.userId),
+        ]);
+        setTrackingData(tracking);
+        setTrackingDocs(userDocs);
+        setTrackingCounts({
+          documentCount: user.documentCount || userDocs.length,
+          pendingDocsCount: user.pendingDocsCount || userDocs.filter((doc) => doc.status === "PENDING").length,
+          verifiedDocsCount: user.verifiedDocsCount || userDocs.filter((doc) => doc.status === "VERIFIED").length,
+          approvedDocsCount: user.approvedDocsCount || userDocs.filter((doc) => doc.status === "APPROVED").length,
+          rejectedDocsCount: user.rejectedDocsCount || userDocs.filter((doc) => doc.status === "REJECTED").length,
+        });
+      } catch {
+        const [docsRes, countRes] = await Promise.all([
+          api.get(`/documents/user/${user.userId}`),
+          api.get(`/documents/count/${user.userId}`),
+        ]);
+        setTrackingDocs(docsRes.data?.data || []);
+        setTrackingCounts(countRes.data?.data || null);
+      }
     } catch (error) {
       showError(error, "Failed to load user status details");
     }
@@ -556,11 +791,34 @@ const DealerDashboard = () => {
       });
       const newUserId = await resolveRegisteredUserId(registerRes.data?.data);
       if (!newUserId) throw new Error("User registered, but backend did not return a userId");
+      upsertLocalDealerUser({
+        ...(registerRes.data?.data || {}),
+        userId: newUserId,
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        registrationType: "DEALER",
+        dealerCode: profile.dealerCode,
+        dealerId: profile.dealerId,
+        paymentDone: false,
+        paymentStatus: "PAYMENT_PENDING",
+      });
 
       await api.post("/personal-info/save", {
         userId: Number(newUserId),
         address: personalForm.address,
         mobileNumber: personalForm.mobileNumber,
+        city: personalForm.city,
+        state: personalForm.state,
+        pincode: personalForm.pincode,
+        loanAmount: Number(personalForm.loanAmount),
+      });
+      upsertLocalDealerPersonalInfo({
+        userId: Number(newUserId),
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        address: personalForm.address,
         city: personalForm.city,
         state: personalForm.state,
         pincode: personalForm.pincode,
@@ -581,6 +839,7 @@ const DealerDashboard = () => {
 
       setUploadedDocs(uploaded.filter(Boolean));
       await loadDashboard();
+      setActiveMenu("Dashboard");
       toast.success("New user loan registration submitted");
       return true;
     } catch (error) {
@@ -606,6 +865,9 @@ const DealerDashboard = () => {
       formData.append("type", type);
       formData.append("file", file);
       await api.post("/documents/upload", formData);
+      addLocalAdminNotification(
+        `${user?.fullName || "Dealer customer"} reuploaded ${docLabel(type)}.`
+      );
       const freshDocs = await fetchDocsForUsers(userIds);
       setDocs(freshDocs);
       if (selectedUser?.userId === userId) {
@@ -620,11 +882,27 @@ const DealerDashboard = () => {
   const saveProfile = async () => {
     setProfileSaving(true);
     try {
-      await api.put(`/dealer/update/${dealerId}`, {
+      const resolvedDealerId = profile.dealerId || dealerId;
+      await api.put(`/dealer/update/${resolvedDealerId}`, {
         fullName: profile.fullName,
         email: profile.email,
         mobileNumber: profile.mobileNumber,
       });
+      const stored = readDealerSession();
+      localStorage.setItem(
+        "dealerData",
+        JSON.stringify({
+          ...stored,
+          dealerId: resolvedDealerId,
+          id: resolvedDealerId,
+          name: profile.fullName,
+          fullName: profile.fullName,
+          email: profile.email,
+          mobileNumber: profile.mobileNumber,
+          dealerCode: profile.dealerCode,
+          role: profile.role,
+        })
+      );
       toast.success("Profile updated");
     } catch (error) {
       showError(error, "Failed to update profile");
@@ -709,9 +987,10 @@ const DealerDashboard = () => {
                             key={item.id}
                             onClick={() => markRead(item.id)}
                             className={`block w-full border-b border-gray-50 px-4 py-3 text-left text-sm ${
-                              item.read ? "bg-white text-gray-600" : "bg-[#EAFBF8] text-[#0B2A4A]"
+                              isNotificationRead(item) ? "bg-white text-gray-600" : "bg-[#EAFBF8] text-[#0B2A4A]"
                             }`}
                           >
+                            {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
                             <p className="font-semibold">{item.message}</p>
                             <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
                           </button>
@@ -736,6 +1015,7 @@ const DealerDashboard = () => {
                   rejectedUsers={rejectedUsers}
                   notifications={notifications}
                   users={users}
+                  docs={docs}
                   markRead={markRead}
                   openNewCustomer={openWizard}
                   openUserModal={openUserModal}
@@ -755,8 +1035,6 @@ const DealerDashboard = () => {
                 <StatusTab
                   users={sortedStatusUsers}
                   docsByUser={docsByUser}
-                  openPreview={openPreview}
-                  reuploadDoc={reuploadDoc}
                   openTrackingModal={openTrackingModal}
                 />
               )}
@@ -800,6 +1078,7 @@ const DealerDashboard = () => {
           user={trackingUser}
           docs={trackingDocs}
           counts={trackingCounts}
+          tracking={trackingData}
           onClose={() => setTrackingUser(null)}
         />
       )}
@@ -835,10 +1114,57 @@ const DealerDashboard = () => {
   );
 };
 
-const DashboardTab = ({ stats, rejectedUsers, notifications, users, markRead, openNewCustomer, openUserModal, openTrackingModal }) => {
+const DashboardTab = ({ stats, rejectedUsers, notifications, users, docs, markRead, openNewCustomer, openUserModal, openTrackingModal }) => {
+  const [statOverlay, setStatOverlay] = useState(null);
   const recentUsers = [...users]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 5);
+  const userNameById = new Map(users.map((user) => [String(user.userId), user.fullName || `User #${user.userId}`]));
+  const documentItems = (list) =>
+    list.map((doc) => ({
+      title: docLabel(doc.documentType),
+      subtitle: userNameById.get(String(doc.userId)) || doc.fileName || "Customer",
+    }));
+  const statCards = [
+    {
+      icon: <FaUsers />,
+      label: "My Users",
+      value: stats.users,
+      items: users.map((user) => ({ title: user.fullName || `User #${user.userId}` })),
+    },
+    {
+      icon: <FaFileAlt />,
+      label: "Total Docs Uploaded",
+      value: stats.docs,
+      items: documentItems(docs),
+    },
+    {
+      icon: <FaClipboardList />,
+      label: "Pending Docs",
+      value: stats.pending,
+      items: documentItems(docs.filter((doc) => doc.status === "PENDING")),
+    },
+    {
+      icon: <FaCheckCircle />,
+      label: "Approved Docs",
+      value: stats.approved,
+      items: documentItems(docs.filter((doc) => doc.status === "APPROVED")),
+    },
+    {
+      icon: <FaRedo />,
+      label: "Rejected Docs",
+      value: stats.rejected || 0,
+      items: documentItems(docs.filter((doc) => doc.status === "REJECTED")),
+    },
+    {
+      icon: <FaCheckCircle />,
+      label: "Bank Assigned",
+      value: stats.bankAssigned || 0,
+      items: users
+        .filter(isUserAssignedToBank)
+        .map((user) => ({ title: user.fullName || `User #${user.userId}`, subtitle: user.assignedBankName || user.bankName || "Assigned" })),
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -851,12 +1177,18 @@ const DashboardTab = ({ stats, rejectedUsers, notifications, users, markRead, op
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard icon={<FaUsers />} label="My Users" value={stats.users} />
-        <StatCard icon={<FaFileAlt />} label="Total Docs Uploaded" value={stats.docs} />
-        <StatCard icon={<FaClipboardList />} label="Pending Docs" value={stats.pending} />
-        <StatCard icon={<FaCheckCircle />} label="Approved Docs" value={stats.approved} />
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-6">
+        {statCards.map((card) => (
+          <StatCard key={card.label} {...card} onClick={() => setStatOverlay(card)} />
+        ))}
       </div>
+      {statOverlay && (
+        <SimpleListOverlay
+          title={statOverlay.label}
+          items={statOverlay.items}
+          onClose={() => setStatOverlay(null)}
+        />
+      )}
 
       {users.length === 0 && <EmptyState text="No users found" />}
       {rejectedUsers.length > 0 && (
@@ -880,9 +1212,10 @@ const DashboardTab = ({ stats, rejectedUsers, notifications, users, markRead, op
                 key={item.id}
                 onClick={() => markRead(item.id)}
                 className={`block w-full border-b border-gray-50 p-4 text-left text-sm ${
-                  item.read ? "bg-white" : "bg-[#EAFBF8]"
+                  isNotificationRead(item) ? "bg-white" : "bg-[#EAFBF8]"
                 }`}
               >
+                {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
                 <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
                 <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
               </button>
@@ -895,8 +1228,8 @@ const DashboardTab = ({ stats, rejectedUsers, notifications, users, markRead, op
   );
 };
 
-const StatCard = ({ icon, label, value }) => (
-  <div className="rounded-3xl bg-white p-6 shadow-sm">
+const StatCard = ({ icon, label, value, onClick }) => (
+  <button type="button" onClick={onClick} className="w-full rounded-3xl bg-white p-6 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
     <div className="flex items-center justify-between gap-4">
       <div>
         <p className="text-sm font-semibold text-gray-500">{label}</p>
@@ -906,7 +1239,24 @@ const StatCard = ({ icon, label, value }) => (
         {icon}
       </div>
     </div>
-  </div>
+  </button>
+);
+
+const SimpleListOverlay = ({ title, items, onClose }) => (
+  <Modal title={title} onClose={onClose}>
+    {items.length === 0 ? (
+      <div className="rounded-3xl bg-[#F4F6F9] p-6 text-sm text-gray-500">No data found.</div>
+    ) : (
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={`${item.title}-${index}`} className="rounded-2xl border border-gray-100 bg-[#F8FAFC] p-4">
+            <p className="font-black text-[#0B2A4A]">{item.title}</p>
+            {item.subtitle && <p className="mt-1 text-sm text-gray-500">{item.subtitle}</p>}
+          </div>
+        ))}
+      </div>
+    )}
+  </Modal>
 );
 
 const SectionTitle = ({ title }) => <h2 className="mb-4 text-lg font-black text-[#0B2A4A]">{title}</h2>;
@@ -962,6 +1312,110 @@ const UsersTab = ({ users, openUserModal, openTrackingModal }) => (
     <UserTable users={users} openUserModal={openUserModal} openTrackingModal={openTrackingModal} />
   </div>
 );
+
+const SettingsTab = ({
+  profile,
+  setProfile,
+  saveProfile,
+  profileSaving,
+  passwordForm,
+  setPasswordForm,
+  changePassword,
+}) => {
+  const [editing, setEditing] = useState({});
+  const updateProfile = (key, value) => setProfile((prev) => ({ ...prev, [key]: value }));
+
+  const editableFields = [
+    ["fullName", "Dealer Name", "text"],
+    ["email", "Email", "email"],
+    ["mobileNumber", "Mobile Number", "tel"],
+  ];
+
+  return (
+    <div className="max-w-5xl space-y-6">
+      <section className="rounded-3xl bg-white p-6 shadow-sm">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-[#0B2A4A]">Dealer Profile</h2>
+            <p className="mt-1 text-sm text-gray-500">Manage dealer contact details.</p>
+          </div>
+          <button
+            onClick={saveProfile}
+            disabled={profileSaving}
+            className="rounded-2xl bg-[#0B2A4A] px-5 py-3 font-bold text-white disabled:opacity-60"
+          >
+            {profileSaving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {editableFields.map(([key, label, type]) => (
+            <div key={key} className="rounded-2xl bg-[#F4F6F9] p-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-black uppercase text-gray-400">{label}</p>
+                <button
+                  onClick={() => setEditing((prev) => ({ ...prev, [key]: !prev[key] }))}
+                  className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-[#0B2A4A]"
+                  aria-label={`Edit ${label}`}
+                  title={`Edit ${label}`}
+                >
+                  <FaEdit />
+                </button>
+              </div>
+              {editing[key] ? (
+                <input
+                  type={type}
+                  value={profile[key] || ""}
+                  onChange={(event) => updateProfile(key, event.target.value)}
+                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 font-semibold text-[#0B2A4A] outline-none focus:border-[#27D3C3]"
+                />
+              ) : (
+                <p className="break-words text-base font-bold text-[#0B2A4A]">
+                  {profile[key] || "Not available"}
+                </p>
+              )}
+            </div>
+          ))}
+          <InfoTile label="Dealer Code" value={profile.dealerCode || "Not available"} />
+          <InfoTile label="Role" value={profile.role || "DEALER"} />
+        </div>
+      </section>
+
+      <section className="rounded-3xl bg-white p-6 shadow-sm">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAFBF8] text-[#0B2A4A]">
+            <FaLock />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-[#0B2A4A]">Update Password</h2>
+            <p className="mt-1 text-sm text-gray-500">Set a new dealer account password.</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <FormField
+            label="New Password"
+            type="password"
+            value={passwordForm.password}
+            onChange={(value) => setPasswordForm({ ...passwordForm, password: value })}
+          />
+          <FormField
+            label="Confirm Password"
+            type="password"
+            value={passwordForm.confirm}
+            onChange={(value) => setPasswordForm({ ...passwordForm, confirm: value })}
+          />
+        </div>
+        <button
+          onClick={changePassword}
+          className="mt-2 rounded-2xl bg-[#27D3C3] px-5 py-3 font-black text-[#0B2A4A]"
+        >
+          Update Password
+        </button>
+      </section>
+    </div>
+  );
+};
 
 const UserModal = ({ user, info, docs, counts, onClose, openPreview, openWizard, reuploadDoc, locked }) => (
   <Modal title={user.fullName || "User Details"} onClose={onClose} wide>
@@ -1055,90 +1509,84 @@ const DocumentGrid = ({ docs, openPreview, reuploadDoc }) => (
   </div>
 );
 
-const StatusTab = ({ users, docsByUser, openPreview, reuploadDoc }) => (
-  <div className="space-y-6">
-    {users.map((user) => {
-      const userDocs = docsByUser[user.userId] || [];
-      const counts = {
-        total: userDocs.length,
-        pending: userDocs.filter((doc) => doc.status === "PENDING").length,
-        approved: userDocs.filter((doc) => doc.status === "APPROVED").length,
-        rejected: userDocs.filter((doc) => doc.status === "REJECTED").length,
-      };
+const StatusTab = ({ users, docsByUser, openTrackingModal }) => {
+  const [expanded, setExpanded] = useState({});
+  const sortedUsers = [...users].sort((a, b) =>
+    String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" })
+  );
 
-      return (
-        <section key={user.userId} className="rounded-3xl bg-white p-5 shadow-sm">
-          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-black text-[#0B2A4A]">{user.fullName}</h3>
-              <p className="text-sm text-gray-500">{user.email}</p>
-            </div>
-            <p className="rounded-2xl bg-[#F4F6F9] px-4 py-2 text-sm font-bold text-[#0B2A4A]">
-              {counts.total} docs • {counts.pending} pending • {counts.approved} approved • {counts.rejected} rejected
-            </p>
-          </div>
-          <DocumentGrid
-            docs={userDocs}
-            openPreview={openPreview}
-            reuploadDoc={isUserAssignedToBank(user) ? null : reuploadDoc}
-          />
-        </section>
-      );
-    })}
-    {users.length === 0 && <EmptyState text="No user status found." />}
-  </div>
-);
+  return (
+    <div className="space-y-5">
+      {sortedUsers.map((user) => {
+        const userDocs = docsByUser[user.userId] || [];
+        const counts = {
+          total: userDocs.length,
+          pending: userDocs.filter((doc) => doc.status === "PENDING").length,
+          approved: userDocs.filter((doc) => doc.status === "APPROVED").length,
+          rejected: userDocs.filter((doc) => doc.status === "REJECTED").length,
+        };
+        const isOpen = expanded[user.userId] === true;
 
-const SettingsTab = ({
-  profile,
-  setProfile,
-  saveProfile,
-  profileSaving,
-  passwordForm,
-  setPasswordForm,
-  changePassword,
-}) => (
-  <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <SectionTitle title="Profile" />
-      <FormField label="Full Name" value={profile.fullName} onChange={(value) => setProfile({ ...profile, fullName: value })} />
-      <FormField label="Email" value={profile.email} readOnly />
-      <FormField label="Mobile" value={profile.mobileNumber} readOnly />
-      <FormField label="Dealer Code" value={profile.dealerCode} readOnly />
-      <FormField label="Role" value={profile.role} readOnly />
-      <button
-        onClick={saveProfile}
-        disabled={profileSaving}
-        className="mt-2 rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white disabled:opacity-60"
-      >
-        {profileSaving ? "Saving..." : "Save Name"}
-      </button>
-    </section>
+        return (
+          <section key={user.userId} className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            <button
+              type="button"
+              onClick={() => setExpanded((prev) => ({ ...prev, [user.userId]: !prev[user.userId] }))}
+              className="flex w-full flex-col gap-4 px-5 py-5 text-left hover:bg-slate-50 md:flex-row md:items-center md:justify-between"
+            >
+              <div>
+                <h3 className="text-lg font-black text-[#0B2A4A]">{user.fullName}</h3>
+                <p className="text-sm text-gray-500">{user.email} • {user.mobileNumber || "N/A"}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-2xl bg-[#F4F6F9] px-4 py-2 text-sm font-bold text-[#0B2A4A]">
+                  {counts.total} docs • {counts.pending} pending • {counts.approved} approved • {counts.rejected} rejected
+                </span>
+                <span className="rounded-2xl bg-[#EAFBF8] px-3 py-2 text-sm font-black text-[#0B2A4A]">
+                  {isOpen ? "Hide" : "Show"}
+                </span>
+              </div>
+            </button>
 
-    <section className="rounded-3xl bg-white p-6 shadow-sm">
-      <SectionTitle title="Change Password" />
-      <FormField
-        label="New Password"
-        type="password"
-        value={passwordForm.password}
-        onChange={(value) => setPasswordForm({ ...passwordForm, password: value })}
-      />
-      <FormField
-        label="Confirm Password"
-        type="password"
-        value={passwordForm.confirm}
-        onChange={(value) => setPasswordForm({ ...passwordForm, confirm: value })}
-      />
-      <button
-        onClick={changePassword}
-        className="mt-2 flex items-center gap-2 rounded-2xl bg-[#27D3C3] px-6 py-3 font-black text-[#0B2A4A]"
-      >
-        <FaLock /> Change Password
-      </button>
-    </section>
-  </div>
-);
-
+            {isOpen && (
+              <div className="border-t border-gray-100 px-5 pb-5 pt-4">
+                <div className="mb-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => openTrackingModal(user)}
+                    className="rounded-2xl bg-[#0B2A4A] px-5 py-3 text-sm font-black text-white"
+                  >
+                    View Application Status
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {userDocs.map((doc) => (
+                    <div key={doc.documentId} className="rounded-2xl border border-gray-100 bg-[#F8FAFC] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-black text-[#0B2A4A]">{docLabel(doc.documentType)}</p>
+                          <p className="mt-1 text-xs text-gray-500">{doc.fileName || "-"}</p>
+                        </div>
+                        <Badge status={doc.status} />
+                      </div>
+                      {doc.remarks && (
+                        <p className="mt-3 rounded-2xl bg-white p-3 text-sm text-gray-600">
+                          {doc.remarks}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {userDocs.length === 0 && <EmptyState text="No documents uploaded yet." />}
+                </div>
+              </div>
+            )}
+          </section>
+        );
+      })}
+      {users.length === 0 && <EmptyState text="No user status found." />}
+    </div>
+  );
+};
 const FormField = ({ label, value, onChange, readOnly = false, type = "text" }) => (
   <label className="mb-4 block">
     <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">{label}</span>
@@ -1234,7 +1682,11 @@ const WizardModal = ({
 
   const handleVerifySubmit = async () => {
     const saved = await onSubmit();
-    if (saved) setReviewOpen(false);
+    if (saved) {
+      setReviewOpen(false);
+      closeSelectedFilePreview();
+      onClose();
+    }
   };
 
   return (
@@ -1437,8 +1889,17 @@ const UploadStep = ({ title, types, files, setFile, note }) => (
   </div>
 );
 
-const TrackingModal = ({ user, docs, counts, onClose }) => {
+const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
   const steps = useMemo(() => {
+    if (tracking?.timeline?.length) {
+      return tracking.timeline.map((item) => ({
+        title: item.label || item.key,
+        status: item.completed ? "DONE" : "PENDING",
+        detail: item.remarks || item.message || item.key,
+        date: item.date,
+      }));
+    }
+
     const totalDocs = docs?.length || 0;
     const pendingCount = docs?.filter((d) => d.status === "PENDING").length || 0;
     const approvedCount = docs?.filter((d) => d.status === "APPROVED").length || 0;
@@ -1504,19 +1965,24 @@ const TrackingModal = ({ user, docs, counts, onClose }) => {
       { title: "Documents Approved", status: step3Status, detail: step3Detail },
       { title: "Sent to Bank", status: step4Status, detail: step4Detail },
     ];
-  }, [docs, user.userId]);
+  }, [docs, tracking, user.userId]);
 
   return (
     <Modal title="Application Tracking" onClose={onClose}>
       <div className="space-y-6 p-1">
         <div className="rounded-3xl bg-gradient-to-br from-[#0B2A4A] to-[#1a3d60] p-6 text-white shadow-lg">
           <span className="text-xs font-bold uppercase tracking-wider text-[#27D3C3]">Applicant Details</span>
-          <h3 className="mt-1 text-2xl font-black">{user.fullName}</h3>
-          <p className="text-sm opacity-80">{user.email} • {user.mobileNumber}</p>
+          <h3 className="mt-1 text-2xl font-black">{tracking?.customerName || user.fullName}</h3>
+          <p className="text-sm opacity-80">{user.email} â€¢ {user.mobileNumber}</p>
           <div className="mt-4 border-t border-white/10 pt-4 flex justify-between items-center text-xs opacity-75">
-            <span>App ID: {user.applicationId || "N/A"}</span>
+            <span>App ID: {tracking?.applicationId || user.applicationId || "N/A"}</span>
             <span>Registered: {formatDate(user.createdAt)}</span>
           </div>
+          {(tracking?.assignedBankName || user.assignedBankName || user.bankName) && (
+            <div className="mt-3 rounded-2xl bg-white/10 px-4 py-2 text-sm font-bold">
+              Assigned Bank: {tracking?.assignedBankName || user.assignedBankName || user.bankName}
+            </div>
+          )}
         </div>
 
         <div className="relative pl-10 pr-2 py-4">
@@ -1557,7 +2023,7 @@ const TrackingModal = ({ user, docs, counts, onClose }) => {
                 <span
                   className={`absolute -left-[40px] top-0.5 flex h-8 w-8 items-center justify-center rounded-full border text-sm font-black transition-all ${circleStyle}`}
                 >
-                  {isDone ? "✓" : idx + 1}
+                  {isDone ? "âœ“" : idx + 1}
                 </span>
 
                 <div className="flex w-full flex-wrap items-center justify-between gap-2">
@@ -1586,3 +2052,5 @@ const TrackingModal = ({ user, docs, counts, onClose }) => {
 };
 
 export default DealerDashboard;
+
+

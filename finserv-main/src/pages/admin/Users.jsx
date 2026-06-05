@@ -1,5 +1,5 @@
 import React from "react";
-import { FaEye, FaSearch } from "react-icons/fa";
+import { FaEye, FaSearch, FaTrash } from "react-icons/fa";
 import {
   DOCUMENT_LABELS,
   formatDate,
@@ -25,6 +25,7 @@ const getAssignedBankName = (user, banks) => {
 const Users = ({
   users,
   banks,
+  userApiWarning,
   searchName,
   setSearchName,
   searchUsers,
@@ -35,9 +36,11 @@ const Users = ({
   assignBankId,
   setAssignBankId,
   assignBank,
+  assigningBank,
   personalInfo,
   closeUser,
   openPreview,
+  deleteUser,
 }) => (
   <>
     <div className="bg-white rounded-3xl p-6 shadow-sm">
@@ -65,13 +68,21 @@ const Users = ({
 
       {users.length === 0 ? (
         <div className="bg-[#F4F6F9] rounded-2xl p-6 text-sm text-slate-500">
-          No users found. Check the backend response for <span className="font-semibold">/api/user/all</span>.
+          {userApiWarning ? (
+            <>
+              User API failed: <span className="font-semibold">{userApiWarning}</span>.
+            </>
+          ) : (
+            <>
+              No users found from user, personal-info, or document data.
+            </>
+          )}
         </div>
       ) : (
         <ResponsiveTable>
           <thead>
             <tr className="text-left text-sm text-slate-500">
-              {["ID", "Name", "Email", "Mobile", "Registration", "Dealer Code", "Created"].map((head) => (
+              {["ID", "Name", "Email", "Mobile", "Registration", "Dealer Code", "Created", "Action"].map((head) => (
                 <th key={head} className="py-3 px-4">
                   {head}
                 </th>
@@ -97,6 +108,16 @@ const Users = ({
                   <td className="py-3 px-4">{user.registrationType}</td>
                   <td className="py-3 px-4">{user.dealerCode}</td>
                   <td className="py-3 px-4">{formatDate(user.createdAt)}</td>
+                  <td className="py-3 px-4">
+                    <button
+                      onClick={() => deleteUser(user)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl text-red-600 hover:bg-red-50"
+                      aria-label={`Delete ${user.fullName || "user"}`}
+                      title="Delete user"
+                    >
+                      <FaTrash />
+                    </button>
+                  </td>
                 </tr>
               );
             })}
@@ -150,8 +171,12 @@ const Users = ({
                 </option>
               ))}
             </select>
-            <button onClick={assignBank} className="bg-[#0B2A4A] text-white rounded-2xl px-5 font-bold">
-              Assign
+            <button
+              onClick={assignBank}
+              disabled={assigningBank}
+              className="bg-[#0B2A4A] text-white rounded-2xl px-5 font-bold disabled:opacity-60"
+            >
+              {assigningBank ? "Assigning..." : "Assign"}
             </button>
           </div>
         </div>

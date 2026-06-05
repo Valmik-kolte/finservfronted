@@ -10,6 +10,7 @@ import {
   FaSignOutAlt,
   FaBars,
   FaClipboardCheck,
+  FaRupeeSign,
 } from "react-icons/fa";
 
 const Sidebar = ({
@@ -36,6 +37,10 @@ const Sidebar = ({
     {
       name: "Documents",
       icon: <FaClipboardCheck />,
+    },
+    {
+      name: "Payments",
+      icon: <FaRupeeSign />,
     },
     {
       name: "Banks",

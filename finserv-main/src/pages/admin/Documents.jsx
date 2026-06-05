@@ -2,9 +2,21 @@ import React, { useMemo, useState } from "react";
 import { FaEye, FaChevronDown, FaChevronUp, FaSearch } from "react-icons/fa";
 import { DOCUMENT_LABELS, formatDate, StatusBadge } from "./adminShared";
 
-const STATUS_PRIORITY = { REJECTED: 0, PENDING: 1, VERIFIED: 2, APPROVED: 3 };
-
 const FILTER_TABS = ["All", "Pending", "Verified", "Approved", "Rejected"];
+
+const getDocumentOwnerId = (doc) =>
+  doc?.userId ?? doc?.user?.userId ?? doc?.customer?.userId ?? doc?.uploadedBy ?? doc?.user?.id ?? "";
+
+const getDocumentKey = (doc) => {
+  if (doc?.documentId) return `id:${doc.documentId}`;
+  return [
+    "fallback",
+    getDocumentOwnerId(doc),
+    doc?.documentType || doc?.type || "",
+    doc?.fileName || doc?.originalFileName || doc?.name || "",
+    doc?.createdAt || doc?.uploadedAt || "",
+  ].join(":");
+};
 
 const Documents = ({
   documentTab,
@@ -22,17 +34,23 @@ const Documents = ({
   const [filterStatus, setFilterStatus] = useState("All");
   const [expanded, setExpanded] = useState({});
 
-  // Merge pending + verified docs, deduplicate by documentId
+  // Merge admin document sources once and dedupe by id or stable document fields.
   const allDocuments = useMemo(() => {
     const map = new Map();
-    [...(allDocs || []), ...(docs || [])].forEach((d) => map.set(d.documentId, d));
+    [...(allDocs || []), ...(docs || [])].filter(Boolean).forEach((doc) => {
+      const key = getDocumentKey(doc);
+      map.set(key, { ...(map.get(key) || {}), ...doc });
+    });
     return Array.from(map.values());
   }, [allDocs, docs]);
 
   // Build user map from users list
   const userMap = useMemo(() => {
     const map = {};
-    (users || []).forEach((u) => { map[u.userId] = u; });
+    (users || []).forEach((u) => {
+      const id = u.userId ?? u.id;
+      if (id !== undefined && id !== null) map[String(id)] = u;
+    });
     return map;
   }, [users]);
 
@@ -46,21 +64,30 @@ const Documents = ({
   const grouped = useMemo(() => {
     const map = {};
     filteredDocs.forEach((doc) => {
-      const uid = doc.userId ?? doc.user?.userId ?? "unknown";
+      const uid = String(
+        doc.userId ??
+          doc.user?.userId ??
+          doc.customer?.userId ??
+          doc.uploadedBy ??
+          doc.user?.id ??
+          "unknown"
+      );
       if (!map[uid]) map[uid] = [];
       map[uid].push(doc);
     });
     return map;
   }, [filteredDocs]);
 
-  // Sort users: lowest priority status first (REJECTED first)
+  // Sort users alphabetically by username.
   const sortedUserIds = useMemo(() => {
     return Object.keys(grouped).sort((a, b) => {
-      const minPriorityA = Math.min(...grouped[a].map((d) => STATUS_PRIORITY[d.status] ?? 99));
-      const minPriorityB = Math.min(...grouped[b].map((d) => STATUS_PRIORITY[d.status] ?? 99));
-      return minPriorityA - minPriorityB;
+      const userA = userMap[a];
+      const userB = userMap[b];
+      const nameA = a === "unknown" ? "Unknown User" : userA?.fullName || `User #${a}`;
+      const nameB = b === "unknown" ? "Unknown User" : userB?.fullName || `User #${b}`;
+      return nameA.localeCompare(nameB, undefined, { sensitivity: "base" });
     });
-  }, [grouped]);
+  }, [grouped, userMap]);
 
   // Filter by search (name or email)
   const visibleUserIds = useMemo(() => {
@@ -132,7 +159,7 @@ const Documents = ({
           const userLabel = uid === "unknown" ? "Unknown User" : user?.fullName || `User #${uid}`;
           const userDocs = grouped[uid];
           const counts = statusCounts(userDocs);
-          const isOpen = expanded[uid] !== false; // default open
+          const isOpen = expanded[uid] === true;
           const hasRejected = counts.REJECTED > 0;
           const hasPending = counts.PENDING > 0;
 
