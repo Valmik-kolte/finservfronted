@@ -27,6 +27,7 @@ import {
   READY2DRIVE_TOTAL_AMOUNT,
   formatINR,
 } from "../../constants/payment";
+import Chatbot from "../../components/chatbot/Chatbot";
 
 const DOCUMENT_LABELS = {
   AADHAAR: "Aadhaar",
@@ -65,8 +66,26 @@ const OPTIONAL_DOCUMENT_TYPES = new Set([
   "ODOMETER_READING",
 ]);
 
-const SALARIED_INCOME_TYPES = ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"];
-const SELF_EMPLOYED_INCOME_TYPES = ["ITR_RETURN", "BANK_STATEMENT"];
+const SALARIED_INCOME_TYPES = new Set(["SALARY_SLIP", "APPOINTMENT_LETTER"]);
+const SELF_EMPLOYED_INCOME_TYPES = new Set(["ITR_RETURN"]);
+
+const getIncomeGroupForType = (type) => {
+  if (SALARIED_INCOME_TYPES.has(type)) return "Salaried";
+  if (SELF_EMPLOYED_INCOME_TYPES.has(type)) return "Self Employed";
+  return "";
+};
+
+const getLockedIncomeTypeFromDocs = (docsByType) => {
+  const hasSalariedDocs = Array.from(SALARIED_INCOME_TYPES).some((type) =>
+    hasUsableDocument(docsByType, type)
+  );
+  const hasSelfEmployedDocs = Array.from(SELF_EMPLOYED_INCOME_TYPES).some((type) =>
+    hasUsableDocument(docsByType, type)
+  );
+  if (hasSalariedDocs) return "Salaried";
+  if (hasSelfEmployedDocs) return "Self Employed";
+  return "";
+};
 
 const STEPS = [
   { id: 1, title: "Personal Information" },
@@ -491,6 +510,7 @@ const CustomerDashboard = () => {
       return acc;
     }, {});
   }, [documents]);
+  const lockedIncomeType = useMemo(() => getLockedIncomeTypeFromDocs(docsByType), [docsByType]);
 
   const fetchDashboardData = useCallback(
     async (showSpinner = false) => {
@@ -719,6 +739,13 @@ const CustomerDashboard = () => {
       toast.info("Your application is already assigned to a bank. Documents are locked.");
       return;
     }
+    const incomeGroup = getIncomeGroupForType(type);
+    if (incomeGroup && lockedIncomeType && lockedIncomeType !== incomeGroup) {
+      toast.error(
+        `${lockedIncomeType} income documents already uploaded. Remove them before switching income type.`
+      );
+      return;
+    }
     if (file.size > 5 * 1024 * 1024) {
       toast.error("File must be 5MB or smaller.");
       return;
@@ -874,8 +901,8 @@ const CustomerDashboard = () => {
 
   const incomeTypes =
     employmentType === "Salaried"
-      ? SALARIED_INCOME_TYPES
-      : SELF_EMPLOYED_INCOME_TYPES;
+      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      : ["ITR_RETURN", "BANK_STATEMENT"];
 
   const missingRequiredTypes = useMemo(
     () => {
@@ -1084,6 +1111,7 @@ const CustomerDashboard = () => {
                   missingRequiredTypes={missingRequiredTypes}
                   personalInfo={personalInfo}
                   assignedBank={assignedBank}
+                  lockedIncomeType={lockedIncomeType}
                   saving={saving}
                   setCurrentStep={setCurrentStep}
                   setEmploymentType={setEmploymentType}
@@ -1185,6 +1213,9 @@ const CustomerDashboard = () => {
           onVerifyPayment={verifyPayment}
         />
       )}
+
+      {/* Chatbot mount only; dashboard logic remains unchanged. */}
+      <Chatbot roleOverride="USER" onNavigateSection={setActiveMenu} />
     </div>
   );
 };
@@ -1363,7 +1394,7 @@ const DashboardTab = ({
       })),
     },
     {
-      label: "Pending",
+      label: "Admin Approval Pending",
       value: counts.pendingCount || 0,
       icon: <FaBell />,
       items: documents
@@ -1374,7 +1405,7 @@ const DashboardTab = ({
         })),
     },
     {
-      label: "Approved",
+      label: "Admin Approved",
       value: counts.approvedCount || 0,
       icon: <FaCheckCircle />,
       items: documents
@@ -1535,6 +1566,7 @@ const DocumentsTab = ({
   missingRequiredTypes,
   personalInfo,
   assignedBank,
+  lockedIncomeType,
   saving,
   setCurrentStep,
   setEmploymentType,
@@ -1547,35 +1579,12 @@ const DocumentsTab = ({
   paymentStatus,
   onPayNow,
 }) => {
-  const hasSalariedIncomeDocs =
-    hasUsableDocument(docsByType, "SALARY_SLIP") || hasUsableDocument(docsByType, "APPOINTMENT_LETTER");
-  const hasSelfEmployedIncomeDocs = hasUsableDocument(docsByType, "ITR_RETURN");
-  const hasSharedIncomeDocs = hasUsableDocument(docsByType, "BANK_STATEMENT");
-  const lockedEmploymentType = hasSalariedIncomeDocs
-    ? "Salaried"
-    : hasSelfEmployedIncomeDocs
-    ? "Self Employed"
-    : hasSharedIncomeDocs
-    ? employmentType
-    : "";
-
-  const changeEmploymentType = (type) => {
-    if (assignedBank) return;
-    if (lockedEmploymentType && type !== lockedEmploymentType) {
-      toast.error(
-        `You already uploaded ${lockedEmploymentType} income documents. Remove or replace those documents before switching employment type.`
-      );
-      return;
-    }
-    setEmploymentType(type);
-  };
-
   const requiredTypesForStep = () => {
     if (currentStep === 2) return ["PAN", "AADHAAR"];
     if (currentStep === 3) return ["RESIDENTIAL_PROOF"];
     if (currentStep === 4) return employmentType === "Salaried"
-      ? SALARIED_INCOME_TYPES
-      : SELF_EMPLOYED_INCOME_TYPES;
+      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      : ["ITR_RETURN", "BANK_STATEMENT"];
     if (currentStep === 5) return ["RC", "INSURANCE"];
     return [];
   };
@@ -1699,11 +1708,19 @@ const DocumentsTab = ({
               {["Salaried", "Self Employed"].map((type) => (
                 <button
                   key={type}
-                  disabled={!!assignedBank || (!!lockedEmploymentType && type !== lockedEmploymentType)}
-                  onClick={() => changeEmploymentType(type)}
+                  disabled={!!assignedBank || (!!lockedIncomeType && lockedIncomeType !== type)}
+                  onClick={() => {
+                    if (lockedIncomeType && lockedIncomeType !== type) {
+                      toast.error(
+                        `${lockedIncomeType} income documents already uploaded. Remove them before switching income type.`
+                      );
+                      return;
+                    }
+                    setEmploymentType(type);
+                  }}
                   className={`px-4 py-2 rounded-xl text-sm font-bold ${
                     employmentType === type ? "bg-white text-[#0B2A4A] shadow-sm" : "text-slate-500"
-                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                  } ${lockedIncomeType && lockedIncomeType !== type ? "cursor-not-allowed opacity-50" : ""}`}
                 >
                   {type}
                 </button>

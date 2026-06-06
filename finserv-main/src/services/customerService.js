@@ -33,16 +33,18 @@ export const assignBank = async (userId, bankId) => {
 };
 
 export const userSendOtp = async (email) => {
-  const response = await api.post(`/user/send-otp?email=${email}`);
+  const response = await api.post(`/user/send-otp?email=${encodeURIComponent(email)}`, null, {
+    skipAuth: true,
+  });
   return response.data;
 };
 
 export const userVerifyOtp = async (dto) => {
-  const response = await api.post("/user/verify-otp", dto);
+  const response = await api.post("/user/verify-otp", dto, { skipAuth: true });
   return response.data;
 };
 
 export const userResetPassword = async (dto) => {
-  const response = await api.post("/user/reset-password", dto);
+  const response = await api.post("/user/reset-password", dto, { skipAuth: true });
   return response.data;
 };

@@ -2,16 +2,44 @@ import React, { useState } from "react";
 import { FaEnvelope } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { dealerSendOtp } from "../../services/dealerService";
+import { userSendOtp } from "../../services/customerService";
 import AuthPageFrame from "./AuthPageFrame";
+
+const getMessage = (error, fallback) =>
+  error?.response?.data || error?.message || fallback;
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState("USER");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    toast.success("OTP sent to your email");
-    navigate("/verify-otp");
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      toast.error("Please enter your email.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const message =
+        role === "DEALER"
+          ? await dealerSendOtp(trimmedEmail)
+          : await userSendOtp(trimmedEmail);
+
+      sessionStorage.setItem("forgot_email", trimmedEmail);
+      sessionStorage.setItem("forgot_role", role);
+      sessionStorage.removeItem("forgot_otp_verified");
+      toast.success(message || "OTP sent to your email");
+      navigate("/verify-otp");
+    } catch (error) {
+      toast.error(getMessage(error, "Failed to send OTP."));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -21,10 +49,43 @@ const ForgotPassword = () => {
         <p className="auth-simple-subtitle">Enter your email to receive OTP</p>
         <div className="auth-simple-divider" />
 
-        <label className="auth-simple-label first" htmlFor="forgot-email">
+        <div
+          style={{
+            position: "absolute",
+            left: 37,
+            top: 145,
+            width: 340,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 8,
+          }}
+        >
+          {["USER", "DEALER"].map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setRole(item)}
+              style={{
+                height: 34,
+                border: 0,
+                borderRadius: 8,
+                background: role === item ? "#0B2A4A" : "#F4F6F9",
+                color: role === item ? "#FFFFFF" : "#0B2A4A",
+                fontFamily: '"Inter", sans-serif',
+                fontSize: 12,
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              {item === "USER" ? "User" : "Dealer"}
+            </button>
+          ))}
+        </div>
+
+        <label className="auth-simple-label first" htmlFor="forgot-email" style={{ top: 198 }}>
           Email
         </label>
-        <div className="auth-simple-input-wrap first">
+        <div className="auth-simple-input-wrap first" style={{ top: 218 }}>
           <FaEnvelope className="auth-simple-icon" />
           <input
             id="forgot-email"
@@ -33,13 +94,14 @@ const ForgotPassword = () => {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="auth-simple-input"
+            required
           />
         </div>
 
-        <button type="submit" className="auth-simple-submit">
-          Send OTP
+        <button type="submit" className="auth-simple-submit" style={{ top: 295 }} disabled={loading}>
+          {loading ? "Sending..." : "Send OTP"}
         </button>
-        <button type="button" className="auth-simple-link" onClick={() => navigate("/")}>
+        <button type="button" className="auth-simple-link" onClick={() => navigate("/login")}>
           Back to Login
         </button>
       </form>

@@ -38,6 +38,7 @@ import {
   StatCard,
   unwrap,
 } from "./adminShared";
+import Chatbot from "../../components/chatbot/Chatbot";
 
 const emptyBank = {
   bankName: "",
@@ -390,10 +391,29 @@ const Dashboard = () => {
     () => uniqueDocuments([...allDocuments, ...pendingDocs, ...verifiedDocs]),
     [allDocuments, pendingDocs, verifiedDocs]
   );
-  const approvedDocsCount = allKnownDocs.filter((doc) => doc.status === "APPROVED").length;
-  const rejectedDocsCount = allKnownDocs.filter((doc) => doc.status === "REJECTED").length;
-  const effectivePendingDocs = allKnownDocs.filter((doc) => doc.status === "PENDING");
-  const effectiveVerifiedDocs = allKnownDocs.filter((doc) => doc.status === "VERIFIED");
+  const paymentRequestByUserId = useMemo(
+    () =>
+      new Map(
+        readPaymentRequests().map((request) => [
+          String(request.userId),
+          request.status || readPaymentStatus(request.userId),
+        ])
+      ),
+    [paymentVersion]
+  );
+  const adminVisibleDocs = useMemo(
+    () =>
+      allKnownDocs.filter((doc) => {
+        const ownerId = getDocumentOwnerId(doc);
+        const paymentStatus = paymentRequestByUserId.get(String(ownerId));
+        return !paymentStatus || paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED;
+      }),
+    [allKnownDocs, paymentRequestByUserId]
+  );
+  const approvedDocsCount = adminVisibleDocs.filter((doc) => doc.status === "APPROVED").length;
+  const rejectedDocsCount = adminVisibleDocs.filter((doc) => doc.status === "REJECTED").length;
+  const effectivePendingDocs = adminVisibleDocs.filter((doc) => doc.status === "PENDING");
+  const effectiveVerifiedDocs = adminVisibleDocs.filter((doc) => doc.status === "VERIFIED");
   const unreadCount = notifications.filter((item) => !item.read).length;
   const paymentRequests = useMemo(
     () => {
@@ -1034,7 +1054,7 @@ const Dashboard = () => {
           documentTab={documentTab}
           setDocumentTab={setDocumentTab}
           docs={documentTab === "Pending" ? effectivePendingDocs : effectiveVerifiedDocs}
-          allDocs={allKnownDocs}
+          allDocs={adminVisibleDocs}
           users={users}
           remarks={remarks}
           setRemarks={setRemarks}
@@ -1196,6 +1216,9 @@ const Dashboard = () => {
       </main>
 
       {preview && <PreviewModal preview={preview} closePreview={closePreview} />}
+
+      {/* Chatbot mount only; dashboard logic remains unchanged. */}
+      <Chatbot roleOverride="ADMIN" onNavigateSection={setActiveMenu} />
     </div>
   );
 };
