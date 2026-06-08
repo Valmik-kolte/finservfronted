@@ -236,6 +236,29 @@ const getErrorMessage = (error, fallback) =>
   error?.message ||
   fallback;
 
+const normalizeAdminProfile = (profile = {}) => ({
+  ...profile,
+  id: firstPresent(profile.id, profile.adminId),
+  adminId: firstPresent(profile.adminId, profile.id),
+  name: firstPresent(profile.fullName, profile.name, profile.adminName, profile.username),
+  fullName: firstPresent(profile.fullName, profile.name, profile.adminName, profile.username),
+  email: firstPresent(profile.email, profile.username, profile.sub),
+  mobileNumber: firstPresent(
+    profile.mobileNumber,
+    profile.mobile,
+    profile.phoneNumber,
+    profile.phone,
+    profile.contactNumber
+  ),
+  role: firstPresent(profile.role, "ADMIN"),
+});
+
+const getProfileData = (response) => {
+  const data = unwrap(response);
+  if (!data || typeof data !== "object" || Array.isArray(data)) return {};
+  return data.profile || data.admin || data.user || data.data || data;
+};
+
 const readLocalDealerNotifications = () => {
   try {
     return JSON.parse(localStorage.getItem(DEALER_NOTIFICATIONS_KEY) || "[]");
@@ -349,7 +372,7 @@ const markLocalAdminNotificationRead = (notificationId) => {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const admin = useMemo(getAdminSession, []);
+  const [admin, setAdmin] = useState(() => normalizeAdminProfile(getAdminSession()));
   const adminId = admin?.id || 1;
 
   const [sidebarOpen, setSidebarOpen] = useState(() =>
@@ -360,6 +383,7 @@ const Dashboard = () => {
   const [permissionError, setPermissionError] = useState("");
   const [apiWarnings, setApiWarnings] = useState([]);
   const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [dealers, setDealers] = useState([]);
   const [pendingDocs, setPendingDocs] = useState([]);
   const [verifiedDocs, setVerifiedDocs] = useState([]);
@@ -508,8 +532,10 @@ const Dashboard = () => {
         if (usersRes.status === "fulfilled") {
           loadedUsers = mergeUsersById(asList(usersRes.value), readLocalDealerUsers());
           setUsers(loadedUsers);
+          setAllUsers(loadedUsers);
         } else if (usersRes.reason?.response?.status === 403) {
           setUsers([]);
+          setAllUsers([]);
           setPermissionError("Your current token is not authorized for admin data. Please login again with an ADMIN account.");
           return;
         }
@@ -545,6 +571,25 @@ const Dashboard = () => {
     },
     [adminId]
   );
+
+  const fetchAdminProfile = useCallback(async () => {
+    const endpoints = ["/admin/me", "/admin/profile", "/auth/me", "/admin/current"];
+    const results = await Promise.allSettled(endpoints.map((endpoint) => api.get(endpoint)));
+    const fulfilled = results.find((result) => {
+      if (result.status !== "fulfilled") return false;
+      const profile = getProfileData(result.value);
+      return Object.keys(profile).length > 0;
+    });
+
+    if (!fulfilled) return;
+
+    const profile = normalizeAdminProfile(getProfileData(fulfilled.value));
+    setAdmin((prev) => {
+      const next = normalizeAdminProfile({ ...prev, ...profile });
+      localStorage.setItem("adminData", JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const fetchDocumentLists = useCallback(async () => {
     try {
@@ -582,6 +627,10 @@ const Dashboard = () => {
   useEffect(() => {
     fetchAdminData(true);
   }, [fetchAdminData]);
+
+  useEffect(() => {
+    fetchAdminProfile();
+  }, [fetchAdminProfile]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -627,26 +676,27 @@ const Dashboard = () => {
       fetchAdminData(false);
       return;
     }
+    const q = searchName.trim().toLowerCase();
+    const localMatches = readLocalDealerUsers().filter(
+      (user) =>
+        String(user.fullName || user.name || "").toLowerCase().includes(q) ||
+        String(user.email || "").toLowerCase().includes(q) ||
+        String(user.mobileNumber || user.mobile || "").includes(q)
+    );
+    const cachedMatches = allUsers.filter(
+      (user) =>
+        String(user.fullName || user.name || "").toLowerCase().includes(q) ||
+        String(user.email || "").toLowerCase().includes(q) ||
+        String(user.mobileNumber || user.mobile || "").includes(q)
+    );
+
     try {
       const res = await api.get(`/user/search?name=${encodeURIComponent(searchName.trim())}`);
-      const q = searchName.trim().toLowerCase();
-      const localMatches = readLocalDealerUsers().filter(
-        (user) =>
-          String(user.fullName || "").toLowerCase().includes(q) ||
-          String(user.email || "").toLowerCase().includes(q) ||
-          String(user.mobileNumber || "").includes(q)
-      );
-      setUsers(mergeUsersById(asList(res), localMatches));
+      setUsers(mergeUsersById(asList(res), cachedMatches, localMatches));
     } catch (error) {
-      const q = searchName.trim().toLowerCase();
-      const localMatches = readLocalDealerUsers().filter(
-        (user) =>
-          String(user.fullName || "").toLowerCase().includes(q) ||
-          String(user.email || "").toLowerCase().includes(q) ||
-          String(user.mobileNumber || "").includes(q)
-      );
-      if (localMatches.length > 0) {
-        setUsers(localMatches);
+      const fallbackMatches = mergeUsersById(cachedMatches, localMatches);
+      if (fallbackMatches.length > 0) {
+        setUsers(fallbackMatches);
       } else {
         toast.error(error?.response?.data?.message || "User search failed.");
       }

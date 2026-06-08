@@ -1693,6 +1693,8 @@ const SettingsTab = ({
   changePassword,
 }) => {
   const [editing, setEditing] = useState({});
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const updateProfile = (key, value) => setProfile((prev) => ({ ...prev, [key]: value }));
 
   const editableFields = [
@@ -1763,16 +1765,18 @@ const SettingsTab = ({
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <FormField
+          <PasswordField
             label="New Password"
-            type="password"
             value={passwordForm.password}
+            showPassword={showNewPassword}
+            setShowPassword={setShowNewPassword}
             onChange={(value) => setPasswordForm({ ...passwordForm, password: value })}
           />
-          <FormField
+          <PasswordField
             label="Confirm Password"
-            type="password"
             value={passwordForm.confirm}
+            showPassword={showConfirmPassword}
+            setShowPassword={setShowConfirmPassword}
             onChange={(value) => setPasswordForm({ ...passwordForm, confirm: value })}
           />
         </div>

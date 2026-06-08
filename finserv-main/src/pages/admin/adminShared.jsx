@@ -1,5 +1,6 @@
 import React from "react";
 import { FaTimes } from "react-icons/fa";
+import { jwtDecode } from "jwt-decode";
 
 export const DOCUMENT_LABELS = {
   AADHAAR: "Aadhaar",
@@ -33,11 +34,55 @@ export const STATUS_STYLES = {
 
 export const unwrap = (response) => response?.data?.data ?? response?.data ?? [];
 
-export const getAdminSession = () => {
+const safeParse = (key) => {
   try {
-    return JSON.parse(localStorage.getItem("adminData") || "{}");
+    return JSON.parse(localStorage.getItem(key) || "{}");
   } catch {
     return {};
+  }
+};
+
+const firstPresent = (...values) =>
+  values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") || "";
+
+export const getAdminSession = () => {
+  try {
+    const storedAdmin = safeParse("adminData");
+    const storedUser = safeParse("user");
+    const storedUserData = safeParse("userData");
+    const token = localStorage.getItem("token");
+    const decoded = token ? jwtDecode(token) : {};
+    const role = String(firstPresent(storedAdmin.role, decoded.role, localStorage.getItem("role"))).replace(/^ROLE_/, "").toUpperCase();
+
+    const admin = {
+      ...storedUser,
+      ...storedUserData,
+      ...storedAdmin,
+      ...decoded,
+      id: firstPresent(storedAdmin.id, storedAdmin.adminId, decoded.id, decoded.adminId),
+      adminId: firstPresent(storedAdmin.adminId, storedAdmin.id, decoded.adminId, decoded.id),
+      name: firstPresent(storedAdmin.fullName, storedAdmin.name, decoded.fullName, decoded.name, decoded.sub),
+      fullName: firstPresent(storedAdmin.fullName, storedAdmin.name, decoded.fullName, decoded.name),
+      email: firstPresent(storedAdmin.email, decoded.email, decoded.sub, storedUser.email, storedUserData.email),
+      mobileNumber: firstPresent(
+        storedAdmin.mobileNumber,
+        storedAdmin.mobile,
+        storedAdmin.phoneNumber,
+        storedAdmin.phone,
+        storedAdmin.contactNumber,
+        decoded.mobileNumber,
+        decoded.mobile,
+        decoded.phoneNumber,
+        decoded.phone,
+        decoded.contactNumber
+      ),
+      role: role || "ADMIN",
+      token,
+    };
+
+    return admin;
+  } catch {
+    return safeParse("adminData");
   }
 };
 

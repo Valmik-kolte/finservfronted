@@ -53,7 +53,7 @@ const Users = ({
           <input
             value={searchName}
             onChange={(event) => setSearchName(event.target.value)}
-            placeholder="Search by name"
+            placeholder="Search by name, email, or mobile"
             className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none sm:w-64"
           />
           <button

@@ -7,6 +7,7 @@ import {
   FaCheckCircle,
   FaCloudUploadAlt,
   FaEye,
+  FaEyeSlash,
   FaFileAlt,
   FaLock,
   FaPaperPlane,
@@ -2130,64 +2131,71 @@ const SettingsTab = ({
   saveSettings,
   changePassword,
   assignedBank,
-}) => (
-  <div className="max-w-4xl space-y-6">
-    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
-      <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Profile Settings</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <Field
-          label="Full Name"
-          value={settingsForm.fullName}
-          onChange={(value) => setSettingsForm({ ...settingsForm, fullName: value })}
-        />
-        <Field label="Email" value={settingsForm.email} readOnly />
-        <Field label="Mobile" value={settingsForm.mobileNumber} readOnly />
-        <Field
-          label="Assigned Bank"
-          value={assignedBank ? assignedBank.bankName : "Yet to assign"}
-          readOnly
-        />
-      </div>
-      <button
-        onClick={saveSettings}
-        disabled={saving}
-        className="mt-6 bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
-      >
-        Save Changes
-      </button>
-    </div>
+}) => {
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-10 h-10 rounded-2xl bg-[#EAFBF8] text-[#0B2A4A] flex items-center justify-center">
-          <FaLock />
+  return (
+    <div className="max-w-4xl space-y-6">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Profile Settings</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <Field
+            label="Full Name"
+            value={settingsForm.fullName}
+            onChange={(value) => setSettingsForm({ ...settingsForm, fullName: value })}
+          />
+          <Field label="Email" value={settingsForm.email} readOnly />
+          <Field label="Mobile" value={settingsForm.mobileNumber} readOnly />
+          <Field
+            label="Assigned Bank"
+            value={assignedBank ? assignedBank.bankName : "Yet to assign"}
+            readOnly
+          />
         </div>
-        <h2 className="text-xl font-bold text-[#0B2A4A]">Change Password</h2>
+        <button
+          onClick={saveSettings}
+          disabled={saving}
+          className="mt-6 bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
+        >
+          Save Changes
+        </button>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <Field
-          label="New Password"
-          type="password"
-          value={passwordForm.newPassword}
-          onChange={(value) => setPasswordForm({ ...passwordForm, newPassword: value })}
-        />
-        <Field
-          label="Confirm Password"
-          type="password"
-          value={passwordForm.confirmPassword}
-          onChange={(value) => setPasswordForm({ ...passwordForm, confirmPassword: value })}
-        />
+
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-2xl bg-[#EAFBF8] text-[#0B2A4A] flex items-center justify-center">
+            <FaLock />
+          </div>
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Change Password</h2>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <PasswordField
+            label="New Password"
+            showPassword={showNewPassword}
+            setShowPassword={setShowNewPassword}
+            value={passwordForm.newPassword}
+            onChange={(value) => setPasswordForm({ ...passwordForm, newPassword: value })}
+          />
+          <PasswordField
+            label="Confirm Password"
+            showPassword={showConfirmPassword}
+            setShowPassword={setShowConfirmPassword}
+            value={passwordForm.confirmPassword}
+            onChange={(value) => setPasswordForm({ ...passwordForm, confirmPassword: value })}
+          />
+        </div>
+        <button
+          onClick={changePassword}
+          disabled={saving}
+          className="mt-6 bg-[#27D3C3] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
+        >
+          Update Password
+        </button>
       </div>
-      <button
-        onClick={changePassword}
-        disabled={saving}
-        className="mt-6 bg-[#27D3C3] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
-      >
-        Update Password
-      </button>
     </div>
-  </div>
-);
+  );
+};
 
 const Field = ({ label, value, onChange, readOnly = false, type = "text" }) => (
   <label className="block">
@@ -2201,6 +2209,28 @@ const Field = ({ label, value, onChange, readOnly = false, type = "text" }) => (
         readOnly ? "bg-slate-50 text-slate-500" : "bg-white focus:border-[#27D3C3]"
       }`}
     />
+  </label>
+);
+
+const PasswordField = ({ label, value, onChange, showPassword, setShowPassword }) => (
+  <label className="block">
+    <span className="block text-sm font-semibold text-[#0B2A4A] mb-2">{label}</span>
+    <div className="relative">
+      <input
+        type={showPassword ? "text" : "password"}
+        value={value ?? ""}
+        onChange={(event) => onChange?.(event.target.value)}
+        className="w-full rounded-2xl px-4 py-3 pr-12 border border-slate-200 bg-white outline-none focus:border-[#27D3C3]"
+      />
+      <button
+        type="button"
+        onClick={() => setShowPassword((current) => !current)}
+        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0B2A4A]"
+        aria-label={showPassword ? `Hide ${label}` : `Show ${label}`}
+      >
+        {showPassword ? <FaEyeSlash /> : <FaEye />}
+      </button>
+    </div>
   </label>
 );
 

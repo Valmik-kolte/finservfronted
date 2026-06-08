@@ -246,9 +246,24 @@ const Login = () => {
       );
 
       const userObject = {
+        ...body,
         id: id || null,
         name: firstValue(body?.fullName, body?.name, decoded?.fullName, decoded?.name, form.email),
+        fullName: firstValue(body?.fullName, body?.name, decoded?.fullName, decoded?.name, form.email),
         email: firstValue(body?.email, decoded?.email, decoded?.sub, form.email),
+        mobileNumber: firstValue(
+          body?.mobileNumber,
+          body?.mobile,
+          body?.phoneNumber,
+          body?.phone,
+          body?.contactNumber,
+          decoded?.mobileNumber,
+          decoded?.mobile,
+          decoded?.phoneNumber,
+          decoded?.phone,
+          decoded?.contactNumber,
+          null
+        ),
         role,
         dealerId:
           role === "DEALER"

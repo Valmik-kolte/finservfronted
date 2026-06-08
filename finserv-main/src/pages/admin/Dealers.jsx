@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
+import { FaSearch } from "react-icons/fa";
 import { Field, formatDate, Modal, ResponsiveTable } from "./adminShared";
 
 const Dealers = ({
@@ -10,12 +11,43 @@ const Dealers = ({
   setDealerForm,
   updateDealer,
   closeDealer,
-}) => (
-  <>
-    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
-      <div className="mb-5">
-        <h2 className="text-xl font-bold text-[#0B2A4A]">Dealers</h2>
-        <p className="text-sm text-slate-500 mt-1">Review and update registered dealer details.</p>
+}) => {
+  const [searchDealer, setSearchDealer] = useState("");
+  const filteredDealers = useMemo(() => {
+    const query = searchDealer.trim().toLowerCase();
+    if (!query) return dealers;
+
+    return dealers.filter((dealer) =>
+      [
+        dealer.dealerId,
+        dealer.id,
+        dealer.dealerCode,
+        dealer.fullName,
+        dealer.name,
+        dealer.email,
+        dealer.mobileNumber,
+        dealer.mobile,
+      ].some((value) => String(value || "").toLowerCase().includes(query))
+    );
+  }, [dealers, searchDealer]);
+
+  return (
+    <>
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
+        <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-xl font-bold text-[#0B2A4A]">Dealers</h2>
+            <p className="text-sm text-slate-500 mt-1">Review and update registered dealer details.</p>
+          </div>
+          <div className="relative w-full md:w-80">
+            <FaSearch className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              value={searchDealer}
+              onChange={(event) => setSearchDealer(event.target.value)}
+              placeholder="Search by dealer ID or code"
+              className="w-full rounded-2xl border border-slate-200 py-3 pl-11 pr-4 outline-none focus:border-[#27D3C3]"
+            />
+          </div>
       </div>
 
       <ResponsiveTable>
@@ -29,7 +61,7 @@ const Dealers = ({
           </tr>
         </thead>
         <tbody>
-          {dealers.map((dealer) => (
+          {filteredDealers.map((dealer) => (
             <tr key={dealer.dealerId} className="border-t border-slate-100">
               <td className="py-3 px-4">{dealer.dealerId}</td>
               <td className="py-3 px-4 font-semibold">{dealer.dealerCode}</td>
@@ -51,6 +83,11 @@ const Dealers = ({
           ))}
         </tbody>
       </ResponsiveTable>
+      {filteredDealers.length === 0 && (
+        <div className="mt-4 rounded-2xl bg-[#F4F6F9] p-4 text-center text-sm text-slate-500">
+          No dealers found for this search.
+        </div>
+      )}
     </div>
 
     {selectedDealer && dealerForm && (
@@ -97,6 +134,7 @@ const Dealers = ({
       </Modal>
     )}
   </>
-);
+  );
+};
 
 export default Dealers;
