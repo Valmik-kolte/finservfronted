@@ -236,6 +236,12 @@ const getErrorMessage = (error, fallback) =>
   error?.message ||
   fallback;
 
+const formatDocumentType = (type) =>
+  String(type || "Document")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
 const normalizeAdminProfile = (profile = {}) => ({
   ...profile,
   id: firstPresent(profile.id, profile.adminId),
@@ -809,7 +815,10 @@ const Dashboard = () => {
       });
       addLocalCustomerNotification({
         userId: selectedUser.userId,
-        message: `Your application has been forwarded to ${assignedBank?.bankName || "a bank"}. ${approvedCount || "All"} document(s) were approved.`,
+        message:
+          approvedCount > 1
+            ? `All documents approved by admin. Your application has been forwarded to ${assignedBank?.bankName || "a bank"}.`
+            : `Your ${formatDocumentType(docsToApprove[0]?.documentType)} was approved by admin. Your application has been forwarded to ${assignedBank?.bankName || "a bank"}.`,
       });
       if (approvalResult.failed > 0) {
         toast.warning(`Bank assigned, but ${approvalResult.failed} document(s) could not be auto-approved.`);
@@ -883,7 +892,11 @@ const Dashboard = () => {
       await api.put(`/documents/status/${doc.documentId}?status=${status}`);
       const userId = getDocumentOwnerId(doc);
       const user = users.find((item) => String(item.userId) === String(userId));
-      const message = `${doc.documentType || "Document"} marked ${status}.`;
+      const documentName = formatDocumentType(doc.documentType);
+      const message =
+        status === "APPROVED"
+          ? `Your ${documentName} was approved by admin.`
+          : `${documentName} marked ${status}.`;
       addLocalCustomerNotification({ userId, message });
       if (user) {
         const dealer = dealers.find(
