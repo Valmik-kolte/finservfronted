@@ -34,9 +34,9 @@ const features = [
 
 const BrandBlock = () => (
   <div className="brand-group">
-    <img src={logo} alt="FinServ" className="brand-logo" />
+    <img src={logo} alt="Vahan Finserv" className="brand-logo" />
     <div className="brand-copy">
-      <h1 className="brand-name">FinServ</h1>
+      <h1 className="brand-name">Vahan <span>Finserv</span></h1>
       <p className="brand-tagline">Smart Finance, Simplified</p>
     </div>
   </div>
@@ -61,7 +61,7 @@ const FeatureCards = () => (
 );
 
 const LeftMarketingSection = () => (
-  <section className="left-section" aria-label="FinServ car loan intro">
+  <section className="left-section" aria-label="Vahan Finserv car loan intro">
     <BrandBlock />
 
     <h2 className="hero-heading">
@@ -390,6 +390,10 @@ const Login = () => {
           font-weight: 700;
           letter-spacing: -0.5px;
           line-height: 1;
+        }
+
+        .brand-name span {
+          color: #00e0d3;
         }
 
         .brand-tagline {

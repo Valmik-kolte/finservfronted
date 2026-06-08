@@ -1015,9 +1015,11 @@ const DealerDashboard = () => {
       formData.append("type", type);
       formData.append("file", file);
       await api.post("/documents/upload", formData);
-      addLocalAdminNotification(
-        `${user?.fullName || "Dealer customer"} reuploaded ${docLabel(type)}.`
-      );
+      if (readPaymentStatus(userId) === PAYMENT_STATUS.PAYMENT_APPROVED) {
+        addLocalAdminNotification(
+          `${user?.fullName || "Dealer customer"} reuploaded ${docLabel(type)}.`
+        );
+      }
       const freshDocs = await fetchDocsForUsers(userIds);
       setDocs(freshDocs);
       if (selectedUser?.userId === userId) {
@@ -1103,7 +1105,7 @@ const DealerDashboard = () => {
   const title = normalizedMenu === "Users" ? "Users" : normalizedMenu;
 
   return (
-    <div className="flex min-h-screen bg-[#F4F6F9]">
+    <div className="flex min-h-dvh bg-[#F4F6F9]">
       <Sidebar
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}

@@ -25,6 +25,8 @@ body,
 body{
   background:#f5f7fb;
   overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 } 
 
 img,

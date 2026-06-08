@@ -134,7 +134,7 @@ const Chatbot = ({ roleOverride = "", onNavigateSection }) => {
                 ? "Unable to fetch this right now. Please try again."
                 : hasNoData
                   ? "No records found for this action."
-                  : "Here is the latest FinServ data."),
+                  : "Here is the latest Vahan Finserv data."),
             actionKey: item.key,
             data: response?.data,
           }),

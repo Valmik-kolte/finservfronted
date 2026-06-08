@@ -15,7 +15,7 @@ const RefundPolicy = () => (
       <div className="space-y-6 text-gray-700 leading-relaxed">
 
         <p>
-          At Caryanam FinServ, all services related to vehicle loan assistance,
+          At Vahan Finserv, all services related to vehicle loan assistance,
           application processing, and bank offer comparison are strictly non-refundable.
         </p>
 
@@ -40,7 +40,7 @@ const RefundPolicy = () => (
         </p>
 
         <p>
-          Caryanam FinServ reserves the right to update this policy at any time
+          Vahan Finserv reserves the right to update this policy at any time
           without prior notice.
         </p>
 

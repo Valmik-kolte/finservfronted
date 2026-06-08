@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { FaLock } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaLock } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { dealerResetPassword } from "../../services/dealerService";
@@ -12,6 +12,8 @@ const getMessage = (error, fallback) =>
 const ResetPassword = () => {
   const navigate = useNavigate();
   const [form, setForm] = useState({ password: "", confirm: "" });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const email = sessionStorage.getItem("forgot_email") || "";
   const role = sessionStorage.getItem("forgot_role") || "USER";
@@ -67,13 +69,29 @@ const ResetPassword = () => {
           <FaLock className="auth-simple-icon" />
           <input
             id="reset-password"
-            type="password"
+            type={showPassword ? "text" : "password"}
             placeholder="New Password"
             value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })}
             className="auth-simple-input"
             required
           />
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            aria-label={showPassword ? "Hide new password" : "Show new password"}
+            style={{
+              marginRight: 13,
+              border: 0,
+              background: "transparent",
+              color: "#7b8aa8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            {showPassword ? <FaEyeSlash /> : <FaEye />}
+          </button>
         </div>
 
         <label className="auth-simple-label second" htmlFor="reset-confirm-password">
@@ -83,13 +101,29 @@ const ResetPassword = () => {
           <FaLock className="auth-simple-icon" />
           <input
             id="reset-confirm-password"
-            type="password"
+            type={showConfirm ? "text" : "password"}
             placeholder="Confirm Password"
             value={form.confirm}
             onChange={(e) => setForm({ ...form, confirm: e.target.value })}
             className="auth-simple-input"
             required
           />
+          <button
+            type="button"
+            onClick={() => setShowConfirm((prev) => !prev)}
+            aria-label={showConfirm ? "Hide confirm password" : "Show confirm password"}
+            style={{
+              marginRight: 13,
+              border: 0,
+              background: "transparent",
+              color: "#7b8aa8",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            {showConfirm ? <FaEyeSlash /> : <FaEye />}
+          </button>
         </div>
 
         <button type="submit" className="auth-simple-submit two-fields" disabled={loading}>

@@ -131,6 +131,10 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         line-height: 1;
       }
 
+      .auth-brand-name span {
+        color: #00e0d3;
+      }
+
       .auth-tagline {
         margin: 7px 0 0;
         color: #8fa3c7;
@@ -591,11 +595,11 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
     <div className="auth-stage" style={{ "--auth-bg": `url(${heroImage})` }}>
       <div className="auth-bg" />
 
-      <section className="auth-left" aria-label="FinServ car loan intro">
+      <section className="auth-left" aria-label="Vahan Finserv car loan intro">
         <div className="auth-brand">
-          <img src={logo} alt="FinServ" className="auth-logo" />
+          <img src={logo} alt="Vahan Finserv" className="auth-logo" />
           <div className="auth-brand-copy">
-            <h1 className="auth-brand-name">FinServ</h1>
+            <h1 className="auth-brand-name">Vahan <span>Finserv</span></h1>
             <p className="auth-tagline">Smart Finance, Simplified</p>
           </div>
         </div>

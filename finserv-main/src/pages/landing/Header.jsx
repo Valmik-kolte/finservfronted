@@ -50,11 +50,11 @@ const Header = () => {
         <div className="flex h-[72px] items-center justify-between gap-4">
           <Link to="/" className="flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center sm:h-12 sm:w-12">
-              <img src={logo} alt="Caryanam FinServ Logo" className="h-full w-full rounded-full object-contain" />
+              <img src={logo} alt="Vahan Finserv Logo" className="h-full w-full rounded-full object-contain" />
             </div>
             <div className="min-w-0">
               <h1 className="truncate text-xl font-bold leading-none text-white sm:text-2xl">
-                Caryanam <span className="text-[#1ECFC3]">FinServ</span>
+                Vahan <span className="text-[#1ECFC3]">Finserv</span>
               </h1>
             </div>
           </Link>

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { FaRobot, FaTimes } from "react-icons/fa";
+import { FaTimes } from "react-icons/fa";
+import chatboxIcon from "../../assets/chatbox.png";
 
 const SENSITIVE_KEYS = new Set([
   "password",
@@ -182,7 +183,7 @@ const MessageBubble = ({ message, role, onNavigateSection }) => {
   );
 };
 
-// Chat window for role-aware FinServ quick actions and structured assistant responses.
+// Chat window for role-aware Vahan Finserv quick actions and structured assistant responses.
 const ChatbotWindow = ({
   role,
   messages,
@@ -202,11 +203,11 @@ const ChatbotWindow = ({
     <section className="fixed bottom-20 left-3 right-3 z-[35] max-h-[75vh] overflow-hidden rounded-3xl bg-white shadow-2xl sm:bottom-[90px] sm:left-auto sm:right-6 sm:w-[400px] sm:max-h-[70vh]">
       <div className="flex items-center justify-between gap-3 bg-[#0B2A4A] px-4 py-4 text-white">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#27D3C3] text-[#0B2A4A]">
-            <FaRobot />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#27D3C3] text-[#0B2A4A]">
+            <img src={chatboxIcon} alt="" className="h-full w-full object-cover" />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate text-base font-black">FinServ Assistant</h2>
+            <h2 className="truncate text-base font-black">Vahan Finserv Assistant</h2>
             <span className="mt-1 inline-flex rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-[#27D3C3]">
               {role || "SESSION"}
             </span>
@@ -216,7 +217,7 @@ const ChatbotWindow = ({
           type="button"
           onClick={onClose}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"
-          aria-label="Close FinServ assistant"
+          aria-label="Close Vahan Finserv assistant"
         >
           <FaTimes />
         </button>
@@ -241,7 +242,7 @@ const ChatbotWindow = ({
           {loading && (
             <div className="flex justify-start">
               <div className="rounded-3xl rounded-bl-md bg-[#F4F6F9] px-4 py-3 text-sm text-slate-600">
-                Fetching latest FinServ data...
+                Fetching latest Vahan Finserv data...
               </div>
             </div>
           )}

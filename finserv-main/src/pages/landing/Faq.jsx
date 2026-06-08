@@ -16,7 +16,7 @@ const faqItems = [
   {
     question: "Can I compare multiple bank offers?",
     answer:
-      "Yes. Caryanam FinServ lets you compare interest rates, EMI estimates, and loan terms from multiple banks so you can choose the best option.",
+      "Yes. Vahan Finserv lets you compare interest rates, EMI estimates, and loan terms from multiple banks so you can choose the best option.",
   },
   {
     question: "Is there any charge for using the platform?",

@@ -6,7 +6,7 @@ const AuthLayout = () => (
     <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-[#0a2540] via-[#0b2a4a] to-[#081f36] text-white px-10 lg:px-20 py-12 lg:py-20 flex-col justify-between">
       <div>
         <h1 className="text-4xl lg:text-5xl font-bold leading-tight mb-6">
-          Caryanam <br /> FinServ
+          Vahan <br /> Finserv
         </h1>
         <p className="text-gray-300">Auto Finance Platform</p>
       </div>

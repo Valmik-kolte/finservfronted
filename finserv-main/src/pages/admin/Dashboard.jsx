@@ -374,6 +374,7 @@ const Dashboard = () => {
   const [assignBankId, setAssignBankId] = useState("");
   const [assigningBank, setAssigningBank] = useState(false);
   const [selectedDealer, setSelectedDealer] = useState(null);
+  const [dealerMode, setDealerMode] = useState("view");
   const [dealerForm, setDealerForm] = useState(null);
   const [documentTab, setDocumentTab] = useState("Pending");
   const [remarks, setRemarks] = useState({});
@@ -748,16 +749,17 @@ const Dashboard = () => {
           contactNumber: assignedBank?.contactNumber || "",
         })
       );
+      const approvedCount = approvalResult.approved || docsToApprove.filter((doc) => doc.status !== "APPROVED").length;
       addLocalDealerNotification({
         dealerId: selectedDealer?.dealerId || selectedDealer?.id || selectedUser.dealerId || selectedUser.assignedDealerId,
         dealerCode: selectedDealer?.dealerCode || selectedUser.dealerCode,
         message: `${selectedUser.fullName || "Customer"} has been assigned to ${
           assignedBank?.bankName || "a bank"
-        }. Documents were approved by admin.`,
+        }. ${approvedCount || "All"} document(s) were approved by admin.`,
       });
       addLocalCustomerNotification({
         userId: selectedUser.userId,
-        message: `Your application has been forwarded to ${assignedBank?.bankName || "a bank"}. Your documents are approved.`,
+        message: `Your application has been forwarded to ${assignedBank?.bankName || "a bank"}. ${approvedCount || "All"} document(s) were approved.`,
       });
       if (approvalResult.failed > 0) {
         toast.warning(`Bank assigned, but ${approvalResult.failed} document(s) could not be auto-approved.`);
@@ -805,7 +807,8 @@ const Dashboard = () => {
     }
   };
 
-  const openDealer = (dealer) => {
+  const openDealer = (dealer, mode = "view") => {
+    setDealerMode(mode);
     setSelectedDealer(dealer);
     setDealerForm({
       fullName: dealer.fullName || "",
@@ -1039,6 +1042,7 @@ const Dashboard = () => {
         <Dealers
           dealers={dealers}
           openDealer={openDealer}
+          dealerMode={dealerMode}
           selectedDealer={selectedDealer}
           dealerForm={dealerForm}
           setDealerForm={setDealerForm}
@@ -1129,7 +1133,7 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-[#F4F6F9] text-slate-800">
+    <div className="flex min-h-dvh bg-[#F4F6F9] text-slate-800">
       <Sidebar
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
@@ -1146,7 +1150,7 @@ const Dashboard = () => {
         />
       )}
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-y-visible md:overflow-y-auto">
         <div className="bg-white px-4 md:px-8 py-4 md:py-5 shadow-sm flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <button

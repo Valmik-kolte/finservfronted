@@ -8,7 +8,7 @@ const PrivacyPolicy = () => (
   <div className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20 max-w-5xl mx-auto space-y-8">
     <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A]">Privacy Policy</h1>
     <p className="text-gray-600 leading-relaxed">
-      At Caryanam FinServ, we respect your privacy and are committed to protecting your personal information.
+      At Vahan Finserv, we respect your privacy and are committed to protecting your personal information.
       This policy explains how we collect, use, and safeguard the data you share with us.
     </p>
 

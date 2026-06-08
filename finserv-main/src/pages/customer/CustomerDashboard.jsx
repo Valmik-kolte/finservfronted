@@ -772,7 +772,7 @@ const CustomerDashboard = () => {
         }
       }
       await api.post("/documents/upload", formData);
-      if (existingDocumentId) {
+      if (existingDocumentId && paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED) {
         addLocalAdminNotification(
           `${profile.fullName || "Customer"} ${wasRejected ? "reuploaded" : "replaced"} ${
             DOCUMENT_LABELS[type] || type
@@ -983,6 +983,7 @@ const CustomerDashboard = () => {
     });
     setQrPaymentOpen(false);
     setActiveMenu("Status");
+    addLocalAdminNotification(`${profile.fullName || "Customer"} has submitted documents for payment verification.`);
     toast.success("Payment verification request sent to admin.");
   };
 
@@ -991,7 +992,7 @@ const CustomerDashboard = () => {
   const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
-    <div className="min-h-screen bg-[#F4F6F9] flex text-slate-800">
+    <div className="min-h-dvh bg-[#F4F6F9] flex text-slate-800">
       <Sidebar
         sidebarOpen={sidebarOpen}
         setSidebarOpen={setSidebarOpen}
@@ -1008,7 +1009,7 @@ const CustomerDashboard = () => {
         />
       )}
 
-      <main className="min-w-0 flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-y-visible md:overflow-y-auto">
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
           <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">

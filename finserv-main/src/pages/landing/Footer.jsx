@@ -10,10 +10,10 @@ const Footer = () => {
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <div className="flex h-11 w-11 items-center justify-center">
-                  <img src={logo} alt="Caryanam FinServ Logo" className="h-full w-full rounded-full object-contain" />
+                  <img src={logo} alt="Vahan Finserv Logo" className="h-full w-full rounded-full object-contain" />
                 </div>
               <h1 className="text-xl font-bold leading-none text-white">
-                Caryanam <span className="text-[#1ECFC3]">FinServ</span>
+                Vahan <span className="text-[#1ECFC3]">Finserv</span>
               </h1>              
               
               </div>
@@ -49,7 +49,7 @@ const Footer = () => {
             <div>
               <h2 className="font-bold mb-4">Contact Us</h2>
               <ul className="space-y-2 text-sm text-gray-300">
-                <li>✉️ support@caryanamfinserv.com</li>
+                <li>✉️ support@vahanfinserv.com</li>
                 <li>📞 +91 9876746436</li>
                 <li>📍 Pune, Maharashtra, India - 411001</li>
               </ul>
@@ -57,7 +57,7 @@ const Footer = () => {
           </div>
 
           <div className="border-t border-gray-700 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
-            <p>&copy; 2026 Caryanam FinServ. All rights reserved.</p>
+            <p>&copy; 2026 Vahan Finserv. All rights reserved.</p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link to="/privacy-policy" className="hover:text-[#27D3C3]">Privacy Policy</Link>
               <Link to="/terms-and-conditions" className="hover:text-[#27D3C3]">Terms & Conditions</Link>

@@ -9,7 +9,7 @@ const TermsCondition = () => (
     <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A]">Terms and Conditions</h1>
 
     <p className="text-gray-600 leading-relaxed">
-      Welcome to Caryanam FinServ. By using our website and applying for a vehicle loan, you agree to comply with these terms and conditions.
+      Welcome to Vahan Finserv. By using our website and applying for a vehicle loan, you agree to comply with these terms and conditions.
       These terms explain your responsibilities, eligibility requirements, and important legal disclosures.
     </p>
 
@@ -24,7 +24,7 @@ const TermsCondition = () => (
     <section className="space-y-4">
       <h2 className="text-xl sm:text-2xl font-semibold text-[#0B2A4A]">Application Process</h2>
       <p className="text-gray-600 leading-relaxed">
-        Caryanam FinServ helps you compare loan offers from our partner banks. We are not a lender. Loan approval, final interest
+        Vahan Finserv helps you compare loan offers from our partner banks. We are not a lender. Loan approval, final interest
         rates, and loan terms are determined by the chosen bank after document verification.
       </p>
       <ul className="list-disc list-inside text-gray-600 space-y-2">
@@ -45,7 +45,7 @@ const TermsCondition = () => (
     <section className="space-y-4">
       <h2 className="text-xl sm:text-2xl font-semibold text-[#0B2A4A]">Responsibility</h2>
       <p className="text-gray-600 leading-relaxed">
-        Caryanam FinServ provides a comparison platform only. We do not provide credit directly. We are not liable for the final
+        Vahan Finserv provides a comparison platform only. We do not provide credit directly. We are not liable for the final
         decision of partner banks, nor for any loan terms offered after approval.
       </p>
     </section>

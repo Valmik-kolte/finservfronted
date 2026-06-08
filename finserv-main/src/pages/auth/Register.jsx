@@ -214,6 +214,10 @@ const Register = ({ defaultRole }) => {
           line-height: 1;
         }
 
+        .register-brand-name span {
+          color: #00e0d3;
+        }
+
         .register-tagline {
           margin: 7px 0 0;
           color: #8fa3c7;
@@ -715,11 +719,11 @@ const Register = ({ defaultRole }) => {
       <div className="register-stage" style={{ "--register-bg": `url(${heroImage})` }}>
         <div className="register-bg" />
 
-        <section className="register-left" aria-label="FinServ car loan intro">
+        <section className="register-left" aria-label="Vahan Finserv car loan intro">
           <div className="register-brand">
-            <img src={logo} alt="FinServ" className="register-logo" />
+            <img src={logo} alt="Vahan Finserv" className="register-logo" />
             <div className="register-brand-copy">
-              <h1 className="register-brand-name">FinServ</h1>
+              <h1 className="register-brand-name">Vahan <span>Finserv</span></h1>
               <p className="register-tagline">Smart Finance, Simplified</p>
             </div>
           </div>

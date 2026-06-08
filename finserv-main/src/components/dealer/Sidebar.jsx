@@ -8,7 +8,7 @@ import {
   FaCog,
   FaSignOutAlt,
   FaBars,
-  FaCar,
+  FaCarSide,
 } from "react-icons/fa";
 
 const menuItems = [
@@ -63,13 +63,13 @@ const Sidebar = ({
               sidebarOpen ? "h-14 w-14 text-2xl" : "h-12 w-12 text-xl"
             }`}
           >
-            <FaCar />
+            <FaCarSide />
           </span>
 
           {sidebarOpen && (
             <div className="min-w-0">
-              <h1 className="truncate text-2xl font-bold">Caryanam</h1>
-              <p className="text-sm text-gray-300">FinServ</p>
+              <h1 className="truncate text-2xl font-bold">Vahan</h1>
+              <p className="text-sm text-gray-300">Finserv</p>
             </div>
           )}
         </button>
