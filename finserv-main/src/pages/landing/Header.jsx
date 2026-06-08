@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { FaBars, FaTimes } from "react-icons/fa";
-import logo from "../../assets/logo2.png";
+import logo from "../../assets/vahan-logo.jpg";
 const navLinks = [
   { label: "Home", href: "/#top", id: "top" },
   { label: "Our Banks", href: "/#our-banks", id: "our-banks" },

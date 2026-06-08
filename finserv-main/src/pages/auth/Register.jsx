@@ -15,7 +15,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { registerUser } from "../../services/customerService.js";
 import { registerDealer } from "../../services/dealerService.js";
-import logo from "../../assets/logo3.png";
+import logo from "../../assets/vahan-logo.jpg";
 import heroImage from "../../assets/finserv-login-hero.png";
 
 const bullet = "\u2022";

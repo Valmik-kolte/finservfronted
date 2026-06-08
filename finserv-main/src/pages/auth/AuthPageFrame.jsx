@@ -4,7 +4,7 @@ import {
   FaClipboardCheck,
   FaShieldAlt,
 } from "react-icons/fa";
-import logo from "../../assets/logo3.png";
+import logo from "../../assets/vahan-logo.jpg";
 import heroImage from "../../assets/finserv-login-hero.png";
 
 const bullet = "\u2022";

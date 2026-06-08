@@ -13,14 +13,12 @@ import {
   FaFileAlt,
   FaLock,
   FaRedo,
-  FaRupeeSign,
   FaTimes,
   FaUpload,
   FaUsers,
 } from "react-icons/fa";
 import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
-import qrCode from "../../assets/upi_1780494820795.png";
 import {
   getDealerDashboardSummary,
   getDealerNotifications,
@@ -31,15 +29,6 @@ import {
   markDealerNotificationRead,
 } from "../../services/dealerDashboardService";
 import Chatbot from "../../components/chatbot/Chatbot";
-import {
-  READY2DRIVE_BASE_AMOUNT,
-  READY2DRIVE_FEE_LABEL,
-  READY2DRIVE_GST_AMOUNT,
-  READY2DRIVE_GST_LABEL,
-  READY2DRIVE_GST_PERCENT,
-  READY2DRIVE_TOTAL_AMOUNT,
-  formatINR,
-} from "../../constants/payment";
 
 const DOCUMENT_TYPES = {
   AADHAAR: "Aadhaar",
@@ -105,7 +94,6 @@ const initialPersonalForm = {
   fullName: "",
   email: "",
   mobileNumber: "",
-  password: "",
   address: "",
   city: "",
   state: "",
@@ -145,62 +133,6 @@ const DEALER_NOTIFICATIONS_KEY = "dealer_assignment_notifications";
 const DEALER_REGISTERED_USERS_KEY = "dealer_registered_users";
 const DEALER_REGISTERED_PERSONAL_INFO_KEY = "dealer_registered_personal_info";
 const ADMIN_NOTIFICATIONS_KEY = "admin_activity_notifications";
-const PAYMENT_REQUESTS_KEY = "customer_payment_requests";
-
-const PAYMENT_STATUS = {
-  PAYMENT_PENDING: "PAYMENT_PENDING",
-  PAYMENT_VERIFICATION_PENDING: "PAYMENT_VERIFICATION_PENDING",
-  PAYMENT_APPROVED: "PAYMENT_APPROVED",
-};
-
-const getPaymentStorageKey = (userId) => `customer_payment_status_${userId || "guest"}`;
-
-const writePaymentStatus = (userId, status) => {
-  if (!userId) return;
-  localStorage.setItem(getPaymentStorageKey(userId), status);
-};
-
-const readPaymentStatus = (userId) =>
-  localStorage.getItem(getPaymentStorageKey(userId)) || PAYMENT_STATUS.PAYMENT_PENDING;
-
-const readPaymentRequests = () => {
-  try {
-    return JSON.parse(localStorage.getItem(PAYMENT_REQUESTS_KEY) || "[]");
-  } catch {
-    return [];
-  }
-};
-
-const upsertDealerPaymentRequest = ({ userId, status, profile, dealerProfile, personalInfo, documents }) => {
-  if (!userId) return;
-  const requests = readPaymentRequests();
-  const nextRequest = {
-    userId,
-    status,
-    source: "DEALER",
-    dealerId: dealerProfile?.dealerId || dealerProfile?.id || "",
-    dealerCode: dealerProfile?.dealerCode || "",
-    fullName: profile?.fullName || "Customer",
-    email: profile?.email || "",
-    mobileNumber: profile?.mobileNumber || "",
-    loanAmount: personalInfo?.loanAmount || "",
-    feeName: READY2DRIVE_FEE_LABEL,
-    feeBaseAmount: READY2DRIVE_BASE_AMOUNT,
-    gstRatePercent: READY2DRIVE_GST_PERCENT,
-    gstAmount: READY2DRIVE_GST_AMOUNT,
-    payableAmount: READY2DRIVE_TOTAL_AMOUNT,
-    documentCount: documents?.length || 0,
-    documents: documents || [],
-    updatedAt: new Date().toISOString(),
-  };
-  const exists = requests.some((request) => String(request.userId) === String(userId));
-  const nextRequests = exists
-    ? requests.map((request) =>
-        String(request.userId) === String(userId) ? { ...request, ...nextRequest } : request
-      )
-    : [nextRequest, ...requests];
-  localStorage.setItem(PAYMENT_REQUESTS_KEY, JSON.stringify(nextRequests));
-};
 
 const readLocalDealerNotifications = () => {
   try {
@@ -433,9 +365,6 @@ const DealerDashboard = () => {
   const [savingWizard, setSavingWizard] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
-  const [paymentPromptUser, setPaymentPromptUser] = useState(null);
-  const [qrPaymentUser, setQrPaymentUser] = useState(null);
-  const [qrImageError, setQrImageError] = useState(false);
   const pollRef = useRef(null);
 
   const userIds = useMemo(() => users.map((u) => u.userId), [users]);
@@ -836,7 +765,6 @@ const DealerDashboard = () => {
       personalForm.fullName,
       personalForm.email,
       personalForm.mobileNumber,
-      personalForm.password,
       personalForm.address,
       personalForm.city,
       personalForm.state,
@@ -854,6 +782,10 @@ const DealerDashboard = () => {
     }
     if (!/^\d{6}$/.test(String(personalForm.pincode))) {
       toast.error("Pincode must be 6 digits");
+      return false;
+    }
+    if (Number(personalForm.loanAmount) <= 0) {
+      toast.error("Loan amount must be greater than 0");
       return false;
     }
     return validateFiles();
@@ -878,7 +810,7 @@ const DealerDashboard = () => {
         fullName: personalForm.fullName,
         email: personalForm.email,
         mobileNumber: personalForm.mobileNumber,
-        password: personalForm.password,
+        password: `${personalForm.mobileNumber}@Vahan`,
         registrationType: "DEALER",
         dealerCode: profile.dealerCode,
         dealerId: profile.dealerId,
@@ -894,8 +826,8 @@ const DealerDashboard = () => {
         registrationType: "DEALER",
         dealerCode: profile.dealerCode,
         dealerId: profile.dealerId,
-        paymentDone: false,
-        paymentStatus: "PAYMENT_PENDING",
+        paymentDone: true,
+        paymentStatus: "SUBMITTED_TO_ADMIN",
       });
 
       await api.post("/personal-info/save", {
@@ -941,30 +873,14 @@ const DealerDashboard = () => {
         dealerCode: profile.dealerCode,
         dealerId: profile.dealerId,
       };
-      const requestPersonalInfo = {
-        loanAmount: Number(personalForm.loanAmount),
-      };
-      writePaymentStatus(newUserId, PAYMENT_STATUS.PAYMENT_PENDING);
-      upsertDealerPaymentRequest({
-        userId: Number(newUserId),
-        status: PAYMENT_STATUS.PAYMENT_PENDING,
-        profile: requestProfile,
-        dealerProfile: profile,
-        personalInfo: requestPersonalInfo,
-        documents: uploadedDocuments.map((doc) => ({
-          ...doc,
-          userId: doc?.userId || Number(newUserId),
-          status: doc?.status || "PENDING",
-        })),
-      });
+      addLocalAdminNotification(
+        `${profile.fullName || "Dealer"} submitted documents for ${
+          requestProfile.fullName || "a customer"
+        }.`
+      );
       await loadDashboard();
       setActiveMenu("Dashboard");
-      setPaymentPromptUser({
-        ...requestProfile,
-        loanAmount: requestPersonalInfo.loanAmount,
-        documents: uploadedDocuments,
-      });
-      toast.success("Application saved. Complete Ready2Drive payment to send it to admin.");
+      toast.success("Application and documents submitted to admin.");
       return true;
     } catch (error) {
       showError(error, "Failed to submit loan registration");
@@ -972,32 +888,6 @@ const DealerDashboard = () => {
     } finally {
       setSavingWizard(false);
     }
-  };
-
-  const openDealerQrPayment = () => {
-    setQrImageError(false);
-    setQrPaymentUser(paymentPromptUser);
-    setPaymentPromptUser(null);
-  };
-
-  const verifyDealerPayment = () => {
-    if (!qrPaymentUser?.userId) return;
-    writePaymentStatus(qrPaymentUser.userId, PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING);
-    upsertDealerPaymentRequest({
-      userId: qrPaymentUser.userId,
-      status: PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING,
-      profile: qrPaymentUser,
-      dealerProfile: profile,
-      personalInfo: { loanAmount: qrPaymentUser.loanAmount },
-      documents: qrPaymentUser.documents || [],
-    });
-    addLocalAdminNotification(
-      `${profile.fullName || "Dealer"} submitted Ready2Drive payment verification for ${
-        qrPaymentUser.fullName || "a customer"
-      }.`
-    );
-    setQrPaymentUser(null);
-    toast.success("Payment verification request sent to admin.");
   };
 
   const reuploadDoc = async (userId, type, file) => {
@@ -1015,11 +905,9 @@ const DealerDashboard = () => {
       formData.append("type", type);
       formData.append("file", file);
       await api.post("/documents/upload", formData);
-      if (readPaymentStatus(userId) === PAYMENT_STATUS.PAYMENT_APPROVED) {
-        addLocalAdminNotification(
-          `${user?.fullName || "Dealer customer"} reuploaded ${docLabel(type)}.`
-        );
-      }
+      addLocalAdminNotification(
+        `${user?.fullName || "Dealer customer"} reuploaded ${docLabel(type)}.`
+      );
       const freshDocs = await fetchDocsForUsers(userIds);
       setDocs(freshDocs);
       if (selectedUser?.userId === userId) {
@@ -1078,22 +966,6 @@ const DealerDashboard = () => {
     } catch (error) {
       showError(error, "Failed to change password");
     }
-  };
-
-  const openPaymentForUser = (user) => {
-    const userId = user?.userId || user?.id;
-    if (!userId) return;
-    const request = readPaymentRequests().find((item) => String(item.userId) === String(userId));
-    const info = personalInfoFor(userId) || {};
-    const userDocs = docs.filter((doc) => String(doc.userId) === String(userId));
-    setPaymentPromptUser({
-      userId,
-      fullName: user.fullName || request?.fullName || "Customer",
-      email: user.email || request?.email || "",
-      mobileNumber: user.mobileNumber || request?.mobileNumber || "",
-      loanAmount: info.loanAmount || request?.loanAmount || "",
-      documents: request?.documents || userDocs,
-    });
   };
 
   const sortedStatusUsers = useMemo(() => {
@@ -1206,7 +1078,6 @@ const DealerDashboard = () => {
                   openNewCustomer={openWizard}
                   openUserModal={openUserModal}
                   openTrackingModal={openTrackingModal}
-                  openPaymentForUser={openPaymentForUser}
                 />
               )}
 
@@ -1215,7 +1086,6 @@ const DealerDashboard = () => {
                   users={users}
                   openUserModal={openUserModal}
                   openTrackingModal={openTrackingModal}
-                  openPaymentForUser={openPaymentForUser}
                 />
               )}
 
@@ -1293,144 +1163,11 @@ const DealerDashboard = () => {
         </Modal>
       )}
 
-      {paymentPromptUser && (
-        <DealerPaymentPromptModal
-          customer={paymentPromptUser}
-          onClose={() => setPaymentPromptUser(null)}
-          onPayNow={openDealerQrPayment}
-        />
-      )}
-
-      {qrPaymentUser && (
-        <DealerQrPaymentModal
-          customer={qrPaymentUser}
-          qrImageError={qrImageError}
-          setQrImageError={setQrImageError}
-          onClose={() => setQrPaymentUser(null)}
-          onVerifyPayment={verifyDealerPayment}
-        />
-      )}
-
       {/* Chatbot mount only; dashboard logic remains unchanged. */}
       <Chatbot roleOverride="DEALER" onNavigateSection={setActiveMenu} />
     </div>
   );
 };
-
-const DealerPaymentPromptModal = ({ customer, onClose, onPayNow }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-    <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl sm:p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-[#0B2A4A]">Ready2Drive Payment</h2>
-          <p className="mt-2 text-sm font-semibold text-amber-700">
-            Pay for {customer?.fullName || "this customer"} to send documents for admin review.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F4F6F9] text-[#0B2A4A]"
-          aria-label="Close payment prompt"
-        >
-          <FaTimes />
-        </button>
-      </div>
-
-      <PaymentBreakdown />
-
-      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-        <button
-          type="button"
-          onClick={onPayNow}
-          className="flex-1 rounded-2xl bg-[#0B2A4A] px-5 py-3 font-bold text-white"
-        >
-          Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
-        </button>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex-1 rounded-2xl bg-[#F4F6F9] px-5 py-3 font-bold text-[#0B2A4A]"
-        >
-          Later
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
-const DealerQrPaymentModal = ({
-  customer,
-  qrImageError,
-  setQrImageError,
-  onClose,
-  onVerifyPayment,
-}) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-    <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl sm:p-6">
-      <div className="mb-5 flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-black text-[#0B2A4A]">Ready2Drive Payment</h2>
-          <p className="mt-1 text-sm text-slate-500">{customer?.fullName || "Customer"}</p>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F4F6F9] text-[#0B2A4A]"
-          aria-label="Close QR payment"
-        >
-          <FaTimes />
-        </button>
-      </div>
-
-      <PaymentBreakdown compact />
-
-      <div className="mt-4 flex min-h-[220px] items-center justify-center rounded-2xl border border-slate-100 bg-[#F4F6F9] p-4 sm:min-h-[260px] sm:p-5">
-        {qrImageError ? (
-          <div className="text-center">
-            <p className="text-sm font-bold text-[#0B2A4A]">QR image placeholder</p>
-            <p className="mt-2 text-xs text-slate-500">Add your QR image in src/assets.</p>
-          </div>
-        ) : (
-          <img
-            src={qrCode}
-            alt="Ready2Drive payment QR code"
-            onError={() => setQrImageError(true)}
-            className="max-h-60 w-full object-contain"
-          />
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={onVerifyPayment}
-        className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-[#27D3C3] px-5 py-3 font-black text-[#0B2A4A]"
-      >
-        <FaRupeeSign />
-        Verify Payment of {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
-      </button>
-    </div>
-  </div>
-);
-
-const PaymentBreakdown = () => (
-  <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 p-4">
-    <div className="flex items-center justify-between text-sm">
-      <span className="font-semibold text-amber-800">Ready2Drive fee</span>
-      <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_BASE_AMOUNT)}</span>
-    </div>
-    <div className="mt-2 flex items-center justify-between text-sm">
-      <span className="font-semibold text-amber-800">{READY2DRIVE_GST_LABEL}</span>
-      <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_GST_AMOUNT)}</span>
-    </div>
-    <div className="mt-3 flex items-center justify-between border-t border-amber-200 pt-3">
-      <span className="text-sm font-bold text-[#0B2A4A]">Total payable</span>
-      <span className="text-xl font-black text-[#0B2A4A]">
-        {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
-      </span>
-    </div>
-  </div>
-);
 
 const DashboardTab = ({
   stats,
@@ -1442,7 +1179,6 @@ const DashboardTab = ({
   openNewCustomer,
   openUserModal,
   openTrackingModal,
-  openPaymentForUser,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
   const recentUsers = [...users]
@@ -1534,7 +1270,6 @@ const DashboardTab = ({
             users={recentUsers}
             openUserModal={openUserModal}
             openTrackingModal={openTrackingModal}
-            openPaymentForUser={openPaymentForUser}
           />
         </section>
 
@@ -1595,37 +1330,16 @@ const SimpleListOverlay = ({ title, items, onClose }) => (
 
 const SectionTitle = ({ title }) => <h2 className="mb-4 text-lg font-black text-[#0B2A4A]">{title}</h2>;
 
-const paymentStatusLabel = (status) => {
-  if (status === PAYMENT_STATUS.PAYMENT_APPROVED) return "Admin Review Active";
-  if (status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING) return "Payment Verification Pending";
-  return "Ready2Drive Payment Pending";
-};
-
-const paymentStatusStyle = (status) => {
-  if (status === PAYMENT_STATUS.PAYMENT_APPROVED) return "bg-emerald-50 text-emerald-700 border-emerald-200";
-  if (status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING) return "bg-sky-50 text-sky-700 border-sky-200";
-  return "bg-amber-50 text-amber-700 border-amber-200";
-};
-
-const PaymentStatusPill = ({ userId }) => {
-  const status = readPaymentStatus(userId);
-  return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${paymentStatusStyle(status)}`}>
-      {paymentStatusLabel(status)}
-    </span>
-  );
-};
-
-const UserTable = ({ users, openUserModal, openTrackingModal, openPaymentForUser }) => (
+const UserTable = ({ users, openUserModal, openTrackingModal }) => (
   <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[920px] text-left">
+      <table className="w-full min-w-[820px] text-left">
         <thead className="bg-[#0B2A4A] text-sm text-white">
           <tr>
             <th className="px-5 py-4">Name</th>
             <th className="px-5 py-4">Email</th>
             <th className="px-5 py-4">Mobile</th>
-            <th className="px-5 py-4">Ready2Drive Status</th>
+            <th className="px-5 py-4">Submission</th>
             <th className="px-5 py-4">Registered Date</th>
             {openUserModal && <th className="px-5 py-4">Action</th>}
           </tr>
@@ -1636,18 +1350,14 @@ const UserTable = ({ users, openUserModal, openTrackingModal, openPaymentForUser
               <td className="px-5 py-4 font-bold text-[#0B2A4A]">{user.fullName || "-"}</td>
               <td className="px-5 py-4 text-gray-600">{user.email || "-"}</td>
               <td className="px-5 py-4 text-gray-600">{user.mobileNumber || "-"}</td>
-              <td className="px-5 py-4"><PaymentStatusPill userId={user.userId} /></td>
+              <td className="px-5 py-4">
+                <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
+                  Sent to Admin
+                </span>
+              </td>
               <td className="px-5 py-4 text-gray-600">{formatDate(user.createdAt)}</td>
               {openUserModal && (
                 <td className="px-5 py-4 flex gap-2">
-                  {readPaymentStatus(user.userId) === PAYMENT_STATUS.PAYMENT_PENDING && openPaymentForUser && (
-                    <button
-                      onClick={() => openPaymentForUser(user)}
-                      className="rounded-2xl bg-amber-500 px-4 py-2 text-sm font-black text-white"
-                    >
-                      Pay
-                    </button>
-                  )}
                   <button
                     onClick={() => openUserModal(user)}
                     className="rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
@@ -1671,14 +1381,13 @@ const UserTable = ({ users, openUserModal, openTrackingModal, openPaymentForUser
   </div>
 );
 
-const UsersTab = ({ users, openUserModal, openTrackingModal, openPaymentForUser }) => (
+const UsersTab = ({ users, openUserModal, openTrackingModal }) => (
   <div className="space-y-5">
     <SectionTitle title="My Users" />
     <UserTable
       users={users}
       openUserModal={openUserModal}
       openTrackingModal={openTrackingModal}
-      openPaymentForUser={openPaymentForUser}
     />
   </div>
 );
@@ -1966,6 +1675,7 @@ const FormField = ({ label, value, onChange, readOnly = false, type = "text" }) 
     <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">{label}</span>
     <input
       type={type}
+      min={type === "number" ? "1" : undefined}
       value={value || ""}
       readOnly={readOnly}
       onChange={(event) => onChange?.(event.target.value)}
@@ -2013,7 +1723,6 @@ const WizardModal = ({
 }) => {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
-  const [showPassword, setShowPassword] = useState(false);
 
   const incomeTypes =
     employmentType === "Salaried"
@@ -2053,7 +1762,6 @@ const WizardModal = ({
       personalForm.fullName,
       personalForm.email,
       personalForm.mobileNumber,
-      personalForm.password,
       personalForm.address,
       personalForm.city,
       personalForm.state,
@@ -2064,6 +1772,10 @@ const WizardModal = ({
 
     if (required.some((value) => String(value || "").trim() === "")) {
       toast.error("Fill all fields before preview");
+      return false;
+    }
+    if (Number(personalForm.loanAmount) <= 0) {
+      toast.error("Loan amount must be greater than 0");
       return false;
     }
     if (!files.PAN || !files.AADHAAR) {
@@ -2132,13 +1844,6 @@ const WizardModal = ({
               value={personalForm.mobileNumber}
               onChange={(value) => updateForm("mobileNumber", value.replace(/\D/g, "").slice(0, 10))}
             />
-            <PasswordField
-              label="Password"
-              value={personalForm.password}
-              onChange={(value) => updateForm("password", value)}
-              showPassword={showPassword}
-              setShowPassword={setShowPassword}
-            />
           </div>
         </section>
 
@@ -2157,7 +1862,7 @@ const WizardModal = ({
               label="Loan Amount"
               type="number"
               value={personalForm.loanAmount}
-              onChange={(value) => updateForm("loanAmount", value)}
+              onChange={(value) => updateForm("loanAmount", value.replace(/^-/, ""))}
             />
             <label className="mb-4 block">
               <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">Employment Type</span>

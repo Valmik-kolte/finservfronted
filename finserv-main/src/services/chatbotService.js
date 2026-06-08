@@ -103,7 +103,7 @@ const normalizeChatbotResponse = ({ role, intent, message, data, suggestions = [
 const shouldUseFallback = (error) => {
   const status = error?.response?.status;
   const message = String(error?.response?.data?.message || error?.response?.data || error?.message || "");
-  return status === 404 || status === 500 || message.toLowerCase().includes("no static resource");
+  return [403, 404, 500].includes(status) || message.toLowerCase().includes("no static resource");
 };
 
 // Tries the dedicated chatbot backend first, then gracefully falls back to existing dashboard APIs.
@@ -113,7 +113,19 @@ const getWithFallback = async (endpoint, fallback) => {
     return response.data;
   } catch (error) {
     if (!shouldUseFallback(error)) throw error;
-    return fallback();
+    try {
+      return await fallback();
+    } catch (fallbackError) {
+      return normalizeChatbotResponse({
+        role: "SYSTEM",
+        intent: "FALLBACK_ERROR",
+        message:
+          fallbackError?.response?.data?.message ||
+          fallbackError?.response?.data ||
+          "I could not fetch live data right now, but the assistant is connected. Please try again.",
+        data: [],
+      });
+    }
   }
 };
 
@@ -348,8 +360,13 @@ const fallbackDealerMonthlySummary = async () => {
 };
 
 const fallbackAdminUsers = async () => {
-  const response = await api.get("/user/all");
-  const users = asList(unwrap(response));
+  let users = [];
+  try {
+    const response = await api.get("/user/all");
+    users = asList(unwrap(response));
+  } catch {
+    users = readLocalDealerUsers();
+  }
   return normalizeChatbotResponse({
     role: "ADMIN",
     intent: "ALL_USERS",
@@ -420,8 +437,13 @@ const fallbackAdminDocumentSummary = async () => {
 };
 
 const fallbackAdminPendingDocuments = async () => {
-  const response = await api.get("/documents/pending");
-  const pending = asList(unwrap(response)).map(safeDocument);
+  let pending = [];
+  try {
+    const response = await api.get("/documents/pending");
+    pending = asList(unwrap(response)).map(safeDocument);
+  } catch {
+    pending = [];
+  }
   return normalizeChatbotResponse({
     role: "ADMIN",
     intent: "PENDING_DOCUMENTS",

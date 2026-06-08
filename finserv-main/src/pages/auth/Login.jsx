@@ -13,7 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import { loginUser } from "../../services/authService.js";
-import logo from "../../assets/logo3.png";
+import logo from "../../assets/vahan-logo.jpg";
 import heroImage from "../../assets/finserv-login-hero.png";
 
 const bullet = "\u2022";

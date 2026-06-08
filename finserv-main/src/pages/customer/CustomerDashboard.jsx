@@ -60,12 +60,15 @@ const STATUS_STYLES = {
   REJECTED: "bg-red-100 text-red-700",
 };
 
-const OPTIONAL_DOCUMENT_TYPES = new Set([
+const OPTIONAL_DOCUMENT_TYPES = new Set();
+const VEHICLE_REQUIRED_TYPES = [
+  "RC",
+  "INSURANCE",
   "CAR_FRONT_SIDE_PHOTO",
   "CAR_BACK_SIDE_PHOTO",
   "CHASSIS_NUMBER",
   "ODOMETER_READING",
-]);
+];
 
 const SALARIED_INCOME_TYPES = new Set(["SALARY_SLIP", "APPOINTMENT_LETTER"]);
 const SELF_EMPLOYED_INCOME_TYPES = new Set(["ITR_RETURN"]);
@@ -582,6 +585,7 @@ const CustomerDashboard = () => {
           }
         }
 
+        let effectiveDocumentsForCounts = null;
         if (docsRes.status === "fulfilled") {
           const loadedDocuments = latestDocumentsByType(unwrap(docsRes.value) || []);
           const localAssignedBank = readLocalAssignedBank(userId);
@@ -593,11 +597,11 @@ const CustomerDashboard = () => {
             user.bankName ||
             localAssignedBank
           );
-          setDocuments(
-            hasAssignedBank
-              ? loadedDocuments.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }))
-              : loadedDocuments
-          );
+          effectiveDocumentsForCounts = hasAssignedBank
+            ? loadedDocuments.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }))
+            : loadedDocuments;
+          setDocuments(effectiveDocumentsForCounts);
+          setCounts(countsFromDocuments(effectiveDocumentsForCounts));
         }
 
         if (countsRes.status === "fulfilled") {
@@ -620,16 +624,21 @@ const CustomerDashboard = () => {
           setCounts(
             hasAssignedBank
               ? {
-                  ...loadedCounts,
+                  ...(effectiveDocumentsForCounts
+                    ? countsFromDocuments(effectiveDocumentsForCounts)
+                    : loadedCounts),
                   pendingCount: 0,
                   verifiedCount: 0,
                   rejectedCount: 0,
                   approvedCount:
+                    effectiveDocumentsForCounts?.length ||
                     loadedCounts.totalCount ||
                     loadedCounts.documentsCount ||
                     loadedCounts.approvedCount,
                 }
-              : loadedCounts
+              : effectiveDocumentsForCounts
+                ? countsFromDocuments(effectiveDocumentsForCounts)
+                : loadedCounts
           );
         }
 
@@ -717,6 +726,11 @@ const CustomerDashboard = () => {
       pincode: personalInfo.pincode,
       loanAmount: Number(personalInfo.loanAmount) || 0,
     };
+
+    if (payload.loanAmount <= 0) {
+      toast.error("Loan amount must be greater than 0.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -907,7 +921,7 @@ const CustomerDashboard = () => {
 
   const missingRequiredTypes = useMemo(
     () => {
-      const missing = ["PAN", "AADHAAR", ...incomeTypes, "RC", "INSURANCE"].filter(
+      const missing = ["PAN", "AADHAAR", ...incomeTypes, ...VEHICLE_REQUIRED_TYPES].filter(
         (type) => !hasUsableDocument(docsByType, type)
       );
 
@@ -943,6 +957,11 @@ const CustomerDashboard = () => {
         pincode: personalInfo.pincode,
         loanAmount: Number(personalInfo.loanAmount) || 0,
       };
+
+      if (personalPayload.loanAmount <= 0) {
+        toast.error("Loan amount must be greater than 0.");
+        return;
+      }
 
       await persistPersonalInfo(personalPayload);
       setPaymentStatus(PAYMENT_STATUS.PAYMENT_PENDING);
@@ -1221,6 +1240,26 @@ const CustomerDashboard = () => {
     </div>
   );
 };
+
+const countsFromDocuments = (documents = []) =>
+  documents.reduce(
+    (acc, doc) => {
+      const status = doc?.status || "PENDING";
+      acc.totalCount += 1;
+      if (status === "PENDING") acc.pendingCount += 1;
+      if (status === "VERIFIED") acc.verifiedCount += 1;
+      if (status === "APPROVED") acc.approvedCount += 1;
+      if (status === "REJECTED") acc.rejectedCount += 1;
+      return acc;
+    },
+    {
+      totalCount: 0,
+      pendingCount: 0,
+      verifiedCount: 0,
+      approvedCount: 0,
+      rejectedCount: 0,
+    }
+  );
 
 const PaymentPromptModal = ({ onClose, onPayNow }) => (
   <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
@@ -1587,7 +1626,7 @@ const DocumentsTab = ({
     if (currentStep === 4) return employmentType === "Salaried"
       ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
       : ["ITR_RETURN", "BANK_STATEMENT"];
-    if (currentStep === 5) return ["RC", "INSURANCE"];
+    if (currentStep === 5) return VEHICLE_REQUIRED_TYPES;
     return [];
   };
 
@@ -1670,7 +1709,13 @@ const DocumentsTab = ({
               label={label}
               value={personalInfo[key]}
               readOnly={!!assignedBank}
-              onChange={(value) => setPersonalInfo({ ...personalInfo, [key]: value })}
+              type={key === "loanAmount" ? "number" : "text"}
+              onChange={(value) =>
+                setPersonalInfo({
+                  ...personalInfo,
+                  [key]: key === "loanAmount" ? value.replace(/^-/, "") : value,
+                })
+              }
             />
           ))}
         </div>
@@ -2202,6 +2247,7 @@ const Field = ({ label, value, onChange, readOnly = false, type = "text" }) => (
     <span className="block text-sm font-semibold text-[#0B2A4A] mb-2">{label}</span>
     <input
       type={type}
+      min={type === "number" ? "1" : undefined}
       value={value ?? ""}
       readOnly={readOnly}
       onChange={(event) => onChange?.(event.target.value)}
