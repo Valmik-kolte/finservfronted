@@ -617,7 +617,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:8081/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");
