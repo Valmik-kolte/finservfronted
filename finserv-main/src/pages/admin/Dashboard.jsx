@@ -578,24 +578,7 @@ const Dashboard = () => {
     [adminId]
   );
 
-  const fetchAdminProfile = useCallback(async () => {
-    const endpoints = ["/admin/me", "/admin/profile", "/auth/me", "/admin/current"];
-    const results = await Promise.allSettled(endpoints.map((endpoint) => api.get(endpoint)));
-    const fulfilled = results.find((result) => {
-      if (result.status !== "fulfilled") return false;
-      const profile = getProfileData(result.value);
-      return Object.keys(profile).length > 0;
-    });
 
-    if (!fulfilled) return;
-
-    const profile = normalizeAdminProfile(getProfileData(fulfilled.value));
-    setAdmin((prev) => {
-      const next = normalizeAdminProfile({ ...prev, ...profile });
-      localStorage.setItem("adminData", JSON.stringify(next));
-      return next;
-    });
-  }, []);
 
   const fetchDocumentLists = useCallback(async () => {
     try {
@@ -633,10 +616,6 @@ const Dashboard = () => {
   useEffect(() => {
     fetchAdminData(true);
   }, [fetchAdminData]);
-
-  useEffect(() => {
-    fetchAdminProfile();
-  }, [fetchAdminProfile]);
 
   useEffect(() => {
     const interval = setInterval(() => {

@@ -159,11 +159,11 @@ const Landing = () => {
         <div className="mx-auto max-w-7xl">
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">5000+</p>
+              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">100+</p>
               <p className="mt-2 text-sm font-medium text-gray-200">Loan Applications</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">50+</p>
+              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">10+</p>
               <p className="mt-2 text-sm font-medium text-gray-200">Banking Partners</p>
             </div>
             <div className="text-center">
@@ -171,7 +171,7 @@ const Landing = () => {
               <p className="mt-2 text-sm font-medium text-gray-200">Approval Success</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">10000+</p>
+              <p className="text-4xl sm:text-5xl font-bold bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">150+</p>
               <p className="mt-2 text-sm font-medium text-gray-200">Happy Customers</p>
             </div>
           </div>
@@ -225,7 +225,7 @@ const Landing = () => {
 
           <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
             {[
-              { icon: <FaUniversity className="text-2xl text-[#1ECFC3]" />, title: "50+ Banks", desc: "Compare offers from India's leading financial institutions" },
+              { icon: <FaUniversity className="text-2xl text-[#1ECFC3]" />, title: "10+ Banks", desc: "Compare offers from India's leading financial institutions" },
               { icon: <FaBolt className="text-2xl text-[#1ECFC3]" />, title: "24-Hour Approval", desc: "Get instant loan approval without unnecessary delays" },
               { icon: <FaFileAlt className="text-2xl text-[#1ECFC3]" />, title: "Minimal Docs", desc: "Paperless process with easy online document upload" },
               { icon: <FaShieldAlt className="text-2xl text-[#1ECFC3]" />, title: "100% Secure", desc: "Bank-level security for all your personal information" },

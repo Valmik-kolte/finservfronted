@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import {
   FaCar,
   FaClipboardCheck,
@@ -14,7 +14,7 @@ import { toast } from "react-toastify";
 import { jwtDecode } from "jwt-decode";
 import { loginUser } from "../../services/authService.js";
 import logo from "../../assets/vahan-logo.jpg";
-import heroImage from "../../assets/finserv-login-hero.png";
+import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
 const wave = "\u{1F44B}";
@@ -28,8 +28,8 @@ const quoteLine2 =
 
 const features = [
   { label: "Car Loan", icon: <FaCar />, left: 53 },
-  { label: "Quick Approval", icon: <FaShieldAlt />, left: 140 },
-  { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 239  },
+  { label: "Quick Approval", icon: <FaShieldAlt />, left: 180 },
+  { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 315 },
 ];
 
 const BrandBlock = () => (
@@ -89,7 +89,6 @@ const LeftMarketingSection = () => (
     </div>
   </section>
 );
-
 const LoginCard = ({
   form,
   handleChange,
@@ -300,6 +299,7 @@ const Login = () => {
   return (
     <div className="finserv-login-page">
       <style>{`
+
         @keyframes loginFadeLeft {
           from { opacity: 0; transform: translateX(-24px); }
           to { opacity: 1; transform: translateX(0); }
@@ -314,48 +314,58 @@ const Login = () => {
           min-height: 100vh;
           width: 100%;
           display: flex;
-          align-items: center;
+          align-items: stretch;
           justify-content: center;
           overflow-x: hidden;
           overflow-y: auto;
-          padding: 8px;
-          background: #02142d;
+          padding: 0;
+          background: #020b1c;
           color: #061842;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           letter-spacing: 0;
         }
 
-.login-stage {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: #001a3a;
-  --auth-left-nudge: 24px;
-}
+        .login-stage {
+          position: relative;
+          width: 100vw;
+          min-height: 100vh;
+          overflow: hidden;
+          background: #001a3a;
+          --auth-left-nudge: 18px;
+        }
 
         .login-bg {
-          position: absolute;
-          inset: 0;
-          background-image: var(--login-bg);
-          background-size: cover;
-          background-position: center center;
-          background-repeat: no-repeat;
-        }
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.bg-video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
         .login-bg::after {
           content: "";
           position: absolute;
           inset: 0;
-          background: rgba(0, 10, 35, 0.25);
+          background:
+            radial-gradient(circle at 22% 72%, rgba(0, 224, 211, 0.14), transparent 80%),
+            linear-gradient(90deg, rgba(0, 10, 35, 0.68) 0%, rgba(0, 10, 35, 0.28) 48%, rgba(0, 10, 35, 0.52) 100%);
         }
 
         .left-section {
           position: absolute;
-  left: 0;
-  top: 0;
-  width: 52%;
-  height: 100%;
+          left: 0;
+          top: 0;
+          width: 58%;
+          height: 100%;
           color: #ffffff;
           animation: loginFadeLeft 650ms ease-out both;
         }
@@ -364,58 +374,61 @@ const Login = () => {
           content: "";
           position: absolute;
           inset: 0;
-          background: linear-gradient(90deg, rgba(0, 15, 45, 0.68) 0%, rgba(0, 15, 45, 0.48) 58%, rgba(0, 15, 45, 0.1) 100%);
+          background: linear-gradient(90deg, rgba(0, 12, 36, 0.72) 0%, rgba(0, 12, 36, 0.42) 58%, rgba(0, 12, 36, 0.05) 100%);
         }
 
         .left-section::after {
           content: "";
           position: absolute;
           inset: 0;
-          box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.5);
+          box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.55);
           pointer-events: none;
         }
 
         .brand-group {
           position: absolute;
           left: calc(50px + var(--auth-left-nudge));
-          top: 40px;
+          top: 48px;
           z-index: 2;
           display: flex;
-          width: 170px;
-          height: 55px;
+          width: 210px;
+          height: 68px;
           align-items: flex-start;
-          gap: 13px;
+          gap: 14px;
         }
 
         .brand-logo {
-          width: 50px;
-          height: 45px;
+          width: 58px;
+          height: 58px;
           object-fit: contain;
+          border-radius: 2px;
+          box-shadow: 0 0 24px rgba(0, 224, 211, 0.16);
         }
 
         .brand-copy {
-          padding-top: 7px;
+          padding-top: 6px;
         }
 
         .brand-name {
           margin: 0;
           color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 28px;
-          font-weight: 700;
-          letter-spacing: -0.5px;
-          line-height: 1;
+          font-size: 30px;
+          font-weight: 800;
+          letter-spacing: -0.7px;
+          line-height: 1.05;
         }
 
         .brand-name span {
+          display: block;
           color: #00e0d3;
         }
 
         .brand-tagline {
-          margin: 7px 0 0;
-          color: #8fa3c7;
+          margin: 14px 0 0;
+          color: #c9d3e7;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 12px;
+          font-size: 14px;
           font-weight: 400;
           line-height: 1;
           white-space: nowrap;
@@ -424,16 +437,17 @@ const Login = () => {
         .hero-heading {
           position: absolute;
           left: calc(49px + var(--auth-left-nudge));
-          top: 120px;
+          top: 200px;
           z-index: 2;
-          width: 380px;
+          width: 540px;
           margin: 0;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 31px;
+          font-size: 44px;
           font-weight: 800;
-          line-height: 38px;
-          letter-spacing: -0.8px;
+          line-height: 1.12;
+          letter-spacing: -1.4px;
           color: #ffffff;
+          text-shadow: 0 12px 38px rgba(0, 0, 0, 0.42);
         }
 
         .hero-heading span {
@@ -443,14 +457,15 @@ const Login = () => {
         .hero-subtitle {
           position: absolute;
           left: calc(50px + var(--auth-left-nudge));
-          top: 205px;
+          top: 334px;
           z-index: 2;
           margin: 0;
           color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 18px;
-          font-weight: 500;
-          line-height: 24px;
+          font-size: 23px;
+          font-weight: 700;
+          line-height: 28px;
+          text-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
         }
 
         .teal-dot {
@@ -460,70 +475,71 @@ const Login = () => {
         .subtitle-underline {
           position: absolute;
           left: calc(49px + var(--auth-left-nudge));
-          top: 233px;
+          top: 372px;
           z-index: 2;
-          width: 36px;
-          height: 2px;
-          border-radius: 2px;
+          width: 50px;
+          height: 3px;
+          border-radius: 3px;
           background: #00e0d3;
         }
 
         .feature-item {
           position: absolute;
-          top: 248px;
+          top: 398px;
           z-index: 2;
-          width: 52px;
+          width: 76px;
           text-align: center;
           animation: loginFadeUp 650ms ease-out both;
         }
 
         .feature-card {
-          width: 52px;
-          height: 52px;
+          width: 74px;
+          height: 74px;
           display: flex;
           align-items: center;
           justify-content: center;
-          border: 1px solid rgba(0, 224, 211, 0.45);
-          border-radius: 10px;
-          background: rgba(0, 25, 65, 0.45);
+          border: 1px solid rgba(0, 224, 211, 0.65);
+          border-radius: 14px;
+          background: rgba(0, 25, 65, 0.42);
           color: #ffffff;
-          font-size: 27px;
-          box-shadow: 0 0 14px rgba(0, 224, 211, 0.25);
+          font-size: 31px;
+          box-shadow: 0 0 22px rgba(0, 224, 211, 0.34);
           backdrop-filter: blur(10px);
           transition: transform 220ms ease, box-shadow 220ms ease;
         }
 
         .feature-card:hover {
           transform: translateY(-4px);
-          box-shadow: 0 0 22px rgba(0, 224, 211, 0.36);
+          box-shadow: 0 0 28px rgba(0, 224, 211, 0.46);
         }
 
         .feature-label {
           position: absolute;
-          top: 61px;
+          top: 88px;
           left: 50%;
           margin: 0;
           transform: translateX(-50%);
-          color: rgba(255, 255, 255, 0.9);
+          color: rgba(255, 255, 255, 0.94);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 11px;
-          font-weight: 400;
+          font-size: 14px;
+          font-weight: 600;
           line-height: 1;
           white-space: nowrap;
+          text-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
         }
 
         .quote-block {
           position: absolute;
           left: calc(47px + var(--auth-left-nudge));
-          top: 348px;
+          top: 552px;
           z-index: 2;
-          width: 310px;
+          width: 380px;
           color: #ffffff;
         }
 
         .quote-mark {
           color: #00e0d3;
-          font-size: 26px;
+          font-size: 32px;
           font-weight: 900;
           line-height: 1;
         }
@@ -532,9 +548,10 @@ const Login = () => {
           margin: 0;
           color: #ffffff;
           font-family: "Noto Sans Devanagari", "Inter", sans-serif;
-          font-size: 16px;
-          font-weight: 500;
-          line-height: 30px;
+          font-size: 18px;
+          font-weight: 700;
+          line-height: 34px;
+          text-shadow: 0 12px 30px rgba(0, 0, 0, 0.42);
         }
 
         .quote-line {
@@ -542,139 +559,128 @@ const Login = () => {
         }
 
         .quote-line.second {
-          margin-left: 24px;
+          margin-left: 28px;
         }
 
         .right-section {
           position: absolute;
-  right: 0;
-  top: 0;
-  width: 48%;
-  height: 90%;
+          right: 0;
+          top: 0;
+          width: 43%;
+          height: 100%;
+          display: flex;
+          justify-content: flex-start;
+          align-items: center;
+          padding: 48px clamp(36px, 5.2vw, 84px) 48px 0;
+          z-index: 3;
         }
 
-        .right-section {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-        
         .login-card {
-          
-          left: 0;
-          top: 30px;
           position: relative;
-  width: 414px;
-  height: 543px;
-          border-radius: 10px;
-          background: #ffffff;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+          width: clamp(390px, 31vw, 460px);
+          min-height: 625px;
+          display: flex;
+          flex-direction: column;
+          box-sizing: border-box;
+          padding: 70px 42px 42px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.98);
+          box-shadow: 0 28px 90px rgba(0, 0, 0, 0.36);
           animation: loginFadeUp 650ms ease-out both;
+          backdrop-filter: blur(18px);
         }
 
         .card-title {
-          position: absolute;
-          left: 0;
-          top: 58px;
-          width: 100%;
           margin: 0;
           text-align: center;
           color: #061842;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 23px;
+          font-size: 28px;
           font-weight: 800;
-          line-height: 24px;
+          line-height: 1.12;
         }
 
         .card-subtitle {
-          position: absolute;
-          left: 0;
-          top: 100px;
-          width: 100%;
-          margin: 0;
+          margin: 26px 0 0;
           text-align: center;
           color: #667085;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
+          font-size: 16px;
           font-weight: 400;
           line-height: 1;
         }
 
         .card-divider {
-          position: absolute;
-          left: 180px;
-          top: 127px;
-          width: 40px;
-          height: 2px;
-          border-radius: 2px;
+          width: 54px;
+          height: 3px;
+          margin: 20px auto 28px;
+          border-radius: 3px;
           background: #00c6bd;
         }
 
         .form-label {
-          position: absolute;
-          left: 37px;
           margin: 0;
           color: #061842;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 600;
+          font-size: 15px;
+          font-weight: 700;
           line-height: 1;
         }
 
         .form-label.email {
-          top: 149px;
+          margin-top: 0;
         }
 
         .form-label.password {
-          top: 243px;
+          margin-top: 32px;
         }
 
         .input-wrap {
-          position: absolute;
-          left: 37px;
-          width: 340px;
-          height: 41px;
+          width: 100%;
+          height: 56px;
+          margin-top: 12px;
           display: flex;
           align-items: center;
+          box-sizing: border-box;
           border: 1px solid #d9dee8;
-          border-radius: 6px;
+          border-radius: 8px;
           background: #ffffff;
           color: #7b8aa8;
-          box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+          box-shadow: 0 8px 22px rgba(16, 24, 40, 0.08);
           transition: border-color 200ms ease, box-shadow 200ms ease;
         }
 
         .input-wrap.email {
-          top: 169px;
+          margin-top: 13px;
         }
 
         .input-wrap.password {
-          top: 264px;
+          margin-top: 13px;
         }
 
         .input-wrap:focus-within {
           border-color: #00c6bd;
-          box-shadow: 0 0 0 3px rgba(0, 198, 189, 0.14);
+          box-shadow: 0 0 0 4px rgba(0, 198, 189, 0.14);
         }
 
         .input-icon {
           flex: 0 0 auto;
-          margin-left: 14px;
-          font-size: 17px;
+          margin-left: 18px;
+          font-size: 20px;
           color: #7b8aa8;
         }
 
         .form-input {
           width: 100%;
           min-width: 0;
-          margin-left: 16px;
+          margin-left: 20px;
           border: 0;
           outline: 0;
           background: transparent;
           color: #061842;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 500;
+          font-size: 16px;
+          font-weight: 600;
         }
 
         .form-input::placeholder {
@@ -685,27 +691,26 @@ const Login = () => {
 
         .password-toggle {
           flex: 0 0 auto;
-          margin: 0 13px 0 8px;
+          margin: 0 16px 0 8px;
           border: 0;
           padding: 0;
           background: transparent;
           color: #7b8aa8;
-          font-size: 17px;
+          font-size: 20px;
           line-height: 1;
           cursor: pointer;
         }
 
         .forgot-link {
-          position: absolute;
-          right: 37px;
-          top: 321px;
+          align-self: flex-end;
+          margin: 23px 0 0;
           border: 0;
           padding: 0;
           background: transparent;
           color: #0047ff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 12px;
-          font-weight: 500;
+          font-size: 15px;
+          font-weight: 600;
           line-height: 1;
           cursor: pointer;
         }
@@ -715,24 +720,22 @@ const Login = () => {
         }
 
         .signin-button {
-          position: absolute;
-          left: 37px;
-          top: 363px;
-          width: 340px;
-          height: 43px;
+          width: 100%;
+          height: 60px;
+          margin-top: 42px;
           border: 0;
-          border-radius: 6px;
+          border-radius: 8px;
           background: linear-gradient(90deg, #14d8c4 0%, #0047d9 100%);
           color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 16px;
-          font-weight: 700;
+          font-size: 18px;
+          font-weight: 800;
           cursor: pointer;
           transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
         }
 
         .signin-button:hover:not(:disabled) {
-          transform: translateY(-2px) scale(1.03);
+          transform: translateY(-2px) scale(1.02);
           box-shadow: 0 16px 34px rgba(10, 85, 209, 0.34);
         }
 
@@ -742,15 +745,11 @@ const Login = () => {
         }
 
         .create-account {
-          position: absolute;
-          left: 0;
-          top: 431px;
-          width: 100%;
-          margin: 0;
+          margin: 30px 0 0;
           text-align: center;
           color: #344054;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
+          font-size: 15px;
           font-weight: 400;
           line-height: 1;
         }
@@ -762,24 +761,23 @@ const Login = () => {
           background: transparent;
           color: #0047ff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 500;
+          font-size: 15px;
+          font-weight: 600;
           cursor: pointer;
         }
 
         .trust-row {
-          position: absolute;
-          left: 37px;
-          top: 486px;
-          width: 340px;
+          width: 100%;
           height: 26px;
+          margin-top: auto;
+          padding-top: 34px;
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
           align-items: center;
           color: #061842;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 10px;
-          font-weight: 500;
+          font-size: 12px;
+          font-weight: 700;
         }
 
         .trust-item {
@@ -798,7 +796,29 @@ const Login = () => {
 
         .trust-item svg {
           color: #061842;
-          font-size: 14px;
+          font-size: 15px;
+        }
+
+        @media (max-width: 1100px) {
+          .hero-heading {
+            font-size: 36px;
+            width: 440px;
+          }
+
+          .hero-subtitle {
+            font-size: 20px;
+          }
+
+          .right-section {
+            width: 46%;
+            padding-right: clamp(24px, 3.6vw, 44px);
+          }
+
+          .login-card {
+            width: min(410px, 92%);
+            padding-left: 34px;
+            padding-right: 34px;
+          }
         }
 
         @media (max-width: 920px) {
@@ -827,12 +847,12 @@ const Login = () => {
           }
 
           .left-section {
-            min-height: 430px;
+            min-height: 610px;
             padding: 34px 26px 36px;
           }
 
           .left-section::before {
-            background: rgba(0, 15, 45, 0.66);
+            background: rgba(0, 15, 45, 0.64);
           }
 
           .brand-group,
@@ -847,17 +867,17 @@ const Login = () => {
           }
 
           .brand-group {
-            margin-bottom: 30px;
+            margin-bottom: 84px;
           }
 
           .hero-heading {
-            width: min(100%, 380px);
-            font-size: 30px;
-            line-height: 37px;
+            width: min(100%, 520px);
+            font-size: 38px;
+            line-height: 1.15;
           }
 
           .hero-subtitle {
-            margin-top: 18px;
+            margin-top: 24px;
           }
 
           .subtitle-underline {
@@ -867,50 +887,60 @@ const Login = () => {
           .feature-item {
             display: inline-block;
             margin-top: 24px;
-            margin-right: 38px;
+            margin-right: 70px;
             vertical-align: top;
           }
 
           .quote-block {
-            margin-top: 38px;
+            margin-top: 86px;
           }
 
           .right-section {
             display: flex;
             justify-content: center;
-            padding: 24px 16px 32px;
+            padding: 32px 16px 42px;
           }
 
           .login-card {
             position: relative;
             left: auto;
             top: auto;
-            width: min(100%, 414px);
-            max-width: 414px;
+            width: min(100%, 460px);
+            max-width: 460px;
           }
         }
 
         @media (max-width: 480px) {
           .left-section {
-            min-height: 440px;
+            min-height: 600px;
             padding: 28px 20px 32px;
           }
 
           .brand-group {
             gap: 10px;
+            margin-bottom: 68px;
           }
 
           .hero-heading {
-            font-size: 28px;
-            line-height: 35px;
+            font-size: 31px;
           }
 
           .hero-subtitle {
-            font-size: 16px;
+            font-size: 17px;
           }
 
           .feature-item {
-            margin-right: 26px;
+            margin-right: 34px;
+          }
+
+          .feature-card {
+            width: 62px;
+            height: 62px;
+          }
+
+          .feature-label {
+            top: 74px;
+            font-size: 11px;
           }
 
           .quote-text {
@@ -924,37 +954,42 @@ const Login = () => {
 
           .login-card {
             width: 100%;
+            min-height: 600px;
+            padding: 54px 20px 30px;
           }
 
-          .card-divider {
-            left: 50%;
-            transform: translateX(-50%);
+          .card-title {
+            font-size: 25px;
           }
 
-          .form-label,
-          .input-wrap,
-          .signin-button,
-          .trust-row {
-            left: 20px;
-            width: calc(100% - 40px);
-          }
-
-          .forgot-link {
-            right: 20px;
+          .form-input {
+            font-size: 15px;
           }
 
           .trust-row {
             font-size: 9px;
+            padding-top: 26px;
           }
 
           .trust-item {
             gap: 5px;
           }
         }
+
       `}</style>
 
-      <div className="login-stage" style={{ "--login-bg": `url(${heroImage})` }}>
+      <div className="login-stage" style={{ "--login-bg": `url(${loginVideo})` }}>
         <div className="login-bg" />
+        <video
+      className="bg-video"
+      autoPlay
+      muted
+      loop
+      playsInline
+      preload="auto"
+    >
+      <source src={loginVideo} type="video/mp4" />
+    </video>
 
         <LeftMarketingSection />
         <LoginCard

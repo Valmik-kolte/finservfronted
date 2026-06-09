@@ -50,7 +50,7 @@ const Footer = () => {
               <h2 className="font-bold mb-4">Contact Us</h2>
               <ul className="space-y-2 text-sm text-gray-300">
                 <li>✉️ support@vahanfinserv.com</li>
-                <li>📞 +91 9876746436</li>
+                <li>📞 +91 7755994123</li>
                 <li>📍 Pune, Maharashtra, India - 411001</li>
               </ul>
             </div>
