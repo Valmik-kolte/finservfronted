@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import Footer from "./Footer";
 import Header from "./Header";
 
@@ -30,36 +30,52 @@ const faqItems = [
   },
 ];
 
-const Faq = () => (
-    < div className="bg-[#1ECFC3]/5">
-    <Header />
-  <div className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20 max-w-5xl mx-auto space-y-8">
-    <div>
-      <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A]">Frequently Asked Questions</h1>
-      <p className="text-gray-600 mt-3 leading-relaxed">
-        Find answers to the most common questions about our vehicle loan application process, eligibility, and partner services.
-      </p>
-    </div>
+const Faq = () => {
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "smooth",
+    });
+  }, []);
 
-    <div className="space-y-4">
-      {faqItems.map((item, idx) => (
-        <details key={idx} className="group rounded-3xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:border-[#1ECFC3]/40">
-          <summary className="cursor-pointer text-base sm:text-lg font-semibold text-[#0B2A4A] list-none">
-            {item.question}
-          </summary>
-          <p className="mt-3 text-gray-600 leading-relaxed">{item.answer}</p>
-        </details>
-      ))}
+  return (
+    <div className="bg-[#1ECFC3]/5">
+      <Header />
+
+      <div className="max-w-5xl mx-auto px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20 space-y-8">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#0B2A4A]">
+            Frequently Asked Questions
+          </h1>
+
+          <p className="mt-3 text-gray-600 leading-relaxed">
+            Find answers to the most common questions about our vehicle loan
+            application process, eligibility, and partner services.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {faqItems.map((item, idx) => (
+            <details
+              key={idx}
+              className="group rounded-3xl border border-slate-200 bg-white p-4 sm:p-5 shadow-sm transition hover:border-[#1ECFC3]/40"
+            >
+              <summary className="cursor-pointer list-none text-base sm:text-lg font-semibold text-[#0B2A4A]">
+                {item.question}
+              </summary>
+
+              <p className="mt-3 text-gray-600 leading-relaxed">
+                {item.answer}
+              </p>
+            </details>
+          ))}
+        </div>
+      </div>
+
+      <Footer />
     </div>
-  </div>
-  <Footer />
-  </div>
-);
+  );
+};
 
 export default Faq;
-
-
-
-
-
-

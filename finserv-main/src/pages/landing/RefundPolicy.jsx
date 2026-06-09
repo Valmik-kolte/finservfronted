@@ -1,8 +1,18 @@
-import React from "react";
+
+import React, { useEffect } from "react";
 import Footer from "./Footer";
 import Header from "./Header";
 
-const RefundPolicy = () => (
+const RefundPolicy = () => {
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "smooth",
+    });
+  }, []);
+
+  return (
   <div className="bg-[#1ECFC3]/5">
     <Header />
 
@@ -50,6 +60,10 @@ const RefundPolicy = () => (
 
     <Footer />
   </div>
-);
+  );
+};
 
 export default RefundPolicy;
+
+
+

@@ -1,8 +1,18 @@
-﻿import React, { useMemo, useState } from "react";
+﻿
+import React, { useEffect, useMemo, useState } from "react";
 import Footer from "./Footer";
 import Header from "./Header";
 
 const LoanCalculator = () => {
+
+    useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "smooth",
+    });
+  }, []);
+
   const [loanAmount, setLoanAmount] = useState(700000);
   const [loanTerm, setLoanTerm] = useState(60);
   const [interestRate, setInterestRate] = useState(8.5);
@@ -109,3 +119,5 @@ const LoanCalculator = () => {
 };
 
 export default LoanCalculator;
+
+

@@ -65,7 +65,13 @@ const Landing = () => {
                   </div>
                   <span className="text-xs sm:text-sm font-semibold text-[#1ECFC3]">Fast Vehicle Loans</span>
                 </div> */}
+<div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#1ECFC3]/40 bg-white/95 px-4 py-2 shadow-lg shadow-[#1ECFC3]/10 backdrop-blur-sm">
+  <span className="text-[#1ECFC3] text-xs">★</span>
 
+  <span className="whitespace-nowrap text-sm font-semibold text-[#1ECFC3]">
+    Driving Aspirations Forward
+  </span>
+</div>
                {/* Main Heading */}
 <div className="space-y-4">
   <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-black leading-tight text-[#112B5A] tracking-tight">
@@ -338,7 +344,3 @@ const Landing = () => {
 };
 
 export default Landing;
-
-
-
-  

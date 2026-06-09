@@ -1,8 +1,19 @@
-﻿import React from "react";
+﻿
+import React, { useEffect } from "react";
 import Footer from "./Footer";
 import Header from "./Header";
 
-const TermsCondition = () => (
+const TermsCondition = () => {
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "smooth",
+    });
+  }, []);
+  
+    return (
+
     < div className="bg-[#1ECFC3]/5">
     <Header />
   <div className="px-4 py-12 sm:px-6 sm:py-16 lg:px-8 lg:py-20 max-w-5xl mx-auto space-y-8">
@@ -60,6 +71,7 @@ const TermsCondition = () => (
   </div>
   <Footer />
   </div>
-);
+  );
+};
 
 export default TermsCondition;
