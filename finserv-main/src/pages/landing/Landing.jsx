@@ -5,7 +5,7 @@ import { FaCheck, FaUniversity, FaBolt, FaFileAlt, FaShieldAlt, FaArrowRight, Fa
 import { MdDirectionsCar, MdVerified, MdTimer } from "react-icons/md";
 import Header from "./Header";
 import Footer from "./Footer";
-import car from "../../assets/car.png";
+import heroVideo from "../../assets/hero-car-video.mp4";
 import hdfc from "../../assets/HDFC_Bank_Logo.png";
 import sbi from "../../assets/SBI.png";
 import icici from "../../assets/ICICI_Bank_Logo.png";
@@ -34,16 +34,18 @@ const Landing = () => {
 
       {/* Hero Section */}
 
-      <section
-        className="relative overflow-hidden bg-gradient-to-br from-[#112B5A]/5 to-[#1ECFC3]/5"
-        style={{
-          backgroundImage: `url(${car})`,
-          backgroundSize: "cover",
-          backgroundPosition: "right center",
-          backgroundRepeat: "no-repeat",
-          backgroundAttachment: "scroll",
-        }}
-      >
+      <section className="relative overflow-hidden bg-gradient-to-br from-[#112B5A]/5 to-[#1ECFC3]/5">
+  <video
+    className="absolute inset-0 h-full w-full object-cover"
+    autoPlay
+    muted
+    loop
+    playsInline
+    preload="auto"
+  >
+    <source src={heroVideo} type="video/mp4" />
+  </video>
+
         {/* Enhanced dark overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/20 to-transparent" />
 

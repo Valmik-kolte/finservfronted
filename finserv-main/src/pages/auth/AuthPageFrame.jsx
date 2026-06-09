@@ -5,7 +5,7 @@ import {
   FaShieldAlt,
 } from "react-icons/fa";
 import logo from "../../assets/vahan-logo.jpg";
-import heroImage from "../../assets/finserv-login-hero.png";
+import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
 const quoteOpen = "\u201C";
@@ -61,17 +61,17 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
       .auth-bg {
         position: absolute;
         inset: 0;
-        background-image: var(--auth-bg);
-        background-size: cover;
-        background-position: center center;
-        background-repeat: no-repeat;
+        overflow: hidden;
+        z-index: 1;
+        pointer-events: none;
       }
 
-      .auth-bg::after {
-        content: "";
+      .auth-bg-video {
         position: absolute;
         inset: 0;
-        background: rgba(0, 10, 35, 0.25);
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
       }
 
       .auth-left {
@@ -81,23 +81,12 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         width: 52%;
         height: 100%;
         color: #ffffff;
+        z-index: 5;
         animation: authFadeLeft 650ms ease-out both;
       }
 
-      .auth-left::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background: linear-gradient(90deg, rgba(0, 15, 45, 0.68) 0%, rgba(0, 15, 45, 0.48) 58%, rgba(0, 15, 45, 0.1) 100%);
-      }
-
-      .auth-left::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.5);
-        pointer-events: none;
-      }
+      .auth-left::before { content: none; }
+      .auth-left::after { content: none; }
 
       .auth-brand {
         position: absolute;
@@ -278,6 +267,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         display: flex;
         justify-content: center;
         align-items: center;
+        z-index: 5;
       }
 
       .auth-card {
@@ -483,9 +473,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
           padding: 34px 26px 36px;
         }
 
-        .auth-left::before {
-          background: rgba(0, 15, 45, 0.66);
-        }
+        .auth-left::before { content: none; }
 
         .auth-brand,
         .auth-heading,
@@ -592,8 +580,12 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
       }
     `}</style>
 
-    <div className="auth-stage" style={{ "--auth-bg": `url(${heroImage})` }}>
-      <div className="auth-bg" />
+    <div className="auth-stage">
+      <div className="auth-bg">
+        <video className="auth-bg-video" autoPlay muted loop playsInline preload="auto">
+          <source src={loginVideo} type="video/mp4" />
+        </video>
+      </div>
 
       <section className="auth-left" aria-label="Vahan Finserv car loan intro">
         <div className="auth-brand">

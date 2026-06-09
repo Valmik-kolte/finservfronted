@@ -16,7 +16,7 @@ import { toast } from "react-toastify";
 import { registerUser } from "../../services/customerService.js";
 import { registerDealer } from "../../services/dealerService.js";
 import logo from "../../assets/vahan-logo.jpg";
-import heroImage from "../../assets/finserv-login-hero.png";
+import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
 const rightArrow = "\u2192";
@@ -137,24 +137,24 @@ const Register = ({ defaultRole }) => {
           width: 100vw;
           height: 100vh;
           overflow: hidden;
-          background: linear-gradient(135deg, #02142d 0%, #001a3a 58%, #041e4d 100%);
+          background: #001a3a;
           --auth-left-nudge: 24px;
         }
 
         .register-bg {
           position: absolute;
           inset: 0;
-          background-image: var(--register-bg);
-          background-size: cover;
-          background-position: center center;
-          background-repeat: no-repeat;
+          overflow: hidden;
+          z-index: 1;
+          pointer-events: none;
         }
 
-        .register-bg::after {
-          content: "";
+        .register-bg-video {
           position: absolute;
           inset: 0;
-          background: rgba(0, 10, 35, 0.25);
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
         }
 
         .register-left {
@@ -164,23 +164,12 @@ const Register = ({ defaultRole }) => {
           width: 52%;
           height: 100%;
           color: #ffffff;
+          z-index: 5;
           animation: registerFadeLeft 650ms ease-out both;
         }
 
-        .register-left::before {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(90deg, rgba(0, 15, 45, 0.68) 0%, rgba(0, 15, 45, 0.48) 58%, rgba(0, 15, 45, 0.1) 100%);
-        }
-
-        .register-left::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.5);
-          pointer-events: none;
-        }
+        .register-left::before { content: none; }
+        .register-left::after { content: none; }
 
         .register-brand {
           position: absolute;
@@ -360,6 +349,7 @@ const Register = ({ defaultRole }) => {
           display: flex;
           justify-content: center;
           align-items: center;
+          z-index: 5;
         }
 
         .register-card {
@@ -606,9 +596,7 @@ const Register = ({ defaultRole }) => {
             padding: 34px 26px 36px;
           }
 
-          .register-left::before {
-            background: rgba(0, 15, 45, 0.66);
-          }
+          .register-left::before { content: none; }
 
           .register-brand,
           .register-heading,
@@ -716,8 +704,12 @@ const Register = ({ defaultRole }) => {
         }
       `}</style>
 
-      <div className="register-stage" style={{ "--register-bg": `url(${heroImage})` }}>
-        <div className="register-bg" />
+      <div className="register-stage">
+        <div className="register-bg">
+          <video className="register-bg-video" autoPlay muted loop playsInline preload="auto">
+            <source src={loginVideo} type="video/mp4" />
+          </video>
+        </div>
 
         <section className="register-left" aria-label="Vahan Finserv car loan intro">
           <div className="register-brand">
