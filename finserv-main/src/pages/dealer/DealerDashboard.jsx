@@ -19,6 +19,8 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
+import Footer from "../landing/Footer";
+import { clearAuthSession } from "../../utils/authSession";
 import {
   getDealerDashboardSummary,
   getDealerNotifications,
@@ -697,8 +699,7 @@ const DealerDashboard = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("role");
-    localStorage.removeItem("dealerData");
+    clearAuthSession();
     navigate("/");
   };
 
@@ -977,24 +978,25 @@ const DealerDashboard = () => {
   const title = normalizedMenu === "Users" ? "Users" : normalizedMenu;
 
   return (
-    <div className="flex min-h-dvh bg-[#F4F6F9]">
-      <Sidebar
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        activeMenu={activeMenu === "Users" ? "User" : activeMenu}
-        setActiveMenu={setActiveMenu}
-        handleLogout={handleLogout}
-      />
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="Close navigation"
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+    <div className="min-h-dvh bg-[#F4F6F9]">
+      <div className="flex min-h-dvh">
+        <Sidebar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          activeMenu={activeMenu === "Users" ? "User" : activeMenu}
+          setActiveMenu={setActiveMenu}
+          handleLogout={handleLogout}
         />
-      )}
+        {sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          />
+        )}
 
-      <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1">
         <div className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 px-4 md:px-6 py-4 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
@@ -1115,7 +1117,9 @@ const DealerDashboard = () => {
             </>
           )}
         </div>
-      </main>
+        </main>
+      </div>
+      <Footer logoutOnNavigate />
 
       {selectedUser && (
         <UserModal

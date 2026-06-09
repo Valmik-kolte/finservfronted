@@ -20,7 +20,9 @@ import Documents from "./Documents";
 import Bank from "./Bank";
 import Reports from "./Reports";
 import Settings from "./Settings";
+import Footer from "../landing/Footer";
 import { markPaymentSuccess } from "../../services/paymentService";
+import { clearAuthSession } from "../../utils/authSession";
 import {
   READY2DRIVE_BASE_AMOUNT,
   READY2DRIVE_FEE_LABEL,
@@ -634,9 +636,7 @@ const Dashboard = () => {
   }, [adminId, fetchDocumentLists, permissionError]);
 
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("adminData");
+    clearAuthSession();
     navigate("/", { replace: true });
   };
 
@@ -1175,91 +1175,94 @@ const Dashboard = () => {
   };
 
   return (
-    <div className="flex min-h-dvh bg-[#F4F6F9] text-slate-800">
-      <Sidebar
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        activeMenu={activeMenu}
-        setActiveMenu={setActiveMenu}
-        handleLogout={handleLogout}
-      />
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="Close navigation"
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+    <div className="min-h-dvh bg-[#F4F6F9] text-slate-800">
+      <div className="flex min-h-dvh">
+        <Sidebar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          activeMenu={activeMenu}
+          setActiveMenu={setActiveMenu}
+          handleLogout={handleLogout}
         />
-      )}
+        {sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          />
+        )}
 
-      <main className="min-w-0 flex-1 overflow-y-visible md:overflow-y-auto">
-        <div className="bg-white px-4 md:px-8 py-4 md:py-5 shadow-sm flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] md:hidden"
-              aria-label="Open navigation"
-            >
-              <FaBars />
-            </button>
-            <div className="min-w-0">
-            <h1 className="truncate text-2xl md:text-3xl font-bold text-[#0B2A4A]">{activeMenu}</h1>
-            <p className="text-sm text-slate-500 mt-1">Welcome back, {admin?.name || "Admin"}</p>
+        <main className="min-w-0 flex-1 overflow-y-visible md:overflow-y-auto">
+          <div className="bg-white px-4 md:px-8 py-4 md:py-5 shadow-sm flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setSidebarOpen(true)}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] md:hidden"
+                aria-label="Open navigation"
+              >
+                <FaBars />
+              </button>
+              <div className="min-w-0">
+              <h1 className="truncate text-2xl md:text-3xl font-bold text-[#0B2A4A]">{activeMenu}</h1>
+              <p className="text-sm text-slate-500 mt-1">Welcome back, {admin?.name || "Admin"}</p>
+              </div>
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications((prev) => !prev)}
+                className="relative w-11 h-11 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] flex items-center justify-center"
+                aria-label="Notifications"
+              >
+                <FaBell />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[11px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              {showNotifications && (
+                <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
+                  <h3 className="font-bold text-[#0B2A4A] mb-3">Notifications</h3>
+                  {notifications.length === 0 ? (
+                    <p className="text-sm text-slate-500">No notifications.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-80 overflow-y-auto">
+                      {notifications.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => markNotificationRead(item.id)}
+                          className={`w-full text-left rounded-2xl p-3 text-sm ${
+                            item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
+                          }`}
+                        >
+                          <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
+                          <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          <div className="relative">
-            <button
-              onClick={() => setShowNotifications((prev) => !prev)}
-              className="relative w-11 h-11 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] flex items-center justify-center"
-              aria-label="Notifications"
-            >
-              <FaBell />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[11px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
-                  {unreadCount}
-                </span>
-              )}
-            </button>
-            {showNotifications && (
-              <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
-                <h3 className="font-bold text-[#0B2A4A] mb-3">Notifications</h3>
-                {notifications.length === 0 ? (
-                  <p className="text-sm text-slate-500">No notifications.</p>
-                ) : (
-                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                    {notifications.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() => markNotificationRead(item.id)}
-                        className={`w-full text-left rounded-2xl p-3 text-sm ${
-                          item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
-                        }`}
-                      >
-                        <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
-                        <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+
+          <div className="p-5 md:p-8">
+            {permissionError ? (
+              <PermissionWarning message={permissionError} onLogout={handleLogout} />
+            ) : loading ? (
+              <div className="bg-white rounded-3xl p-5 sm:p-8 font-bold text-[#0B2A4A]">Loading admin data...</div>
+            ) : (
+              <>
+                {apiWarnings.length > 0 && <ApiWarning failedApis={apiWarnings} />}
+                {renderActivePage()}
+              </>
             )}
           </div>
-        </div>
-
-        <div className="p-5 md:p-8">
-          {permissionError ? (
-            <PermissionWarning message={permissionError} onLogout={handleLogout} />
-          ) : loading ? (
-            <div className="bg-white rounded-3xl p-5 sm:p-8 font-bold text-[#0B2A4A]">Loading admin data...</div>
-          ) : (
-            <>
-              {apiWarnings.length > 0 && <ApiWarning failedApis={apiWarnings} />}
-              {renderActivePage()}
-            </>
-          )}
-        </div>
-      </main>
+        </main>
+      </div>
+      <Footer logoutOnNavigate />
 
       {preview && <PreviewModal preview={preview} closePreview={closePreview} />}
 

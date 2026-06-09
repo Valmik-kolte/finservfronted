@@ -4,7 +4,6 @@ import {
   FaClipboardCheck,
   FaShieldAlt,
 } from "react-icons/fa";
-import logo from "../../assets/vahan-logo.jpg";
 import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
@@ -16,9 +15,9 @@ const quoteLine2 =
   "\u0935\u093f\u0936\u094d\u0935\u093e\u0938\u093e\u0930\u094d\u0939 \u0906\u0930\u094d\u0925\u093f\u0915 \u0938\u093e\u0925";
 
 const features = [
-  { label: "Car Loan", icon: <FaCar />, left: 53 },
-  { label: "Quick Approval", icon: <FaShieldAlt />, left: 140 },
-  { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 239 },
+  { label: "Car Loan", icon: <FaCar />, left: 70 },
+  { label: "Quick Approval", icon: <FaShieldAlt />, left: 157 },
+  { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 256 },
 ];
 
 const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
@@ -88,64 +87,18 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
       .auth-left::before { content: none; }
       .auth-left::after { content: none; }
 
-      .auth-brand {
-        position: absolute;
-        left: calc(50px + var(--auth-left-nudge));
-        top: 40px;
-        z-index: 2;
-        display: flex;
-        width: 170px;
-        height: 55px;
-        align-items: flex-start;
-        gap: 13px;
-      }
-
-      .auth-logo {
-        width: 50px;
-        height: 45px;
-        object-fit: contain;
-      }
-
-      .auth-brand-copy {
-        padding-top: 7px;
-      }
-
-      .auth-brand-name {
-        margin: 0;
-        color: #ffffff;
-        font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-        font-size: 28px;
-        font-weight: 700;
-        letter-spacing: -0.5px;
-        line-height: 1;
-      }
-
-      .auth-brand-name span {
-        color: #00e0d3;
-      }
-
-      .auth-tagline {
-        margin: 7px 0 0;
-        color: #8fa3c7;
-        font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-        font-size: 12px;
-        font-weight: 400;
-        line-height: 1;
-        white-space: nowrap;
-      }
-
       .auth-heading {
         position: absolute;
-        left: calc(49px + var(--auth-left-nudge));
-        top: 120px;
+        left: calc(70px + var(--auth-left-nudge));
+        top: 117px;
         z-index: 2;
-        width: 380px;
+        width: 410px;
         margin: 0;
         color: #ffffff;
-        font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-        font-size: 31px;
+        font-family: "Montserrat ExtraBold", "Noto Sans Devanagari", sans-serif;
+        font-size: 36px;
         font-weight: 800;
-        line-height: 38px;
+        line-height: 37px;
         letter-spacing: -0.8px;
       }
 
@@ -155,8 +108,8 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
       .auth-subtitle {
         position: absolute;
-        left: calc(50px + var(--auth-left-nudge));
-        top: 205px;
+        left: calc(70px + var(--auth-left-nudge));
+        top: 204px;
         z-index: 2;
         margin: 0;
         color: #ffffff;
@@ -172,7 +125,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
       .auth-underline {
         position: absolute;
-        left: calc(49px + var(--auth-left-nudge));
+        left: calc(70px + var(--auth-left-nudge));
         top: 233px;
         z-index: 2;
         width: 36px;
@@ -183,7 +136,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
       .auth-feature {
         position: absolute;
-        top: 248px;
+        top: 260px;
         z-index: 2;
         width: 52px;
         text-align: center;
@@ -227,7 +180,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
       .auth-quote {
         position: absolute;
-        left: calc(47px + var(--auth-left-nudge));
+        left: calc(70px + var(--auth-left-nudge));
         top: 348px;
         z-index: 2;
         width: 310px;
@@ -475,7 +428,6 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
         .auth-left::before { content: none; }
 
-        .auth-brand,
         .auth-heading,
         .auth-subtitle,
         .auth-underline,
@@ -484,10 +436,6 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
           position: relative;
           left: auto !important;
           top: auto;
-        }
-
-        .auth-brand {
-          margin-bottom: 30px;
         }
 
         .auth-heading {
@@ -534,10 +482,6 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         .auth-left {
           min-height: 440px;
           padding: 28px 20px 32px;
-        }
-
-        .auth-brand {
-          gap: 10px;
         }
 
         .auth-heading {
@@ -588,14 +532,6 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
       </div>
 
       <section className="auth-left" aria-label="Vahan Finserv car loan intro">
-        <div className="auth-brand">
-          <img src={logo} alt="Vahan Finserv" className="auth-logo" />
-          <div className="auth-brand-copy">
-            <h1 className="auth-brand-name">Vahan <span>Finserv</span></h1>
-            <p className="auth-tagline">Smart Finance, Simplified</p>
-          </div>
-        </div>
-
         <h2 className="auth-heading">
           Drive Your Dreams,
           <br />

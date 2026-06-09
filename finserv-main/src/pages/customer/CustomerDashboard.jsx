@@ -19,6 +19,8 @@ import {
 import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
 import qrCode from "../../assets/upi_1780494820795.png";
+import Footer from "../landing/Footer";
+import { clearAuthSession } from "../../utils/authSession";
 import {
   READY2DRIVE_BASE_AMOUNT,
   READY2DRIVE_FEE_LABEL,
@@ -681,9 +683,7 @@ const CustomerDashboard = () => {
   }, [paymentStatus, userId]);
 
   const handleLogout = () => {
-    localStorage.removeItem("role");
-    localStorage.removeItem("token");
-    localStorage.removeItem("userData");
+    clearAuthSession();
     navigate("/");
   };
 
@@ -1012,24 +1012,25 @@ const CustomerDashboard = () => {
   const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
-    <div className="min-h-dvh bg-[#F4F6F9] flex text-slate-800">
-      <Sidebar
-        sidebarOpen={sidebarOpen}
-        setSidebarOpen={setSidebarOpen}
-        activeMenu={activeMenu}
-        setActiveMenu={setActiveMenu}
-        handleLogout={handleLogout}
-      />
-      {sidebarOpen && (
-        <button
-          type="button"
-          aria-label="Close navigation"
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+    <div className="min-h-dvh bg-[#F4F6F9] text-slate-800">
+      <div className="flex min-h-dvh">
+        <Sidebar
+          sidebarOpen={sidebarOpen}
+          setSidebarOpen={setSidebarOpen}
+          activeMenu={activeMenu}
+          setActiveMenu={setActiveMenu}
+          handleLogout={handleLogout}
         />
-      )}
+        {sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Close navigation"
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          />
+        )}
 
-      <main className="min-w-0 flex-1 overflow-y-visible md:overflow-y-auto">
+        <main className="min-w-0 flex-1 overflow-y-visible md:overflow-y-auto">
         <div className="p-4 md:p-8 max-w-7xl mx-auto">
           <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
@@ -1176,7 +1177,9 @@ const CustomerDashboard = () => {
             </>
           )}
         </div>
-      </main>
+        </main>
+      </div>
+      <Footer logoutOnNavigate />
 
       {preview && (
         <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">

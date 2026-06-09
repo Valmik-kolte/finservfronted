@@ -1,7 +1,12 @@
 import logo from "../../assets/vahan-logo.jpg";
 import { Link } from "react-router-dom";
+import { clearAuthSession } from "../../utils/authSession";
 
-const Footer = () => {
+const Footer = ({ logoutOnNavigate = false }) => {
+  const handleFooterNavigate = () => {
+    if (logoutOnNavigate) clearAuthSession();
+  };
+
   return (
       <footer id="contact" className="bg-[#0a2540] px-4 sm:px-6 py-12 text-white lg:px-10">
         <div className="mx-auto max-w-7xl">
@@ -27,10 +32,10 @@ const Footer = () => {
             <div>
               <h2 className="font-bold mb-4">Quick Links</h2>
               <ul className="space-y-2 text-sm text-gray-300">
-                <li><Link to="/#top" className="hover:text-[#27D3C3]">Home</Link></li>
-                <li><Link to="/#our-banks" className="hover:text-[#27D3C3]">Our Banks</Link></li>
-                <li><Link to="/#how-it-works" className="hover:text-[#27D3C3]">How It Works</Link></li>
-                <li><Link to="/#about-us" className="hover:text-[#27D3C3]">About Us</Link></li>
+                <li><Link to="/#top" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Home</Link></li>
+                <li><Link to="/#our-banks" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Our Banks</Link></li>
+                <li><Link to="/#how-it-works" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">How It Works</Link></li>
+                <li><Link to="/#about-us" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">About Us</Link></li>
               </ul>
             </div>
 
@@ -38,8 +43,8 @@ const Footer = () => {
             <div>
               <h2 className="font-bold mb-4">Resources</h2>
               <ul className="space-y-2 text-sm text-gray-300">
-                <li><Link to="/faq" className="hover:text-[#27D3C3]">FAQs</Link></li>
-                <li><Link to="/loan-calculator" className="hover:text-[#27D3C3]">Loan Calculator</Link></li>
+                <li><Link to="/faq" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">FAQs</Link></li>
+                <li><Link to="/loan-calculator" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Loan Calculator</Link></li>
             
               </ul>
               
@@ -59,9 +64,9 @@ const Footer = () => {
           <div className="border-t border-gray-700 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
             <p>&copy; 2026 Vahan Finserv. All rights reserved.</p>
             <div className="flex flex-wrap justify-center gap-4">
-              <Link to="/privacy-policy" className="hover:text-[#27D3C3]">Privacy Policy</Link>
-              <Link to="/terms-and-conditions" className="hover:text-[#27D3C3]">Terms & Conditions</Link>
-              <Link to="/refund-policy" className="hover:text-[#27D3C3]">Refund Policy</Link>
+              <Link to="/privacy-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Privacy Policy</Link>
+              <Link to="/terms-and-conditions" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Terms & Conditions</Link>
+              <Link to="/refund-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Refund Policy</Link>
             </div>
           </div>
         </div>

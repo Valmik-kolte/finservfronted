@@ -15,7 +15,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { registerUser } from "../../services/customerService.js";
 import { registerDealer } from "../../services/dealerService.js";
-import logo from "../../assets/vahan-logo.jpg";
 import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
@@ -47,9 +46,9 @@ const Register = ({ defaultRole }) => {
   });
 
   const features = [
-    { label: "Car Loan", icon: <FaCar />, left: 53 },
-    { label: "Quick Approval", icon: <FaShieldAlt />, left: 140 },
-    { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 239 },
+    { label: "Car Loan", icon: <FaCar />, left: 70 },
+    { label: "Quick Approval", icon: <FaShieldAlt />, left: 157 },
+    { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 256 },
   ];
 
   const handleChange = (event) => {
@@ -171,64 +170,18 @@ const Register = ({ defaultRole }) => {
         .register-left::before { content: none; }
         .register-left::after { content: none; }
 
-        .register-brand {
-          position: absolute;
-          left: calc(50px + var(--auth-left-nudge));
-          top: 40px;
-          z-index: 2;
-          display: flex;
-          width: 170px;
-          height: 55px;
-          align-items: flex-start;
-          gap: 13px;
-        }
-
-        .register-logo {
-          width: 50px;
-          height: 45px;
-          object-fit: contain;
-        }
-
-        .register-brand-copy {
-          padding-top: 7px;
-        }
-
-        .register-brand-name {
-          margin: 0;
-          color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 28px;
-          font-weight: 700;
-          letter-spacing: -0.5px;
-          line-height: 1;
-        }
-
-        .register-brand-name span {
-          color: #00e0d3;
-        }
-
-        .register-tagline {
-          margin: 7px 0 0;
-          color: #8fa3c7;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 12px;
-          font-weight: 400;
-          line-height: 1;
-          white-space: nowrap;
-        }
-
         .register-heading {
           position: absolute;
-          left: calc(49px + var(--auth-left-nudge));
+          left: calc(70px + var(--auth-left-nudge));
           top: 117px;
           z-index: 2;
-          width: 380px;
+          width: 410px;
           margin: 0;
           color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 31px;
+          font-family: "Montserrat ExtraBold", "Noto Sans Devanagari", sans-serif;
+          font-size: 36px;
           font-weight: 800;
-          line-height: 38px;
+          line-height: 37px;
           letter-spacing: -0.8px;
         }
 
@@ -238,7 +191,7 @@ const Register = ({ defaultRole }) => {
 
         .register-subtitle {
           position: absolute;
-          left: calc(50px + var(--auth-left-nudge));
+          left: calc(70px + var(--auth-left-nudge));
           top: 204px;
           z-index: 2;
           margin: 0;
@@ -255,7 +208,7 @@ const Register = ({ defaultRole }) => {
 
         .register-underline {
           position: absolute;
-          left: calc(49px + var(--auth-left-nudge));
+          left: calc(70px + var(--auth-left-nudge));
           top: 233px;
           z-index: 2;
           width: 36px;
@@ -266,7 +219,7 @@ const Register = ({ defaultRole }) => {
 
         .register-feature {
           position: absolute;
-          top: 248px;
+          top: 260px;
           z-index: 2;
           width: 52px;
           text-align: center;
@@ -310,7 +263,7 @@ const Register = ({ defaultRole }) => {
 
         .register-quote {
           position: absolute;
-          left: calc(47px + var(--auth-left-nudge));
+          left: calc(70px + var(--auth-left-nudge));
           top: 348px;
           z-index: 2;
           width: 310px;
@@ -598,7 +551,6 @@ const Register = ({ defaultRole }) => {
 
           .register-left::before { content: none; }
 
-          .register-brand,
           .register-heading,
           .register-subtitle,
           .register-underline,
@@ -607,10 +559,6 @@ const Register = ({ defaultRole }) => {
             position: relative;
             left: auto !important;
             top: auto;
-          }
-
-          .register-brand {
-            margin-bottom: 30px;
           }
 
           .register-heading {
@@ -657,10 +605,6 @@ const Register = ({ defaultRole }) => {
           .register-left {
             min-height: 440px;
             padding: 28px 20px 32px;
-          }
-
-          .register-brand {
-            gap: 10px;
           }
 
           .register-heading {
@@ -712,14 +656,6 @@ const Register = ({ defaultRole }) => {
         </div>
 
         <section className="register-left" aria-label="Vahan Finserv car loan intro">
-          <div className="register-brand">
-            <img src={logo} alt="Vahan Finserv" className="register-logo" />
-            <div className="register-brand-copy">
-              <h1 className="register-brand-name">Vahan <span>Finserv</span></h1>
-              <p className="register-tagline">Smart Finance, Simplified</p>
-            </div>
-          </div>
-
           <h2 className="register-heading">
             Drive Your Dreams,
             <br />
