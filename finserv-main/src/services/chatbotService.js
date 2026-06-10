@@ -233,29 +233,12 @@ const fallbackUserLoanAmount = async () => {
 };
 
 const getDealerUsersFallbackList = async () => {
-  const dealer = getDealerSession();
-  const localUsers = readLocalDealerUsers().filter(
-    (user) =>
-      String(user.dealerCode || "").toLowerCase() === String(dealer.dealerCode || "").toLowerCase() ||
-      String(user.dealerId || user.assignedDealerId || "") === String(dealer.dealerId || "")
-  );
-  let apiUsers = [];
-  try {
-    const response = await api.get("/dealer/me/users");
-    apiUsers = asList(unwrap(response));
-  } catch {
-    try {
-      const response = await api.get("/user/all");
-      apiUsers = asList(unwrap(response)).filter(
-        (user) =>
-          String(user.dealerCode || "").toLowerCase() === String(dealer.dealerCode || "").toLowerCase() ||
-          String(user.dealerId || user.assignedDealerId || "") === String(dealer.dealerId || "")
-      );
-    } catch {
-      apiUsers = [];
-    }
-  }
-  return mergeUsersById(apiUsers, localUsers);
+  const response = await api.get("/chatbot/dealer/users");
+  const list = unwrap(response) || [];
+  return list.map((user) => ({
+    ...user,
+    fullName: user.fullName || user.name,
+  }));
 };
 
 const getDocumentsForUsers = async (users) => {
@@ -468,16 +451,16 @@ export const getUserLoanAmount = () =>
   getWithFallback("/chatbot/user/loan-amount", fallbackUserLoanAmount);
 
 export const getDealerMyId = () =>
-  fallbackDealerMyId();
+  getWithFallback("/chatbot/dealer/my-id", fallbackDealerMyId);
 
 export const getDealerUsers = () =>
-  fallbackDealerUsers();
+  getWithFallback("/chatbot/dealer/users", fallbackDealerUsers);
 
 export const getDealerPendingDocuments = () =>
-  fallbackDealerPendingDocuments();
+  getWithFallback("/chatbot/dealer/pending-documents", fallbackDealerPendingDocuments);
 
 export const getDealerMonthlySummary = () =>
-  fallbackDealerMonthlySummary();
+  getWithFallback("/chatbot/dealer/document-summary", fallbackDealerMonthlySummary);
 
 export const getAdminUsers = () =>
   getWithFallback("/chatbot/admin/users", fallbackAdminUsers);

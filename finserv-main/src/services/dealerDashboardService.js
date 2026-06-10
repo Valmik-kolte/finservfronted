@@ -2,42 +2,27 @@ import api from "./api";
 
 const unwrap = (response) => response.data?.data ?? response.data ?? null;
 
-export const getDealerProfile = async () => {
-  const response = await api.get("/dealer/me");
-  return unwrap(response);
-};
-
 export const getDealerUsers = async () => {
-  const response = await api.get("/dealer/me/users");
-  return unwrap(response) || [];
+  const response = await api.get("/chatbot/dealer/users");
+  const list = unwrap(response) || [];
+  return list.map((user) => ({
+    ...user,
+    fullName: user.fullName || user.name,
+  }));
 };
 
 export const getDealerUserDocuments = async (userId) => {
-  const response = await api.get(`/dealer/me/users/${userId}/documents`);
+  const response = await api.get(`/documents/user/${userId}`);
   return unwrap(response) || [];
 };
 
-export const getDealerDashboardSummary = async () => {
-  const response = await api.get("/dealer/me/dashboard");
-  return unwrap(response);
-};
-
-export const getDealerUserTracking = async (userId) => {
-  const response = await api.get(`/dealer/me/users/${userId}/tracking`);
-  return unwrap(response);
-};
-
-export const getDealerNotifications = async (params = {}) => {
-  const response = await api.get("/dealer/me/notifications", { params });
+export const getDealerNotifications = async ({ dealerId } = {}) => {
+  if (!dealerId) return [];
+  const response = await api.get(`/notifications/${dealerId}`);
   return unwrap(response) || [];
 };
 
 export const markDealerNotificationRead = async (notificationId) => {
-  const response = await api.put(`/dealer/me/notifications/${notificationId}/read`);
-  return unwrap(response);
-};
-
-export const markAllDealerNotificationsRead = async () => {
-  const response = await api.put("/dealer/me/notifications/read-all");
+  const response = await api.put(`/notifications/read/${notificationId}`);
   return unwrap(response);
 };

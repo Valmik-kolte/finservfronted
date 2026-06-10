@@ -504,6 +504,8 @@ const Login = () => {
           background: #ffffff;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
           animation: loginFadeUp 650ms ease-out both;
+          background: rgba(255, 255, 255, 0.25);
+backdrop-filter: blur(14px);
         }
 
         .card-title {

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -22,11 +22,8 @@ import api from "../../services/api";
 import Footer from "../landing/Footer";
 import { clearAuthSession } from "../../utils/authSession";
 import {
-  getDealerDashboardSummary,
   getDealerNotifications,
-  getDealerProfile,
   getDealerUserDocuments,
-  getDealerUserTracking,
   getDealerUsers,
   markDealerNotificationRead,
 } from "../../services/dealerDashboardService";
@@ -665,23 +662,16 @@ const DealerDashboard = () => {
     setSelectedCounts(null);
     setSelectedUserDocs(docsByUser[user.userId] || []);
     try {
-      try {
-        setSelectedUserDocs(await getDealerUserDocuments(user.userId));
-        setSelectedCounts({
-          documentCount: user.documentCount || 0,
-          pendingDocsCount: user.pendingDocsCount || 0,
-          verifiedDocsCount: user.verifiedDocsCount || 0,
-          approvedDocsCount: user.approvedDocsCount || 0,
-          rejectedDocsCount: user.rejectedDocsCount || 0,
-        });
-      } catch {
-        const [docsRes, countRes] = await Promise.all([
-          api.get(`/documents/user/${user.userId}`),
-          api.get(`/documents/count/${user.userId}`),
-        ]);
-        setSelectedUserDocs(docsRes.data?.data || []);
-        setSelectedCounts(countRes.data?.data || null);
-      }
+      const userDocs = documentsForAssignedBankUser(user, await getDealerUserDocuments(user.userId));
+      setSelectedUserDocs(userDocs);
+      const computedCounts = {
+        documentCount: userDocs.length,
+        pendingDocsCount: userDocs.filter((d) => d.status === "PENDING").length,
+        verifiedDocsCount: userDocs.filter((d) => d.status === "VERIFIED").length,
+        approvedDocsCount: userDocs.filter((d) => d.status === "APPROVED").length,
+        rejectedDocsCount: userDocs.filter((d) => d.status === "REJECTED").length,
+      };
+      setSelectedCounts(countsForAssignedBankUser(user, userDocs, computedCounts));
     } catch (error) {
       showError(error, "Failed to load user details");
     }
@@ -693,28 +683,17 @@ const DealerDashboard = () => {
     setTrackingData(null);
     setTrackingDocs(docsByUser[user.userId] || []);
     try {
-      try {
-        const [tracking, userDocs] = await Promise.all([
-          getDealerUserTracking(user.userId),
-          getDealerUserDocuments(user.userId),
-        ]);
-        setTrackingData(tracking);
-        setTrackingDocs(userDocs);
-        setTrackingCounts({
-          documentCount: user.documentCount || userDocs.length,
-          pendingDocsCount: user.pendingDocsCount || userDocs.filter((doc) => doc.status === "PENDING").length,
-          verifiedDocsCount: user.verifiedDocsCount || userDocs.filter((doc) => doc.status === "VERIFIED").length,
-          approvedDocsCount: user.approvedDocsCount || userDocs.filter((doc) => doc.status === "APPROVED").length,
-          rejectedDocsCount: user.rejectedDocsCount || userDocs.filter((doc) => doc.status === "REJECTED").length,
-        });
-      } catch {
-        const [docsRes, countRes] = await Promise.all([
-          api.get(`/documents/user/${user.userId}`),
-          api.get(`/documents/count/${user.userId}`),
-        ]);
-        setTrackingDocs(docsRes.data?.data || []);
-        setTrackingCounts(countRes.data?.data || null);
-      }
+      const userDocs = await getDealerUserDocuments(user.userId);
+      const effectiveDocs = documentsForAssignedBankUser(user, userDocs);
+      setTrackingDocs(effectiveDocs);
+      const computedCounts = {
+        documentCount: effectiveDocs.length,
+        pendingDocsCount: effectiveDocs.filter((d) => d.status === "PENDING").length,
+        verifiedDocsCount: effectiveDocs.filter((d) => d.status === "VERIFIED").length,
+        approvedDocsCount: effectiveDocs.filter((d) => d.status === "APPROVED").length,
+        rejectedDocsCount: effectiveDocs.filter((d) => d.status === "REJECTED").length,
+      };
+      setTrackingCounts(countsForAssignedBankUser(user, effectiveDocs, computedCounts));
     } catch (error) {
       showError(error, "Failed to load user status details");
     }
@@ -902,6 +881,8 @@ const DealerDashboard = () => {
         }.`
       );
       await loadDashboard();
+      localStorage.removeItem("dealer_registered_users");
+      localStorage.removeItem("dealer_registered_personal_info");
       setActiveMenu("Dashboard");
       toast.success("Application and documents submitted to admin.");
       return true;
@@ -1356,6 +1337,18 @@ const SimpleListOverlay = ({ title, items, onClose }) => (
 
 const SectionTitle = ({ title }) => <h2 className="mb-4 text-lg font-black text-[#0B2A4A]">{title}</h2>;
 
+const getUserStatusText = (user) => {
+  if (isUserAssignedToBank(user)) return "Sent to Bank";
+  if (user.paymentDone) return "Approved";
+  return "Sent to Admin";
+};
+
+const getUserStatusStyle = (user) => {
+  if (isUserAssignedToBank(user)) return "border-green-200 bg-green-50 text-green-700";
+  if (user.paymentDone) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  return "border-sky-200 bg-sky-50 text-sky-700";
+};
+
 const UserTable = ({ users, openUserModal, openTrackingModal }) => (
   <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
     <div className="overflow-x-auto">
@@ -1377,8 +1370,8 @@ const UserTable = ({ users, openUserModal, openTrackingModal }) => (
               <td className="px-5 py-4 text-gray-600">{user.email || "-"}</td>
               <td className="px-5 py-4 text-gray-600">{user.mobileNumber || "-"}</td>
               <td className="px-5 py-4">
-                <span className="inline-flex rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
-                  Sent to Admin
+                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getUserStatusStyle(user)}`}>
+                  {getUserStatusText(user)}
                 </span>
               </td>
               <td className="px-5 py-4 text-gray-600">{formatDate(user.createdAt)}</td>

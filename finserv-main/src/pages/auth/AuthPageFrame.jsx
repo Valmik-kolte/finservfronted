@@ -230,8 +230,10 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         width: 414px;
         height: 543px;
         border-radius: 10px;
-        background: #ffffff;
+        background: rgba(255, 255, 255, 0.88);
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
         animation: authFadeUp 650ms ease-out both;
       }
 
@@ -296,6 +298,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         position: absolute;
         left: 37px;
         width: 340px;
+        box-sizing: border-box;
         height: 41px;
         display: flex;
         align-items: center;
@@ -508,6 +511,8 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
         .auth-card {
           width: 100%;
+          height: auto;
+          min-height: 460px;
         }
 
         .auth-simple-divider {
@@ -520,6 +525,11 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         .auth-simple-submit {
           left: 20px;
           width: calc(100% - 40px);
+        }
+
+        .auth-card form > div[style*="grid-template-columns"] {
+          left: 20px !important;
+          width: calc(100% - 40px) !important;
         }
       }
     `}</style>

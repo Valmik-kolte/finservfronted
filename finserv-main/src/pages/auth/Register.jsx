@@ -312,8 +312,10 @@ const Register = ({ defaultRole }) => {
           width: 414px;
           height: 543px;
           border-radius: 10px;
-          background: #ffffff;
+          background: rgba(255, 255, 255, 0.88);
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
           animation: registerFadeUp 650ms ease-out both;
         }
 
@@ -360,6 +362,7 @@ const Register = ({ defaultRole }) => {
           left: 37px;
           top: 116px;
           width: 340px;
+          box-sizing: border-box;
           height: 40px;
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -408,6 +411,7 @@ const Register = ({ defaultRole }) => {
           position: absolute;
           left: 37px;
           width: 340px;
+          box-sizing: border-box;
           height: 37px;
           display: flex;
           align-items: center;
@@ -631,6 +635,8 @@ const Register = ({ defaultRole }) => {
 
           .register-card {
             width: 100%;
+            height: auto;
+            min-height: 575px;
           }
 
           .register-divider {

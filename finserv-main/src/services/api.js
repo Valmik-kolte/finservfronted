@@ -3,7 +3,8 @@
 import axios from "axios";
 
 const api = axios.create({
-  baseURL: "https://v1.vahanfinserv.com/api",
+  // baseURL: "https://v1.vahanfinserv.com/api",
+  baseURL: "http://localhost:8081/api",
 });
 
 // Attach JWT token automatically

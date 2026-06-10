@@ -529,17 +529,26 @@ const CustomerDashboard = () => {
       if (showSpinner) setLoading(true);
       try {
         setPaymentStatus(getStoredPaymentStatus(userId));
-        const [userRes, docsRes, countsRes, notificationsRes] =
+        const [userRes, docsRes, notificationsRes, paymentHistoryRes] =
           await Promise.allSettled([
             api.get(`/user/${userId}`),
             api.get(`/documents/user/${userId}`),
-            api.get(`/documents/count/${userId}`),
             api.get(`/notifications/${userId}`),
+            api.get(`/user/history/${userId}`),
           ]);
+
+        let backendPaymentApproved = false;
+        if (paymentHistoryRes.status === "fulfilled") {
+          const historyData = unwrap(paymentHistoryRes.value) || {};
+          if (historyData.paymentStatus === "APPROVED") {
+            backendPaymentApproved = true;
+          }
+        }
 
         if (userRes.status === "fulfilled") {
           const user = unwrap(userRes.value) || {};
-          setPaymentStatus(inferPaymentStatus(user));
+          const isApproved = backendPaymentApproved || user.paymentDone;
+          setPaymentStatus(isApproved ? PAYMENT_STATUS.PAYMENT_APPROVED : inferPaymentStatus(user));
           const nextProfile = {
             ...emptyProfile,
             ...user,
@@ -606,43 +615,7 @@ const CustomerDashboard = () => {
           setCounts(countsFromDocuments(effectiveDocumentsForCounts));
         }
 
-        if (countsRes.status === "fulfilled") {
-          const loadedCounts = {
-            pendingCount: 0,
-            verifiedCount: 0,
-            approvedCount: 0,
-            rejectedCount: 0,
-            ...(unwrap(countsRes.value) || {}),
-          };
-          const localAssignedBank = readLocalAssignedBank(userId);
-          const user = userRes.status === "fulfilled" ? unwrap(userRes.value) || {} : {};
-          const hasAssignedBank = !!(
-            user.bankId ||
-            user.assignedBankId ||
-            user.assignedBankName ||
-            user.bankName ||
-            localAssignedBank
-          );
-          setCounts(
-            hasAssignedBank
-              ? {
-                  ...(effectiveDocumentsForCounts
-                    ? countsFromDocuments(effectiveDocumentsForCounts)
-                    : loadedCounts),
-                  pendingCount: 0,
-                  verifiedCount: 0,
-                  rejectedCount: 0,
-                  approvedCount:
-                    effectiveDocumentsForCounts?.length ||
-                    loadedCounts.totalCount ||
-                    loadedCounts.documentsCount ||
-                    loadedCounts.approvedCount,
-                }
-              : effectiveDocumentsForCounts
-                ? countsFromDocuments(effectiveDocumentsForCounts)
-                : loadedCounts
-          );
-        }
+        // Counts are computed locally from documents above
 
         if (notificationsRes.status === "fulfilled") {
           setNotifications(
@@ -727,7 +700,7 @@ const CustomerDashboard = () => {
       loanAmount: Number(personalInfo.loanAmount) || 0,
     };
 
-    if (payload.loanAmount <= 1000000) {
+    if (payload.loanAmount < 100000) {
       toast.error("Loan amount must be greater than 1 Lakh.");
       return;
     }
@@ -1001,6 +974,8 @@ const CustomerDashboard = () => {
       personalInfo,
       documents,
     });
+    localStorage.removeItem(`personal_info_draft_${userId}`);
+    localStorage.removeItem(`personal_info_saved_${userId}`);
     setQrPaymentOpen(false);
     setActiveMenu("Status");
     addLocalAdminNotification(`${profile.fullName || "Customer"} has submitted documents for payment verification.`);
@@ -2195,11 +2170,7 @@ const SettingsTab = ({
           />
           <Field label="Email" value={settingsForm.email} readOnly />
           <Field label="Mobile" value={settingsForm.mobileNumber} readOnly />
-          <Field
-            label="Assigned Bank"
-            value={assignedBank ? assignedBank.bankName : "Yet to assign"}
-            readOnly
-          />
+          
         </div>
         <button
           onClick={saveSettings}

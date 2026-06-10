@@ -158,27 +158,29 @@ const Users = ({
               {getAssignedBankName(selectedUser, banks) || "Not assigned"}
             </span>
           </p>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <select
-              value={assignBankId}
-              onChange={(event) => setAssignBankId(event.target.value)}
-              className="flex-1 rounded-2xl border border-slate-200 px-4 py-3"
-            >
-              <option value="">Select bank</option>
-              {banks.map((bank) => (
-                <option key={bank.bankId} value={bank.bankId}>
-                  {bank.bankName}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={assignBank}
-              disabled={assigningBank}
-              className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
-            >
-              {assigningBank ? "Assigning..." : "Assign"}
-            </button>
-          </div>
+          {!getAssignedBankId(selectedUser) && (
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <select
+                value={assignBankId}
+                onChange={(event) => setAssignBankId(event.target.value)}
+                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3"
+              >
+                <option value="">Select bank</option>
+                {banks.map((bank) => (
+                  <option key={bank.bankId} value={bank.bankId}>
+                    {bank.bankName}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={assignBank}
+                disabled={assigningBank}
+                className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
+              >
+                {assigningBank ? "Assigning..." : "Assign"}
+              </button>
+            </div>
+          )}
         </div>
 
         {personalInfo && (

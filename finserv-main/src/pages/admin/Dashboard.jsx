@@ -21,7 +21,11 @@ import Bank from "./Bank";
 import Reports from "./Reports";
 import Settings from "./Settings";
 import Footer from "../landing/Footer";
-import { markPaymentSuccess } from "../../services/paymentService";
+import {
+  approvePayment as approvePaymentRequest,
+  getPaymentVerificationRequests,
+  rejectPayment as rejectPaymentRequest,
+} from "../../services/paymentService";
 import { clearAuthSession } from "../../utils/authSession";
 import {
   READY2DRIVE_BASE_AMOUNT,
@@ -50,7 +54,9 @@ const emptyBank = {
 };
 
 const asList = (response) => {
-  const data = unwrap(response);
+  if (Array.isArray(response)) return response;
+
+  const data = response?.data !== undefined ? unwrap(response) : response;
   if (Array.isArray(data)) return data;
 
   const nestedList = [
@@ -140,8 +146,6 @@ const readAssignedBankId = (userId) => localStorage.getItem(`user_bank_assignmen
 const getAssignedBankDetailKey = (userId) => `user_bank_assignment_detail_${userId}`;
 
 const DEALER_NOTIFICATIONS_KEY = "dealer_assignment_notifications";
-const DEALER_REGISTERED_USERS_KEY = "dealer_registered_users";
-const DEALER_REGISTERED_PERSONAL_INFO_KEY = "dealer_registered_personal_info";
 const ADMIN_NOTIFICATIONS_KEY = "admin_activity_notifications";
 const CUSTOMER_NOTIFICATIONS_KEY = "customer_activity_notifications";
 
@@ -151,41 +155,6 @@ const PAYMENT_STATUS = {
   PAYMENT_VERIFICATION_PENDING: "PAYMENT_VERIFICATION_PENDING",
   PAYMENT_APPROVED: "PAYMENT_APPROVED",
   PAYMENT_REJECTED: "PAYMENT_REJECTED",
-};
-
-const PAYMENT_REQUESTS_KEY = "customer_payment_requests";
-
-const getPaymentStorageKey = (userId) => `customer_payment_status_${userId || "guest"}`;
-
-const readPaymentStatus = (userId) =>
-  localStorage.getItem(getPaymentStorageKey(userId)) || PAYMENT_STATUS.DRAFT;
-
-const writePaymentStatus = (userId, status) => {
-  localStorage.setItem(getPaymentStorageKey(userId), status);
-};
-
-const readPaymentRequests = () => {
-  try {
-    return JSON.parse(localStorage.getItem(PAYMENT_REQUESTS_KEY) || "[]");
-  } catch {
-    return [];
-  }
-};
-
-const writePaymentRequest = (userId, status, documents = null) => {
-  const requests = readPaymentRequests();
-  const nextRequests = requests.map((request) =>
-    String(request.userId) === String(userId)
-      ? {
-          ...request,
-          status,
-          documents: documents || request.documents || [],
-          documentCount: documents?.length ?? request.documentCount ?? 0,
-          updatedAt: new Date().toISOString(),
-        }
-      : request
-  );
-  localStorage.setItem(PAYMENT_REQUESTS_KEY, JSON.stringify(nextRequests));
 };
 
 const approveDocuments = async (documents) => {
@@ -311,28 +280,9 @@ const addLocalCustomerNotification = ({ userId, message }) => {
   localStorage.setItem(CUSTOMER_NOTIFICATIONS_KEY, JSON.stringify([notification, ...notifications]));
 };
 
-const readLocalDealerUsers = () => {
-  try {
-    return JSON.parse(localStorage.getItem(DEALER_REGISTERED_USERS_KEY) || "[]");
-  } catch {
-    return [];
-  }
-};
-
 const removeUserFromLocalCaches = (userId) => {
-  const id = String(userId);
-  localStorage.removeItem(getPaymentStorageKey(userId));
   localStorage.removeItem(`user_bank_assignment_${userId}`);
   localStorage.removeItem(getAssignedBankDetailKey(userId));
-
-  const paymentRequests = readPaymentRequests().filter((request) => String(request.userId) !== id);
-  localStorage.setItem(PAYMENT_REQUESTS_KEY, JSON.stringify(paymentRequests));
-
-  const localUsers = readLocalDealerUsers().filter((user) => String(user.userId || user.id) !== id);
-  localStorage.setItem(DEALER_REGISTERED_USERS_KEY, JSON.stringify(localUsers));
-
-  const localInfos = readLocalDealerPersonalInfos().filter((info) => String(info.userId) !== id);
-  localStorage.setItem(DEALER_REGISTERED_PERSONAL_INFO_KEY, JSON.stringify(localInfos));
 };
 
 const mergeUsersById = (...lists) => {
@@ -343,14 +293,6 @@ const mergeUsersById = (...lists) => {
     map.set(String(id), { ...(map.get(String(id)) || {}), ...user, userId: id });
   });
   return Array.from(map.values());
-};
-
-const readLocalDealerPersonalInfos = () => {
-  try {
-    return JSON.parse(localStorage.getItem(DEALER_REGISTERED_PERSONAL_INFO_KEY) || "[]");
-  } catch {
-    return [];
-  }
 };
 
 const readLocalAdminNotifications = () => {
@@ -366,6 +308,70 @@ const mergeNotifications = (...lists) =>
     .flat()
     .filter(Boolean)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+const getPaymentUserId = (request) =>
+  firstPresent(
+    request?.userId,
+    request?.customerId,
+    request?.user?.userId,
+    request?.customer?.userId,
+    request?.user?.id,
+    request?.customer?.id,
+    request?.id
+  );
+
+const normalizePaymentRequest = (request = {}, { users = [], personalInfos = [], documents = [] } = {}) => {
+  const userId = getPaymentUserId(request);
+  const existingUser = users.find(
+    (user) => String(user.userId || user.id) === String(userId)
+  );
+  const requestUser = request.user || request.customer || {};
+  const user = {
+    ...(existingUser || {}),
+    ...requestUser,
+    userId: userId || requestUser.userId || requestUser.id,
+    fullName: firstPresent(
+      requestUser.fullName,
+      requestUser.name,
+      existingUser?.fullName,
+      existingUser?.name,
+      request.fullName,
+      request.name
+    ),
+    email: firstPresent(requestUser.email, existingUser?.email, request.email),
+    mobileNumber: firstPresent(
+      requestUser.mobileNumber,
+      requestUser.mobile,
+      existingUser?.mobileNumber,
+      existingUser?.mobile,
+      request.mobileNumber,
+      request.mobile
+    ),
+  };
+  const personalInfo =
+    request.personalInfo ||
+    personalInfos.find((info) => String(info.userId) === String(user.userId)) ||
+    {};
+  const documentCount =
+    Number(request.documentCount) ||
+    request.documents?.length ||
+    documents.filter((doc) => String(getDocumentOwnerId(doc)) === String(user.userId)).length ||
+    0;
+
+  return {
+    ...request,
+    user,
+    status: request.status || request.paymentStatus || PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING,
+    personalInfo,
+    documents: request.documents || [],
+    documentCount,
+    feeName: request.feeName || READY2DRIVE_FEE_LABEL,
+    feeBaseAmount: Number(request.feeBaseAmount) || READY2DRIVE_BASE_AMOUNT,
+    gstAmount: Number(request.gstAmount) || READY2DRIVE_GST_AMOUNT,
+    payableAmount: Number(request.payableAmount) || READY2DRIVE_TOTAL_AMOUNT,
+    updatedAt: request.updatedAt || request.paymentUpdatedAt || request.requestedAt || request.createdAt || "",
+  };
+};
 
 const markLocalAdminNotificationRead = (notificationId) => {
   const notifications = readLocalAdminNotifications();
@@ -414,7 +420,7 @@ const Dashboard = () => {
   const [bankModal, setBankModal] = useState(null);
   const [bankForm, setBankForm] = useState(emptyBank);
   const [preview, setPreview] = useState(null);
-  const [paymentVersion, setPaymentVersion] = useState(0);
+  const [rawPaymentRequests, setRawPaymentRequests] = useState([]);
   const [searchName, setSearchName] = useState("");
   const [passwordForm, setPasswordForm] = useState({
     newPassword: "",
@@ -425,22 +431,41 @@ const Dashboard = () => {
     () => uniqueDocuments([...allDocuments, ...pendingDocs, ...verifiedDocs]),
     [allDocuments, pendingDocs, verifiedDocs]
   );
+  const paymentRequests = useMemo(
+    () =>
+      rawPaymentRequests
+        .map((request) =>
+          normalizePaymentRequest(request, {
+            users,
+            personalInfos,
+            documents: allKnownDocs,
+          })
+        )
+        .filter((request) =>
+          [
+            PAYMENT_STATUS.PAYMENT_PENDING,
+            PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING,
+            PAYMENT_STATUS.PAYMENT_APPROVED,
+            PAYMENT_STATUS.PAYMENT_REJECTED,
+          ].includes(request.status)
+        ),
+    [allKnownDocs, personalInfos, rawPaymentRequests, users]
+  );
   const paymentRequestByUserId = useMemo(
     () =>
       new Map(
-        readPaymentRequests().map((request) => [
-          String(request.userId),
-          request.status || readPaymentStatus(request.userId),
-        ])
+        paymentRequests
+          .filter((request) => request.user?.userId)
+          .map((request) => [String(request.user.userId), request.status])
       ),
-    [paymentVersion]
+    [paymentRequests]
   );
   const adminVisibleDocs = useMemo(
     () =>
       allKnownDocs.filter((doc) => {
         const ownerId = getDocumentOwnerId(doc);
         const paymentStatus = paymentRequestByUserId.get(String(ownerId));
-        return !paymentStatus || paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED;
+        return paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED;
       }),
     [allKnownDocs, paymentRequestByUserId]
   );
@@ -449,63 +474,6 @@ const Dashboard = () => {
   const effectivePendingDocs = adminVisibleDocs.filter((doc) => doc.status === "PENDING");
   const effectiveVerifiedDocs = adminVisibleDocs.filter((doc) => doc.status === "VERIFIED");
   const unreadCount = notifications.filter((item) => !item.read).length;
-  const paymentRequests = useMemo(
-    () => {
-      const localRequests = readPaymentRequests();
-      const userMap = new Map(users.map((user) => [String(user.userId), user]));
-      const localUserIds = new Set(localRequests.map((request) => String(request.userId)));
-      const userRequests = users
-        .filter((user) => !localUserIds.has(String(user.userId)))
-        .map((user) => ({
-          user,
-          status: readPaymentStatus(user.userId),
-          personalInfo: personalInfos.find((info) => info.userId === user.userId),
-          documentCount: allKnownDocs.filter((doc) => doc.userId === user.userId).length,
-          feeName: READY2DRIVE_FEE_LABEL,
-          feeBaseAmount: READY2DRIVE_BASE_AMOUNT,
-          gstAmount: READY2DRIVE_GST_AMOUNT,
-          payableAmount: READY2DRIVE_TOTAL_AMOUNT,
-          updatedAt: "",
-        }));
-
-      const storedRequests = localRequests.map((request) => {
-        const user =
-          userMap.get(String(request.userId)) || {
-            userId: request.userId,
-            fullName: request.fullName,
-            email: request.email,
-            mobileNumber: request.mobileNumber,
-          };
-        return {
-          user,
-          status: request.status || readPaymentStatus(request.userId),
-          personalInfo:
-            personalInfos.find((info) => String(info.userId) === String(request.userId)) || {
-              loanAmount: request.loanAmount,
-            },
-          documentCount:
-            allKnownDocs.filter((doc) => String(doc.userId) === String(request.userId)).length ||
-            request.documentCount ||
-            0,
-          feeName: request.feeName || READY2DRIVE_FEE_LABEL,
-          feeBaseAmount: Number(request.feeBaseAmount) || READY2DRIVE_BASE_AMOUNT,
-          gstAmount: Number(request.gstAmount) || READY2DRIVE_GST_AMOUNT,
-          payableAmount: Number(request.payableAmount) || READY2DRIVE_TOTAL_AMOUNT,
-          updatedAt: request.updatedAt || "",
-        };
-      });
-
-      return [...storedRequests, ...userRequests].filter(({ status }) =>
-        [
-          PAYMENT_STATUS.PAYMENT_PENDING,
-          PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING,
-          PAYMENT_STATUS.PAYMENT_APPROVED,
-          PAYMENT_STATUS.PAYMENT_REJECTED,
-        ].includes(status)
-      );
-    },
-    [allKnownDocs, paymentVersion, personalInfos, users]
-  );
   const pendingPaymentRequests = paymentRequests.filter(
     (request) => request.status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
   );
@@ -516,7 +484,16 @@ const Dashboard = () => {
       try {
         setPermissionError("");
         setApiWarnings([]);
-        const [usersRes, dealersRes, pendingRes, verifiedRes, personalRes, banksRes, notificationsRes] =
+        const [
+          usersRes,
+          dealersRes,
+          pendingRes,
+          verifiedRes,
+          personalRes,
+          banksRes,
+          notificationsRes,
+          paymentRequestsRes,
+        ] =
           await Promise.allSettled([
             api.get("/user/all"),
             api.get("/dealer/all"),
@@ -525,6 +502,7 @@ const Dashboard = () => {
             api.get("/personal-info/all"),
             api.get("/admin/banks"),
             api.get(`/notifications/${adminId}`),
+            getPaymentVerificationRequests(),
           ]);
 
         const failedApis = getApiFailureSummary([
@@ -535,11 +513,12 @@ const Dashboard = () => {
           { label: "/personal-info/all", status: getFailureStatus(personalRes) },
           { label: "/admin/banks", status: getFailureStatus(banksRes) },
           { label: `/notifications/${adminId}`, status: getFailureStatus(notificationsRes) },
+          { label: "/payments/admin/verification-requests", status: getFailureStatus(paymentRequestsRes) },
         ]);
 
         let loadedUsers = [];
         if (usersRes.status === "fulfilled") {
-          loadedUsers = mergeUsersById(asList(usersRes.value), readLocalDealerUsers());
+          loadedUsers = mergeUsersById(asList(usersRes.value));
           setUsers(loadedUsers);
           setAllUsers(loadedUsers);
         } else if (usersRes.reason?.response?.status === 403) {
@@ -556,13 +535,22 @@ const Dashboard = () => {
         if (pendingRes.status === "fulfilled") setPendingDocs(asList(pendingRes.value));
         if (verifiedRes.status === "fulfilled") setVerifiedDocs(asList(verifiedRes.value));
         if (personalRes.status === "fulfilled") {
-          setPersonalInfos([...asList(personalRes.value), ...readLocalDealerPersonalInfos()]);
+          setPersonalInfos(asList(personalRes.value));
         }
         if (banksRes.status === "fulfilled") {
           setBanks(asList(banksRes.value));
         }
         if (notificationsRes.status === "fulfilled") {
           setNotifications(mergeNotifications(readLocalAdminNotifications(), asList(notificationsRes.value)));
+        }
+        if (paymentRequestsRes.status === "fulfilled") {
+          setRawPaymentRequests(
+            Array.isArray(paymentRequestsRes.value)
+              ? paymentRequestsRes.value
+              : asList(paymentRequestsRes.value)
+          );
+        } else {
+          setRawPaymentRequests([]);
         }
 
         setApiWarnings(failedApis);
@@ -645,13 +633,25 @@ const Dashboard = () => {
     setSelectedUser(user);
     setAssigningBank(false);
     setAssignBankId(String(user.bankId || user.assignedBankId || readAssignedBankId(user.userId) || ""));
+
+    const paymentStatus = paymentRequestByUserId.get(String(user.userId));
+    if (paymentStatus !== PAYMENT_STATUS.PAYMENT_APPROVED) {
+      toast.info("Payment is not approved yet. Documents are locked.");
+      setSelectedUserDocs([]);
+      setSelectedUserCounts(null);
+      return;
+    }
+
     try {
-      const [docsRes, countsRes] = await Promise.all([
-        api.get(`/documents/user/${user.userId}`),
-        api.get(`/documents/count/${user.userId}`),
-      ]);
-      setSelectedUserDocs(unwrap(docsRes) || []);
-      setSelectedUserCounts(unwrap(countsRes) || null);
+      const docsRes = await api.get(`/documents/user/${user.userId}`);
+      const userDocs = unwrap(docsRes) || [];
+      setSelectedUserDocs(userDocs);
+      setSelectedUserCounts({
+        pendingCount: userDocs.filter((d) => d.status === "PENDING").length,
+        verifiedCount: userDocs.filter((d) => d.status === "VERIFIED").length,
+        approvedCount: userDocs.filter((d) => d.status === "APPROVED").length,
+        rejectedCount: userDocs.filter((d) => d.status === "REJECTED").length,
+      });
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load user details.");
     }
@@ -663,12 +663,6 @@ const Dashboard = () => {
       return;
     }
     const q = searchName.trim().toLowerCase();
-    const localMatches = readLocalDealerUsers().filter(
-      (user) =>
-        String(user.fullName || user.name || "").toLowerCase().includes(q) ||
-        String(user.email || "").toLowerCase().includes(q) ||
-        String(user.mobileNumber || user.mobile || "").includes(q)
-    );
     const cachedMatches = allUsers.filter(
       (user) =>
         String(user.fullName || user.name || "").toLowerCase().includes(q) ||
@@ -678,9 +672,9 @@ const Dashboard = () => {
 
     try {
       const res = await api.get(`/user/search?name=${encodeURIComponent(searchName.trim())}`);
-      setUsers(mergeUsersById(asList(res), cachedMatches, localMatches));
+      setUsers(mergeUsersById(asList(res), cachedMatches));
     } catch (error) {
-      const fallbackMatches = mergeUsersById(cachedMatches, localMatches);
+      const fallbackMatches = mergeUsersById(cachedMatches);
       if (fallbackMatches.length > 0) {
         setUsers(fallbackMatches);
       } else {
@@ -771,7 +765,9 @@ const Dashboard = () => {
         const docsRes = await api.get(`/documents/user/${selectedUser.userId}`);
         docsToApprove = asList(docsRes);
       }
-      const approvalResult = await approveDocuments(docsToApprove);
+      await approveDocuments(docsToApprove);
+      const approvedDocs = docsToApprove.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }));
+      const totalApprovedDocuments = docsToApprove.length;
       localStorage.setItem(`user_bank_assignment_${selectedUser.userId}`, String(assignBankId));
       localStorage.setItem(
         getAssignedBankDetailKey(selectedUser.userId),
@@ -785,28 +781,21 @@ const Dashboard = () => {
           contactNumber: assignedBank?.contactNumber || "",
         })
       );
-      const approvedCount = approvalResult.approved || docsToApprove.filter((doc) => doc.status !== "APPROVED").length;
       addLocalDealerNotification({
         dealerId: selectedDealer?.dealerId || selectedDealer?.id || selectedUser.dealerId || selectedUser.assignedDealerId,
         dealerCode: selectedDealer?.dealerCode || selectedUser.dealerCode,
         message: `${selectedUser.fullName || "Customer"} has been assigned to ${
           assignedBank?.bankName || "a bank"
-        }. ${approvedCount || "All"} document(s) were approved by admin.`,
+        }. ${totalApprovedDocuments || "All"} document(s) were approved by admin.`,
       });
       addLocalCustomerNotification({
         userId: selectedUser.userId,
         message:
-          approvedCount > 1
+          totalApprovedDocuments > 1
             ? `All documents approved by admin. Your application has been forwarded to ${assignedBank?.bankName || "a bank"}.`
             : `Your ${formatDocumentType(docsToApprove[0]?.documentType)} was approved by admin. Your application has been forwarded to ${assignedBank?.bankName || "a bank"}.`,
       });
-      if (approvalResult.failed > 0) {
-        toast.warning(`Bank assigned, but ${approvalResult.failed} document(s) could not be auto-approved.`);
-      } else if (approvalResult.approved > 0) {
-        toast.success(`Bank assigned, dealer notified, and ${approvalResult.approved} document(s) approved.`);
-      } else {
-        toast.success("Bank assigned and dealer notified.");
-      }
+      toast.success("Bank assigned successfully and documents approved.");
       const bankFields = {
         bankId: Number(assignBankId),
         assignedBankId: Number(assignBankId),
@@ -817,7 +806,7 @@ const Dashboard = () => {
         prev.map((doc) => (doc.documentId ? { ...doc, status: "APPROVED", remarks: "" } : doc))
       );
       if (docsToApprove.length > 0) {
-        setSelectedUserDocs(docsToApprove.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" })));
+        setSelectedUserDocs(approvedDocs);
       }
       setSelectedUser((prev) => (prev ? { ...prev, ...bankFields } : prev));
       setUsers((prev) =>
@@ -825,7 +814,6 @@ const Dashboard = () => {
           user.userId === selectedUser.userId ? { ...user, ...bankFields } : user
         )
       );
-      const approvedDocs = docsToApprove.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }));
       const approvedDocIds = new Set(approvedDocs.map((doc) => String(doc.documentId)));
       setPendingDocs((prev) => prev.filter((doc) => !approvedDocIds.has(String(doc.documentId))));
       setVerifiedDocs((prev) => uniqueDocuments([...prev, ...approvedDocs]));
@@ -964,10 +952,10 @@ const Dashboard = () => {
   const updatePaymentRequest = async (userId, status) => {
     try {
       if (status === PAYMENT_STATUS.PAYMENT_APPROVED) {
-        await markPaymentSuccess(userId);
+        await approvePaymentRequest(userId);
+      } else if (status === PAYMENT_STATUS.PAYMENT_REJECTED) {
+        await rejectPaymentRequest(userId);
       }
-      writePaymentStatus(userId, status);
-      writePaymentRequest(userId, status);
       addLocalCustomerNotification({
         userId,
         message:
@@ -991,7 +979,6 @@ const Dashboard = () => {
               : `${user.fullName || "Customer"} payment was rejected.`,
         });
       }
-      setPaymentVersion((prev) => prev + 1);
       toast.success(
         status === PAYMENT_STATUS.PAYMENT_APPROVED
           ? "Payment approved. Customer documents can proceed to admin review."
