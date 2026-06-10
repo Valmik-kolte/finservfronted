@@ -275,7 +275,7 @@ const readLocalDealerNotifications = () => {
   }
 };
 
-const addLocalDealerNotification = ({ dealerId, dealerCode, message }) => {
+const addLocalDealerNotification = ({ dealerId, dealerCode, message, ...meta }) => {
   if (!dealerId && !dealerCode) return;
   const notifications = readLocalDealerNotifications();
   const notification = {
@@ -285,6 +285,7 @@ const addLocalDealerNotification = ({ dealerId, dealerCode, message }) => {
     message,
     read: false,
     createdAt: new Date().toISOString(),
+    ...meta,
   };
   localStorage.setItem(DEALER_NOTIFICATIONS_KEY, JSON.stringify([notification, ...notifications]));
 };
@@ -887,6 +888,11 @@ const Dashboard = () => {
           dealerId: dealer?.dealerId || dealer?.id || user.dealerId || user.assignedDealerId,
           dealerCode: dealer?.dealerCode || user.dealerCode,
           message: `${user.fullName || "Customer"}: ${message}`,
+          type: "DOCUMENT_STATUS",
+          documentStatus: status,
+          documentId: doc.documentId,
+          documentType: doc.documentType,
+          userId,
         });
       }
       toast.success(`Document marked ${status}.`);
@@ -905,6 +911,8 @@ const Dashboard = () => {
       const doc = allKnownDocs.find((item) => String(item.documentId) === String(documentId));
       const userId = getDocumentOwnerId(doc);
       const user = users.find((item) => String(item.userId) === String(userId));
+      const documentStatus = doc?.status || "";
+      const isRejectedDocument = String(documentStatus).toUpperCase() === "REJECTED";
       const message = `Admin added a remark on ${doc?.documentType || "your document"}${remark ? `: ${remark}` : "."}`;
       addLocalCustomerNotification({ userId, message });
       if (user) {
@@ -916,7 +924,15 @@ const Dashboard = () => {
         addLocalDealerNotification({
           dealerId: dealer?.dealerId || dealer?.id || user.dealerId || user.assignedDealerId,
           dealerCode: dealer?.dealerCode || user.dealerCode,
-          message: `${user.fullName || "Customer"} received a document remark.`,
+          message: isRejectedDocument
+            ? `${user.fullName || "Customer"} received a remark on a rejected document.`
+            : `${user.fullName || "Customer"} received a document remark.`,
+          type: isRejectedDocument ? "REJECTED_DOCUMENT_REMARK" : "DOCUMENT_REMARK",
+          documentStatus,
+          documentId,
+          documentType: doc?.documentType,
+          remarks: remark,
+          userId,
         });
       }
       toast.success("Remark saved.");

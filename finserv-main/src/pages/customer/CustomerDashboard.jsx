@@ -727,8 +727,8 @@ const CustomerDashboard = () => {
       loanAmount: Number(personalInfo.loanAmount) || 0,
     };
 
-    if (payload.loanAmount <= 0) {
-      toast.error("Loan amount must be greater than 0.");
+    if (payload.loanAmount <= 1000000) {
+      toast.error("Loan amount must be greater than 1 Lakh.");
       return;
     }
 

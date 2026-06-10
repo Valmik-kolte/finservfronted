@@ -121,6 +121,24 @@ const getMessage = (error, fallback) =>
 
 const showError = (error, fallback) => toast.error(getMessage(error, fallback));
 const isNotificationRead = (item) => item.read ?? item.isRead ?? false;
+const isRejectedDocumentRemarkNotification = (item = {}) => {
+  const haystack = [
+    item.type,
+    item.notificationType,
+    item.eventType,
+    item.category,
+    item.title,
+    item.message,
+    item.documentStatus,
+    item.status,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const hasRemark = haystack.includes("remark") || Boolean(item.remarks || item.remark);
+  const hasRejected = haystack.includes("reject");
+  return hasRemark && hasRejected;
+};
 
 const readDealerSession = () => {
   try {
@@ -398,7 +416,11 @@ const DealerDashboard = () => {
 
   const dealerCode = profile.dealerCode;
   const notificationDealerId = profile.dealerId || dealerId;
-  const unreadCount = notifications.filter((item) => !isNotificationRead(item)).length;
+  const bellNotifications = useMemo(
+    () => notifications.filter(isRejectedDocumentRemarkNotification),
+    [notifications]
+  );
+  const unreadCount = bellNotifications.filter((item) => !isNotificationRead(item)).length;
 
   const fetchDocsForUsers = useCallback(async (ids) => {
     if (!ids || ids.length === 0) return []; // No user IDs, return empty docs
@@ -785,8 +807,8 @@ const DealerDashboard = () => {
       toast.error("Pincode must be 6 digits");
       return false;
     }
-    if (Number(personalForm.loanAmount) <= 0) {
-      toast.error("Loan amount must be greater than 0");
+    if (Number(personalForm.loanAmount) <= 100000) {
+      toast.error("Loan amount must be greater than 1 Lakh");
       return false;
     }
     return validateFiles();
@@ -1039,10 +1061,10 @@ const DealerDashboard = () => {
                   <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl">
                     <div className="border-b border-gray-100 px-4 py-3 font-bold text-[#0B2A4A]">Notifications</div>
                     <div className="max-h-96 overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-4 text-sm text-gray-500">No notifications</div>
+                      {bellNotifications.length === 0 ? (
+                        <div className="p-4 text-sm text-gray-500">No rejected document remarks</div>
                       ) : (
-                        notifications.slice(0, 8).map((item) => (
+                        bellNotifications.slice(0, 8).map((item) => (
                           <button
                             key={item.id}
                             onClick={() => markRead(item.id)}

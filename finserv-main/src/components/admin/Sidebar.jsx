@@ -6,13 +6,13 @@ import {
   FaUserTie,
   FaChartBar,
   FaUniversity,
-  FaCarSide,
   FaCog,
   FaSignOutAlt,
   FaBars,
   FaClipboardCheck,
   FaRupeeSign,
 } from "react-icons/fa";
+import logo from "../../assets/vahan-logo.jpg";
 
 const menuItems = [
   { name: "Dashboard", icon: <FaTachometerAlt /> },
@@ -50,7 +50,7 @@ const Sidebar = ({
       <div
         className={`flex border-b border-white/10 ${
           sidebarOpen
-            ? "items-center justify-between px-5 py-5 sm:px-6 sm:py-6"
+            ? "items-center justify-between px-3 py-5 sm:px-4 sm:py-6"
             : "items-center justify-center px-3 py-5 md:flex-col md:gap-4"
         }`}
       >
@@ -60,22 +60,21 @@ const Sidebar = ({
             if (!sidebarOpen) setSidebarOpen(true);
           }}
           className={`flex min-w-0 items-center rounded-2xl text-left ${
-            sidebarOpen ? "gap-4" : "justify-center hover:bg-white/10"
+            sidebarOpen ? "gap-3 px-4 sm:px-5" : "justify-center hover:bg-white/10"
           }`}
           aria-label={sidebarOpen ? "Admin home" : "Expand navigation"}
         >
-          <span
-            className={`flex shrink-0 items-center justify-center rounded-2xl bg-[#27D3C3] text-[#0B2A4A] ${
-              sidebarOpen ? "h-14 w-14 text-2xl" : "h-12 w-12 text-xl"
+          <img
+            src={logo}
+            alt="Vahan Finserv"
+            className={`shrink-0 rounded-full bg-white object-cover ring-2 ring-[#27D3C3]/30 ${
+              sidebarOpen ? "h-12 w-12" : "h-12 w-12"
             }`}
-          >
-            <FaCarSide />
-          </span>
-
+          />
           {sidebarOpen && (
-            <div className="min-w-0">
-              <h1 className="truncate text-2xl font-bold">Vahan</h1>
-              <p className="text-sm text-gray-300">Finserv</p>
+            <div className="flex min-w-0 flex-col justify-center leading-none">
+              <h1 className="m-0 truncate text-2xl font-black tracking-normal text-white">Vahan</h1>
+              <p className="m-0 mt-1 truncate text-sm font-bold tracking-normal text-[#27D3C3]">Finserv</p>
             </div>
           )}
         </button>
