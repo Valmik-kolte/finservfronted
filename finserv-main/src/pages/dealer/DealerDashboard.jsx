@@ -26,6 +26,7 @@ import {
   getDealerUserDocuments,
   getDealerUsers,
   markDealerNotificationRead,
+  getDealerDashboardSummary,
 } from "../../services/dealerDashboardService";
 import Chatbot from "../../components/chatbot/Chatbot";
 

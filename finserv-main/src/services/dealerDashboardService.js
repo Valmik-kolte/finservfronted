@@ -26,3 +26,21 @@ export const markDealerNotificationRead = async (notificationId) => {
   const response = await api.put(`/notifications/read/${notificationId}`);
   return unwrap(response);
 };
+
+export const getDealerDashboardSummary = async () => {
+  try {
+    const response = await api.get("/chatbot/dealer/document-summary");
+    const unwrapResponse = unwrap(response);
+    const summary = unwrapResponse?.summary || {};
+    return {
+      usersCount: unwrapResponse?.usersCount,
+      documentsCount: summary.totalDocuments,
+      pendingDocsCount: summary.pending,
+      approvedDocsCount: summary.approved,
+      rejectedDocsCount: summary.rejected,
+      bankAssignedCount: unwrapResponse?.bankAssignedCount,
+    };
+  } catch (e) {
+    return null;
+  }
+};
