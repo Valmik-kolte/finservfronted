@@ -338,6 +338,36 @@ const Modal = ({ title, onClose, children, wide = false }) => (
   </div>
 );
 
+const mergeBankAssignmentsIntoUsers = (usersList, notificationsList) => {
+  const regex = /^(.+?)\s+has been assigned to\s+([^.]+)/i;
+  const assignments = new Map();
+  notificationsList.forEach((notif) => {
+    const msg = notif.message || notif.msg || "";
+    const match = msg.match(regex);
+    if (match && match[1] && match[2]) {
+      const customerName = match[1].trim();
+      const bankName = match[2].trim();
+      if (!assignments.has(customerName)) {
+        assignments.set(customerName, bankName);
+      }
+    }
+  });
+
+  return usersList.map((u) => {
+    const bankName = assignments.get(u.fullName);
+    if (bankName) {
+      return {
+        ...u,
+        bankName,
+        assignedBankName: bankName,
+        bankId: 1,
+        assignedBankId: 1,
+      };
+    }
+    return u;
+  });
+};
+
 const DealerDashboard = () => {
   const navigate = useNavigate();
   const session = useMemo(() => readDealerSession(), []);
@@ -512,19 +542,20 @@ const DealerDashboard = () => {
         );
         documentResponses.forEach((list) => dealerDocs.push(...list));
         const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
+        const finalNotifications = [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const updatedUsers = mergeBankAssignmentsIntoUsers(normalizedUsers, finalNotifications);
+
         setDashboardSummary(summary);
-        setUsers(normalizedUsers);
+        setUsers(updatedUsers);
         setPersonalInfos(
-          normalizedUsers.map((user) => ({
+          updatedUsers.map((user) => ({
             userId: user.userId,
             loanAmount: user.loanAmount,
             applicationId: user.applicationId,
           }))
         );
         setDocs(uniqueDocuments(dealerDocs));
-        setNotifications(
-          [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        );
+        setNotifications(finalNotifications);
         return;
       } catch (error) {
         if (![403, 404, 500].includes(error?.response?.status)) {
@@ -568,20 +599,25 @@ const DealerDashboard = () => {
       myUsers.sort((a, b) =>
         String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" })
       );
-      setUsers(myUsers);
-      setPersonalInfos(myInfos);
-      setDocs(uniqueDocuments(myDocs));
-
+      let finalNotifications = [];
       if (resolvedDealerId) {
         try {
           const notifRes = await api.get(`/notifications/${resolvedDealerId}`);
           const list = Array.isArray(notifRes.data) ? notifRes.data : [];
           const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
-          setNotifications([...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          finalNotifications = [...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         } catch {
-          setNotifications(getLocalDealerNotifications(resolvedDealerId, resolvedCode));
+          finalNotifications = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
         }
+      } else {
+        finalNotifications = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
       }
+
+      const updatedUsers = mergeBankAssignmentsIntoUsers(myUsers, finalNotifications);
+      setUsers(updatedUsers);
+      setNotifications(finalNotifications);
+      setPersonalInfos(myInfos);
+      setDocs(uniqueDocuments(myDocs));
     } catch (error) {
       showError(error, "Failed to load dealer dashboard");
     } finally {
@@ -639,7 +675,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`ttp://localhost:8081/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");

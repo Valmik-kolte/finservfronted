@@ -244,40 +244,36 @@ const readLocalDealerNotifications = () => {
   }
 };
 
-const addLocalDealerNotification = ({ dealerId, dealerCode, message, ...meta }) => {
+const addLocalDealerNotification = async ({ dealerId, dealerCode, message }) => {
   if (!dealerId && !dealerCode) return;
-  const notifications = readLocalDealerNotifications();
-  const notification = {
-    id: `local-bank-${Date.now()}`,
-    dealerId: dealerId || "",
-    dealerCode: dealerCode || "",
-    message,
-    read: false,
-    createdAt: new Date().toISOString(),
-    ...meta,
-  };
-  localStorage.setItem(DEALER_NOTIFICATIONS_KEY, JSON.stringify([notification, ...notifications]));
-};
-
-const readLocalCustomerNotifications = () => {
   try {
-    return JSON.parse(localStorage.getItem(CUSTOMER_NOTIFICATIONS_KEY) || "[]");
-  } catch {
-    return [];
+    const adminSession = getAdminSession();
+    const adminId = adminSession?.id || 1;
+    await api.post("/notifications/send", {
+      receiverId: dealerId ? Number(dealerId) : null,
+      message,
+      senderId: Number(adminId),
+      role: "DEALER"
+    });
+  } catch (err) {
+    console.error("Failed to send dealer database notification:", err);
   }
 };
 
-const addLocalCustomerNotification = ({ userId, message }) => {
+const addLocalCustomerNotification = async ({ userId, message }) => {
   if (!userId || !message) return;
-  const notifications = readLocalCustomerNotifications();
-  const notification = {
-    id: `local-customer-${Date.now()}-${userId}`,
-    userId,
-    message,
-    read: false,
-    createdAt: new Date().toISOString(),
-  };
-  localStorage.setItem(CUSTOMER_NOTIFICATIONS_KEY, JSON.stringify([notification, ...notifications]));
+  try {
+    const adminSession = getAdminSession();
+    const adminId = adminSession?.id || 1;
+    await api.post("/notifications/send", {
+      receiverId: Number(userId),
+      message,
+      senderId: Number(adminId),
+      role: "USER"
+    });
+  } catch (err) {
+    console.error("Failed to send customer database notification:", err);
+  }
 };
 
 const removeUserFromLocalCaches = (userId) => {
@@ -285,12 +281,28 @@ const removeUserFromLocalCaches = (userId) => {
   localStorage.removeItem(getAssignedBankDetailKey(userId));
 };
 
+const isDealerAddedUser = (user) => {
+  if (!user) return false;
+  return (
+    user.registrationType === "DEALER" ||
+    (user.dealerCode !== undefined && user.dealerCode !== null && String(user.dealerCode).trim() !== "")
+  );
+};
+
 const mergeUsersById = (...lists) => {
   const map = new Map();
   lists.flat().filter(Boolean).forEach((user) => {
     const id = user.userId || user.id;
     if (!id) return;
-    map.set(String(id), { ...(map.get(String(id)) || {}), ...user, userId: id });
+    const existing = map.get(String(id)) || {};
+    const merged = { ...existing, ...user, userId: id };
+    if (user.name && !merged.fullName) {
+      merged.fullName = user.name;
+    }
+    if (!merged.registrationType) {
+      merged.registrationType = merged.dealerCode ? "DEALER" : "INDIVIDUAL";
+    }
+    map.set(String(id), merged);
   });
   return Array.from(map.values());
 };
@@ -442,6 +454,7 @@ const Dashboard = () => {
           })
         )
         .filter((request) =>
+          !isDealerAddedUser(request.user) &&
           [
             PAYMENT_STATUS.PAYMENT_PENDING,
             PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING,
@@ -464,10 +477,14 @@ const Dashboard = () => {
     () =>
       allKnownDocs.filter((doc) => {
         const ownerId = getDocumentOwnerId(doc);
+        const user = users.find((u) => String(u.userId || u.id) === String(ownerId));
+        if (isDealerAddedUser(user)) {
+          return true;
+        }
         const paymentStatus = paymentRequestByUserId.get(String(ownerId));
         return paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED;
       }),
-    [allKnownDocs, paymentRequestByUserId]
+    [allKnownDocs, paymentRequestByUserId, users]
   );
   const approvedDocsCount = adminVisibleDocs.filter((doc) => doc.status === "APPROVED").length;
   const rejectedDocsCount = adminVisibleDocs.filter((doc) => doc.status === "REJECTED").length;
@@ -486,6 +503,8 @@ const Dashboard = () => {
         setApiWarnings([]);
         const [
           usersRes,
+          chatbotUsersRes,
+          userHistoryRes,
           dealersRes,
           pendingRes,
           verifiedRes,
@@ -496,6 +515,8 @@ const Dashboard = () => {
         ] =
           await Promise.allSettled([
             api.get("/user/all"),
+            api.get("/chatbot/admin/users"),
+            api.get("/user/history"),
             api.get("/dealer/all"),
             api.get("/documents/pending"),
             api.get("/documents/verified"),
@@ -507,6 +528,8 @@ const Dashboard = () => {
 
         const failedApis = getApiFailureSummary([
           { label: "/user/all", status: getFailureStatus(usersRes) },
+          { label: "/chatbot/admin/users", status: getFailureStatus(chatbotUsersRes) },
+          { label: "/user/history", status: getFailureStatus(userHistoryRes) },
           { label: "/dealer/all", status: getFailureStatus(dealersRes) },
           { label: "/documents/pending", status: getFailureStatus(pendingRes) },
           { label: "/documents/verified", status: getFailureStatus(verifiedRes) },
@@ -517,18 +540,77 @@ const Dashboard = () => {
         ]);
 
         let loadedUsers = [];
-        if (usersRes.status === "fulfilled") {
-          loadedUsers = mergeUsersById(asList(usersRes.value));
+        const usersList = usersRes.status === "fulfilled" ? asList(usersRes.value) : [];
+        const chatbotUsersList = chatbotUsersRes.status === "fulfilled" ? asList(chatbotUsersRes.value) : [];
+        const userHistoryList = userHistoryRes.status === "fulfilled" ? asList(userHistoryRes.value) : [];
+
+        loadedUsers = mergeUsersById(usersList, chatbotUsersList, userHistoryList);
+
+        let loadedBanks = [];
+        if (banksRes.status === "fulfilled") {
+          loadedBanks = asList(banksRes.value);
+          setBanks(loadedBanks);
+        }
+
+        if (loadedBanks.length > 0 && loadedUsers.length > 0) {
+          try {
+            const bankUsersResults = await Promise.allSettled(
+              loadedBanks.map((bank) =>
+                api.get(`/user/search-by-bank?bankName=${encodeURIComponent(bank.bankName)}`)
+              )
+            );
+
+            const userBankMap = new Map();
+            bankUsersResults.forEach((res, index) => {
+              if (res.status === "fulfilled") {
+                const bank = loadedBanks[index];
+                const list = asList(res.value);
+                list.forEach((u) => {
+                  const uid = u.userId || u.id;
+                  if (uid) {
+                    userBankMap.set(String(uid), {
+                      bankId: bank.bankId,
+                      assignedBankId: bank.bankId,
+                      bankName: bank.bankName,
+                      assignedBankName: bank.bankName,
+                      representativeName: bank.representativeName,
+                      email: bank.email,
+                      contactNumber: bank.contactNumber,
+                    });
+                  }
+                });
+              }
+            });
+
+            loadedUsers = loadedUsers.map((user) => {
+              const userId = user.userId || user.id;
+              const bankDetails = userBankMap.get(String(userId));
+              if (bankDetails) {
+                return { ...user, ...bankDetails };
+              }
+              return user;
+            });
+          } catch (err) {
+            console.error("Failed to query bank assignments from database:", err);
+          }
+        }
+
+        if (loadedUsers.length > 0) {
           setUsers(loadedUsers);
           setAllUsers(loadedUsers);
-        } else if (usersRes.reason?.response?.status === 403) {
-          setUsers([]);
-          setAllUsers([]);
-          setPermissionError("Your current token is not authorized for admin data. Please login again with an ADMIN account.");
-          return;
+        } else {
+          const is403 = [usersRes, chatbotUsersRes, userHistoryRes].some(
+            (res) => res.status === "rejected" && res.reason?.response?.status === 403
+          );
+          if (is403) {
+            setUsers([]);
+            setAllUsers([]);
+            setPermissionError("Your current token is not authorized for admin data. Please login again with an ADMIN account.");
+            return;
+          }
         }
         if (dealersRes.status === "fulfilled") setDealers(asList(dealersRes.value));
-        if (dealersRes.reason?.response?.status === 403 && usersRes.status === "rejected") {
+        if (dealersRes.reason?.response?.status === 403 && [usersRes, chatbotUsersRes, userHistoryRes].every((res) => res.status === "rejected")) {
           setPermissionError("Admin API access is forbidden for this token. Please login again as ADMIN, or check backend role permissions for admin endpoints.");
           return;
         }
@@ -536,9 +618,6 @@ const Dashboard = () => {
         if (verifiedRes.status === "fulfilled") setVerifiedDocs(asList(verifiedRes.value));
         if (personalRes.status === "fulfilled") {
           setPersonalInfos(asList(personalRes.value));
-        }
-        if (banksRes.status === "fulfilled") {
-          setBanks(asList(banksRes.value));
         }
         if (notificationsRes.status === "fulfilled") {
           setNotifications(mergeNotifications(readLocalAdminNotifications(), asList(notificationsRes.value)));
@@ -556,9 +635,14 @@ const Dashboard = () => {
         setApiWarnings(failedApis);
 
         if (loadedUsers.length > 0) {
-          setAllDocuments(await fetchDocumentsForUsersInBatches(loadedUsers));
+          const docs = await fetchDocumentsForUsersInBatches(loadedUsers);
+          setAllDocuments(docs);
+          setPendingDocs(docs.filter((doc) => doc.status === "PENDING"));
+          setVerifiedDocs(docs.filter((doc) => doc.status === "VERIFIED"));
         } else {
           setAllDocuments([]);
+          setPendingDocs([]);
+          setVerifiedDocs([]);
         }
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to load admin dashboard.");
@@ -573,32 +657,16 @@ const Dashboard = () => {
 
   const fetchDocumentLists = useCallback(async () => {
     try {
-      const [pendingRes, verifiedRes] = await Promise.allSettled([
-        api.get("/documents/pending"),
-        api.get("/documents/verified"),
-      ]);
-      if (isForbiddenResult(pendingRes) || isForbiddenResult(verifiedRes)) {
+      if (users.length > 0) {
+        const docs = await fetchDocumentsForUsersInBatches(users);
+        setAllDocuments(docs);
+        setPendingDocs(docs.filter((doc) => doc.status === "PENDING"));
+        setVerifiedDocs(docs.filter((doc) => doc.status === "VERIFIED"));
+      } else {
+        setAllDocuments([]);
         setPendingDocs([]);
         setVerifiedDocs([]);
-        setApiWarnings((prev) =>
-          Array.from(
-            new Set([
-              ...prev,
-              ...getApiFailureSummary([
-                { label: "/documents/pending", status: getFailureStatus(pendingRes) },
-                { label: "/documents/verified", status: getFailureStatus(verifiedRes) },
-              ]),
-            ])
-          )
-        );
-        if (users.length > 0) {
-          setAllDocuments(await fetchDocumentsForUsersInBatches(users));
-        }
-        return;
       }
-      if (pendingRes.status === "fulfilled") setPendingDocs(asList(pendingRes.value));
-      if (verifiedRes.status === "fulfilled") setVerifiedDocs(asList(verifiedRes.value));
-      setAllDocuments(await fetchDocumentsForUsersInBatches(users));
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to refresh documents.");
     }
@@ -635,7 +703,7 @@ const Dashboard = () => {
     setAssignBankId(String(user.bankId || user.assignedBankId || readAssignedBankId(user.userId) || ""));
 
     const paymentStatus = paymentRequestByUserId.get(String(user.userId));
-    if (paymentStatus !== PAYMENT_STATUS.PAYMENT_APPROVED) {
+    if (!isDealerAddedUser(user) && paymentStatus !== PAYMENT_STATUS.PAYMENT_APPROVED) {
       toast.info("Payment is not approved yet. Documents are locked.");
       setSelectedUserDocs([]);
       setSelectedUserCounts(null);
@@ -768,19 +836,7 @@ const Dashboard = () => {
       await approveDocuments(docsToApprove);
       const approvedDocs = docsToApprove.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }));
       const totalApprovedDocuments = docsToApprove.length;
-      localStorage.setItem(`user_bank_assignment_${selectedUser.userId}`, String(assignBankId));
-      localStorage.setItem(
-        getAssignedBankDetailKey(selectedUser.userId),
-        JSON.stringify({
-          bankId: Number(assignBankId),
-          assignedBankId: Number(assignBankId),
-          bankName: assignedBank?.bankName || "Assigned",
-          assignedBankName: assignedBank?.bankName || "Assigned",
-          representativeName: assignedBank?.representativeName || "",
-          email: assignedBank?.email || "",
-          contactNumber: assignedBank?.contactNumber || "",
-        })
-      );
+
       addLocalDealerNotification({
         dealerId: selectedDealer?.dealerId || selectedDealer?.id || selectedUser.dealerId || selectedUser.assignedDealerId,
         dealerCode: selectedDealer?.dealerCode || selectedUser.dealerCode,
@@ -933,7 +989,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
+      const response = await fetch(`ttp://localhost:8081/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");

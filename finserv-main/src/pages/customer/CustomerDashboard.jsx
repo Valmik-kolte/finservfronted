@@ -573,24 +573,24 @@ const CustomerDashboard = () => {
           if (user.applicationId) {
             setApplicationNumber(user.applicationId);
           }
-          const bankId = user.bankId || user.assignedBankId;
-          const backendBankName = user.assignedBankName || user.bankName;
-          const localAssignedBank = readLocalAssignedBank(userId);
-          if (bankId) {
-            try {
-              const banksRes = await api.get("/admin/banks");
-              const bankList = Array.isArray(banksRes.data) ? banksRes.data : banksRes.data?.data || [];
-              const bank = bankList.find((b) => String(b.bankId) === String(bankId));
-              setAssignedBank(bank || { ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
-            } catch {
-              setAssignedBank({ ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
+          const dbNotifications = notificationsRes.status === "fulfilled" ? notificationListFromResponse(notificationsRes.value) : [];
+          let parsedBankName = "";
+          const regex = /forwarded\s+to\s+([^.]+)/i;
+          for (const notif of dbNotifications) {
+            const msg = notif.message || notif.msg || "";
+            const match = msg.match(regex);
+            if (match && match[1]) {
+              parsedBankName = match[1].trim();
+              break;
             }
-          } else if (backendBankName || localAssignedBank) {
-            setAssignedBank({
-              ...(localAssignedBank || {}),
-              bankName: backendBankName || localAssignedBank?.bankName || "Assigned",
-              assignedBankName: backendBankName || localAssignedBank?.assignedBankName || localAssignedBank?.bankName || "Assigned",
-            });
+          }
+
+          const bankId = user.bankId || user.assignedBankId;
+          const backendBankName = user.assignedBankName || user.bankName || parsedBankName;
+          if (bankId) {
+            setAssignedBank({ bankId, bankName: backendBankName || "Assigned" });
+          } else if (backendBankName) {
+            setAssignedBank({ bankName: backendBankName, assignedBankName: backendBankName });
           } else {
             setAssignedBank(null);
           }
@@ -599,14 +599,24 @@ const CustomerDashboard = () => {
         let effectiveDocumentsForCounts = null;
         if (docsRes.status === "fulfilled") {
           const loadedDocuments = latestDocumentsByType(unwrap(docsRes.value) || []);
-          const localAssignedBank = readLocalAssignedBank(userId);
+          const dbNotifications = notificationsRes.status === "fulfilled" ? notificationListFromResponse(notificationsRes.value) : [];
+          let parsedBankName = "";
+          const regex = /forwarded\s+to\s+([^.]+)/i;
+          for (const notif of dbNotifications) {
+            const msg = notif.message || notif.msg || "";
+            const match = msg.match(regex);
+            if (match && match[1]) {
+              parsedBankName = match[1].trim();
+              break;
+            }
+          }
           const user = userRes.status === "fulfilled" ? unwrap(userRes.value) || {} : {};
           const hasAssignedBank = !!(
             user.bankId ||
             user.assignedBankId ||
             user.assignedBankName ||
             user.bankName ||
-            localAssignedBank
+            parsedBankName
           );
           effectiveDocumentsForCounts = hasAssignedBank
             ? loadedDocuments.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }))
@@ -785,7 +795,7 @@ const CustomerDashboard = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`,
+        `ttp://localhost:8081/api/documents/preview/${documentId}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
