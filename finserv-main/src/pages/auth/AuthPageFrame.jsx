@@ -511,25 +511,117 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
         .auth-card {
           width: 100%;
-          height: auto;
-          min-height: 460px;
+          height: auto !important;
+          min-height: unset !important;
+          padding: 30px 20px 20px !important;
+          display: flex !important;
+          flex-direction: column !important;
+        }
+
+        .auth-card form {
+          display: flex !important;
+          flex-direction: column !important;
+          width: 100% !important;
+        }
+
+        .auth-simple-title {
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 100% !important;
+          margin: 0 0 10px 0 !important;
+          font-size: 23px !important;
+          text-align: center !important;
+        }
+
+        .auth-simple-subtitle {
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 100% !important;
+          margin: 0 0 12px 0 !important;
+          text-align: center !important;
+          font-size: 13px !important;
+          line-height: 1.4 !important;
         }
 
         .auth-simple-divider {
-          left: 50%;
-          transform: translateX(-50%);
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 40px !important;
+          height: 2px !important;
+          margin: 0 auto 20px auto !important;
+          transform: none !important;
         }
 
-        .auth-simple-label,
-        .auth-simple-input-wrap,
+        .auth-simple-label {
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 100% !important;
+          margin: 0 0 6px 0 !important;
+        }
+
+        .auth-simple-input-wrap {
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 100% !important;
+          margin: 0 0 16px 0 !important;
+          box-sizing: border-box !important;
+        }
+
         .auth-simple-submit {
-          left: 20px;
-          width: calc(100% - 40px);
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 100% !important;
+          margin: 10px 0 16px 0 !important;
+        }
+
+        .auth-simple-link {
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 100% !important;
+          margin: 0 0 10px 0 !important;
+          text-align: center !important;
         }
 
         .auth-card form > div[style*="grid-template-columns"] {
-          left: 20px !important;
-          width: calc(100% - 40px) !important;
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 100% !important;
+          margin: 0 0 20px 0 !important;
+          box-sizing: border-box !important;
+        }
+      }
+
+      @media (min-width: 2000px) {
+        .auth-left {
+          transform: scale(1.4);
+          transform-origin: left center;
+          left: 4% !important;
+        }
+        .auth-right {
+          transform: scale(1.4);
+          transform-origin: right center;
+          right: 4% !important;
+        }
+      }
+
+      @media (min-width: 3200px) {
+        .auth-left {
+          transform: scale(2.0);
+          transform-origin: left center;
+          left: 8% !important;
+        }
+        .auth-right {
+          transform: scale(2.0);
+          transform-origin: right center;
+          right: 8% !important;
         }
       }
     `}</style>

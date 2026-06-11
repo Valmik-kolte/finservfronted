@@ -123,6 +123,26 @@ const getUserSession = () => {
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? null;
 
+const fetchPersonalInfoFromBackend = async (userId) => {
+  try {
+    const res = await api.get(`/personal-info/user/${userId}`);
+    const data = unwrap(res);
+    if (data && data.address) return data;
+  } catch (err) {}
+  try {
+    const res = await api.get(`/personal-info/${userId}`);
+    const data = unwrap(res);
+    if (data && data.address) return data;
+  } catch (err) {}
+  try {
+    const res = await api.get("/personal-info/all");
+    const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
+    const found = list.find((item) => String(item.userId) === String(userId));
+    if (found) return found;
+  } catch (err) {}
+  return null;
+};
+
 const formatDate = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -350,7 +370,7 @@ const upsertPaymentRequest = ({ userId, status, profile, personalInfo, documents
   }
 };
 
-const addLocalAdminNotification = async (message) => {
+const addLocalAdminNotification = (message) => {
   try {
     const notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || "[]");
     localStorage.setItem(
@@ -365,22 +385,11 @@ const addLocalAdminNotification = async (message) => {
         ...notifications,
       ])
     );
-  } catch (e) {
-    console.error("Local storage error:", e);
-  }
-
-  try {
-    const session = getUserSession();
-    const senderId = session?.id || session?.userId || 1;
-    await api.post("/notifications/send", {
-      receiverId: 1,
-      message,
-      senderId: Number(senderId),
-      receiverRole: "ADMIN",
-      role: "ADMIN"
-    });
-  } catch (err) {
-    console.error("Failed to send admin DB notification:", err);
+  } catch {
+    localStorage.setItem(
+      ADMIN_NOTIFICATIONS_KEY,
+      JSON.stringify([{ id: `local-admin-${Date.now()}`, message, read: false, createdAt: new Date().toISOString() }])
+    );
   }
 };
 
@@ -540,12 +549,13 @@ const CustomerDashboard = () => {
       if (showSpinner) setLoading(true);
       try {
         setPaymentStatus(getStoredPaymentStatus(userId));
-        const [userRes, docsRes, notificationsRes, paymentHistoryRes] =
+        const [userRes, docsRes, notificationsRes, paymentHistoryRes, personalInfoRes] =
           await Promise.allSettled([
             api.get(`/user/${userId}`),
             api.get(`/documents/user/${userId}`),
             api.get(`/notifications/${userId}`),
             api.get(`/user/history/${userId}`),
+            fetchPersonalInfoFromBackend(userId),
           ]);
 
         let backendPaymentApproved = false;
@@ -575,33 +585,44 @@ const CustomerDashboard = () => {
             email: nextProfile.email,
             mobileNumber: nextProfile.mobileNumber || "",
           });
-          setPersonalInfo((prev) => ({
-            ...prev,
+          let backendPersonalInfo = null;
+          if (personalInfoRes.status === "fulfilled" && personalInfoRes.value) {
+            backendPersonalInfo = personalInfoRes.value;
+          }
+          const localDraft = getPersonalInfoDraft(userId, session);
+          const mergedPersonalInfo = {
+            ...emptyPersonalInfo,
+            ...localDraft,
             fullName: nextProfile.fullName,
             email: nextProfile.email,
-            mobileNumber: prev.mobileNumber || nextProfile.mobileNumber || "",
-          }));
+            mobileNumber: localDraft.mobileNumber || nextProfile.mobileNumber || "",
+            ...(backendPersonalInfo || {}),
+          };
+          setPersonalInfo(mergedPersonalInfo);
+          if (backendPersonalInfo && backendPersonalInfo.address) {
+            setHasPersonalInfo(true);
+          }
           if (user.applicationId) {
             setApplicationNumber(user.applicationId);
           }
-          const dbNotifications = notificationsRes.status === "fulfilled" ? notificationListFromResponse(notificationsRes.value) : [];
-          let parsedBankName = "";
-          const regex = /forwarded\s+to\s+([^.]+)/i;
-          for (const notif of dbNotifications) {
-            const msg = notif.message || notif.msg || "";
-            const match = msg.match(regex);
-            if (match && match[1]) {
-              parsedBankName = match[1].trim();
-              break;
-            }
-          }
-
           const bankId = user.bankId || user.assignedBankId;
-          const backendBankName = user.assignedBankName || user.bankName || parsedBankName;
+          const backendBankName = user.assignedBankName || user.bankName;
+          const localAssignedBank = readLocalAssignedBank(userId);
           if (bankId) {
-            setAssignedBank({ bankId, bankName: backendBankName || "Assigned" });
-          } else if (backendBankName) {
-            setAssignedBank({ bankName: backendBankName, assignedBankName: backendBankName });
+            try {
+              const banksRes = await api.get("/admin/banks");
+              const bankList = Array.isArray(banksRes.data) ? banksRes.data : banksRes.data?.data || [];
+              const bank = bankList.find((b) => String(b.bankId) === String(bankId));
+              setAssignedBank(bank || { ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
+            } catch {
+              setAssignedBank({ ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
+            }
+          } else if (backendBankName || localAssignedBank) {
+            setAssignedBank({
+              ...(localAssignedBank || {}),
+              bankName: backendBankName || localAssignedBank?.bankName || "Assigned",
+              assignedBankName: backendBankName || localAssignedBank?.assignedBankName || localAssignedBank?.bankName || "Assigned",
+            });
           } else {
             setAssignedBank(null);
           }
@@ -610,28 +631,16 @@ const CustomerDashboard = () => {
         let effectiveDocumentsForCounts = null;
         if (docsRes.status === "fulfilled") {
           const loadedDocuments = latestDocumentsByType(unwrap(docsRes.value) || []);
-          const dbNotifications = notificationsRes.status === "fulfilled" ? notificationListFromResponse(notificationsRes.value) : [];
-          let parsedBankName = "";
-          const regex = /forwarded\s+to\s+([^.]+)/i;
-          for (const notif of dbNotifications) {
-            const msg = notif.message || notif.msg || "";
-            const match = msg.match(regex);
-            if (match && match[1]) {
-              parsedBankName = match[1].trim();
-              break;
-            }
-          }
+          const localAssignedBank = readLocalAssignedBank(userId);
           const user = userRes.status === "fulfilled" ? unwrap(userRes.value) || {} : {};
           const hasAssignedBank = !!(
             user.bankId ||
             user.assignedBankId ||
             user.assignedBankName ||
             user.bankName ||
-            parsedBankName
+            localAssignedBank
           );
-          effectiveDocumentsForCounts = hasAssignedBank
-            ? loadedDocuments.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }))
-            : loadedDocuments;
+          effectiveDocumentsForCounts = loadedDocuments;
           setDocuments(effectiveDocumentsForCounts);
           setCounts(countsFromDocuments(effectiveDocumentsForCounts));
         }
@@ -806,7 +815,7 @@ const CustomerDashboard = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `http://localhost:8081/api/documents/preview/${documentId}`,
+        `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
@@ -1063,16 +1072,18 @@ const CustomerDashboard = () => {
                 {showNotifications && (
                   <div className="absolute right-0 z-30 mt-3 w-[calc(100vw-2rem)] sm:w-80 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl">
                     <h3 className="mb-3 font-bold text-[#0B2A4A]">Notifications</h3>
-                    {notifications.filter((item) => !item.read).length === 0 ? (
+                    {notifications.length === 0 ? (
                       <p className="text-sm text-slate-500">No notifications.</p>
                     ) : (
                       <div className="max-h-80 space-y-2 overflow-y-auto">
-                        {notifications.filter((item) => !item.read).slice(0, 8).map((item) => (
+                        {notifications.slice(0, 8).map((item) => (
                           <button
                             type="button"
                             key={item.id}
-                            onClick={() => markNotificationRead(item.id)}
-                            className="w-full rounded-2xl p-3 text-left text-sm bg-[#EAFBF8]"
+                            onClick={() => !item.read && markNotificationRead(item.id)}
+                            className={`w-full rounded-2xl p-3 text-left text-sm ${
+                              item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
+                            }`}
                           >
                             <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
                             <p className="mt-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
@@ -1570,15 +1581,17 @@ const DashboardTab = ({
 
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Notifications</h2>
-        {notifications.filter((item) => !item.read).length === 0 ? (
+        {notifications.length === 0 ? (
           <p className="text-sm text-slate-500">No notifications yet.</p>
         ) : (
           <div className="space-y-3">
-            {notifications.filter((item) => !item.read).map((item) => (
+            {notifications.map((item) => (
               <button
                 key={item.id}
-                onClick={() => markNotificationRead(item.id)}
-                className="w-full text-left p-4 rounded-2xl border bg-[#EAFBF8] border-[#27D3C3]/30"
+                onClick={() => !item.read && markNotificationRead(item.id)}
+                className={`w-full text-left p-4 rounded-2xl border ${
+                  item.read ? "bg-slate-50 border-slate-100" : "bg-[#EAFBF8] border-[#27D3C3]/30"
+                }`}
               >
                 <p className="text-sm font-semibold text-[#0B2A4A]">{item.message}</p>
                 <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>

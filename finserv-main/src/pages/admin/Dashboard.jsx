@@ -943,7 +943,14 @@ const Dashboard = () => {
     const assignedBank = banks.find((bank) => String(bank.bankId) === String(assignBankId));
     const selectedPersonalInfo = personalInfos.find(
       (info) => String(info.userId) === String(selectedUser.userId)
-    );
+    ) || (selectedUser.loanAmount ? {
+      userId: selectedUser.userId,
+      loanAmount: selectedUser.loanAmount,
+      address: "N/A",
+      city: "N/A",
+      state: "N/A",
+      pincode: "N/A",
+    } : null);
     const selectedDealer = dealers.find(
       (dealer) =>
         String(dealer.dealerCode || "").toLowerCase() ===
@@ -1134,7 +1141,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8081/api/documents/preview/${documentId}`, {
+      const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");
@@ -1275,7 +1282,14 @@ const Dashboard = () => {
           setAssignBankId={setAssignBankId}
           assignBank={assignBank}
           assigningBank={assigningBank}
-          personalInfo={personalInfos.find((info) => String(info.userId) === String(selectedUser?.userId))}
+          personalInfo={personalInfos.find((info) => String(info.userId) === String(selectedUser?.userId)) || {
+            userId: selectedUser?.userId,
+            loanAmount: selectedUser?.loanAmount || 0,
+            address: "N/A",
+            city: "N/A",
+            state: "N/A",
+            pincode: "N/A",
+          }}
           closeUser={() => setSelectedUser(null)}
           openPreview={openPreview}
           deleteUser={deleteUser}

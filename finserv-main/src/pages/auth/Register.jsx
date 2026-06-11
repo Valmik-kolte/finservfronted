@@ -635,21 +635,111 @@ const Register = ({ defaultRole }) => {
 
           .register-card {
             width: 100%;
-            height: auto;
-            min-height: 575px;
+            height: auto !important;
+            min-height: unset !important;
+            padding: 30px 20px 20px !important;
+            display: flex !important;
+            flex-direction: column !important;
+          }
+
+          .register-title {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 10px 0 !important;
+            font-size: 23px !important;
+            text-align: center !important;
+          }
+
+          .register-card-subtitle {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 12px 0 !important;
+            text-align: center !important;
+            font-size: 13px !important;
+            line-height: 1.4 !important;
           }
 
           .register-divider {
-            left: 50%;
-            transform: translateX(-50%);
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 40px !important;
+            height: 2px !important;
+            margin: 0 auto 20px auto !important;
+            transform: none !important;
           }
 
-          .role-switch,
-          .register-label,
-          .register-input-wrap,
+          .role-switch {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 20px 0 !important;
+            box-sizing: border-box !important;
+          }
+
+          .register-label {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 6px 0 !important;
+          }
+
+          .register-input-wrap {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 16px 0 !important;
+            box-sizing: border-box !important;
+          }
+
           .register-submit {
-            left: 20px;
-            width: calc(100% - 40px);
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 10px 0 20px 0 !important;
+          }
+
+          .register-login-link {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 10px 0 !important;
+            text-align: center !important;
+          }
+        }
+
+        @media (min-width: 2000px) {
+          .register-left {
+            transform: scale(1.4);
+            transform-origin: left center;
+            left: 4% !important;
+          }
+          .register-right {
+            transform: scale(1.4);
+            transform-origin: right center;
+            right: 4% !important;
+          }
+        }
+
+        @media (min-width: 3200px) {
+          .register-left {
+            transform: scale(2.0);
+            transform-origin: left center;
+            left: 8% !important;
+          }
+          .register-right {
+            transform: scale(2.0);
+            transform-origin: right center;
+            right: 8% !important;
           }
         }
       `}</style>

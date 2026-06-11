@@ -841,12 +841,85 @@ backdrop-filter: blur(14px);
 
           .login-card {
             width: 100%;
-            min-height: 600px;
-            padding: 54px 20px 30px;
+            height: auto !important;
+            min-height: unset !important;
+            padding: 30px 20px 20px !important;
+            display: flex !important;
+            flex-direction: column !important;
           }
 
           .card-title {
-            font-size: 25px;
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 10px 0 !important;
+            font-size: 23px !important;
+            text-align: center !important;
+          }
+
+          .card-subtitle {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 12px 0 !important;
+            text-align: center !important;
+            font-size: 13px !important;
+            line-height: 1.4 !important;
+          }
+
+          .card-divider {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 40px !important;
+            height: 2px !important;
+            margin: 0 auto 20px auto !important;
+          }
+
+          .form-label {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 6px 0 !important;
+          }
+
+          .input-wrap {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 16px 0 !important;
+            box-sizing: border-box !important;
+          }
+
+          .forgot-link {
+            position: relative !important;
+            left: auto !important;
+            right: auto !important;
+            top: auto !important;
+            width: auto !important;
+            align-self: flex-end !important;
+            margin: -6px 0 20px 0 !important;
+          }
+
+          .signin-button {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 16px 0 !important;
+          }
+
+          .create-account {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 24px 0 !important;
+            text-align: center !important;
           }
 
           .form-input {
@@ -854,12 +927,44 @@ backdrop-filter: blur(14px);
           }
 
           .trust-row {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin-top: 10px !important;
+            padding-top: 0 !important;
+            box-sizing: border-box !important;
             font-size: 9px;
-            padding-top: 26px;
           }
 
           .trust-item {
             gap: 5px;
+          }
+        }
+
+        @media (min-width: 2000px) {
+          .left-section {
+            transform: scale(1.4);
+            transform-origin: left center;
+            left: 4% !important;
+          }
+          .right-section {
+            transform: scale(1.4);
+            transform-origin: right center;
+            right: 4% !important;
+          }
+        }
+
+        @media (min-width: 3200px) {
+          .left-section {
+            transform: scale(2.0);
+            transform-origin: left center;
+            left: 8% !important;
+          }
+          .right-section {
+            transform: scale(2.0);
+            transform-origin: right center;
+            right: 8% !important;
           }
         }
 

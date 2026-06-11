@@ -286,6 +286,15 @@ const isUserAssignedToBank = (user) =>
     localStorage.getItem(`user_bank_assignment_${user?.userId}`)
   );
 
+const documentsForAssignedBankUser = (user, userDocs = []) => {
+  return userDocs;
+};
+
+const countsForAssignedBankUser = (user, userDocs = [], computedCounts) => {
+  return computedCounts;
+};
+
+
 const chunk = (items, size) => {
   const chunks = [];
   for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
@@ -496,9 +505,10 @@ const DealerDashboard = () => {
 
       try {
         const dealerUsers = await getDealerUsers();
-        const [summary, notificationList] = await Promise.all([
+        const [summary, notificationList, personalRes] = await Promise.all([
           getDealerDashboardSummary().catch(() => null),
-          getDealerNotifications().catch(() => []),
+          getDealerNotifications({ dealerId: resolvedDealerId }).catch(() => []),
+          api.get("/personal-info/all").catch(() => null),
         ]);
         const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
         const normalizedUsers = mergeUsersById(Array.isArray(dealerUsers) ? dealerUsers : [], localDealerUsers);
@@ -512,19 +522,71 @@ const DealerDashboard = () => {
         );
         documentResponses.forEach((list) => dealerDocs.push(...list));
         const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
+        const allNotifs = [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        const parsedBankAssignments = {};
+        allNotifs.forEach((notif) => {
+          if (!notif.message) return;
+          const match = notif.message.match(/(.*) has been assigned to (.*?)\./i);
+          if (match) {
+            const customerName = match[1].trim().toLowerCase();
+            const bankName = match[2].trim();
+            if (!parsedBankAssignments[customerName]) {
+              parsedBankAssignments[customerName] = bankName;
+            }
+          }
+        });
+
+        const enrichedUsers = normalizedUsers.map((u) => {
+          const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
+          const bankName = parsedBankAssignments[nameKey];
+          if (bankName) {
+            return {
+              ...u,
+              bankName,
+              assignedBankName: bankName,
+              bankId: 1,
+              assignedBankId: 1,
+              bankStatus: "SENT_TO_BANK",
+            };
+          }
+          return u;
+        });
+
         setDashboardSummary(summary);
-        setUsers(normalizedUsers);
-        setPersonalInfos(
-          normalizedUsers.map((user) => ({
+        setUsers(enrichedUsers);
+        const ids = new Set(normalizedUsers.map((u) => u.userId));
+        const localInfos = readLocalDealerPersonalInfos().filter((info) => ids.has(info.userId));
+        const apiPersonalInfos = personalRes?.data?.data || personalRes?.data || [];
+        
+        const infoMap = {};
+        normalizedUsers.forEach((user) => {
+          infoMap[user.userId] = {
             userId: user.userId,
             loanAmount: user.loanAmount,
             applicationId: user.applicationId,
-          }))
-        );
+          };
+        });
+        apiPersonalInfos.forEach((info) => {
+          if (info && info.userId && infoMap[info.userId]) {
+            infoMap[info.userId] = {
+              ...infoMap[info.userId],
+              ...info,
+            };
+          }
+        });
+        localInfos.forEach((info) => {
+          if (info && info.userId && infoMap[info.userId]) {
+            infoMap[info.userId] = {
+              ...infoMap[info.userId],
+              ...info,
+            };
+          }
+        });
+
+        setPersonalInfos(Object.values(infoMap));
         setDocs(uniqueDocuments(dealerDocs));
-        setNotifications(
-          [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-        );
+        setNotifications(allNotifs);
         return;
       } catch (error) {
         if (![403, 404, 500].includes(error?.response?.status)) {
@@ -543,20 +605,17 @@ const DealerDashboard = () => {
         userRes.status === "fulfilled" ? userRes.value.data?.data || [] : [],
         localDealerUsers
       );
-        // Build filtered list of users belonging to the logged-in dealer.
-        const myUsers = allUsers.filter((u) => {
-          // Prefer dealerCode match when we have it
-          if (resolvedCode && u.dealerCode) {
-            if (sameCode(u.dealerCode, resolvedCode)) return true;
+      const myUsers = allUsers.filter((u) => {
+        if (resolvedCode && u.dealerCode) {
+          if (sameCode(u.dealerCode, resolvedCode)) return true;
+        }
+        if (resolvedDealerId) {
+          if (sameId(u.dealerId, resolvedDealerId) || sameId(u.assignedDealerId, resolvedDealerId)) {
+            return true;
           }
-          // Fallback to dealerId matching (direct or assigned)
-          if (resolvedDealerId) {
-            if (sameId(u.dealerId, resolvedDealerId) || sameId(u.assignedDealerId, resolvedDealerId)) {
-              return true;
-            }
-          }
-          return false;
-        });
+        }
+        return false;
+      });
 
       const ids = new Set(myUsers.map((u) => u.userId));
       const localInfos = readLocalDealerPersonalInfos().filter((info) => ids.has(info.userId));
@@ -568,20 +627,52 @@ const DealerDashboard = () => {
       myUsers.sort((a, b) =>
         String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" })
       );
-      setUsers(myUsers);
-      setPersonalInfos(myInfos);
-      setDocs(uniqueDocuments(myDocs));
 
+      let finalUsers = myUsers;
       if (resolvedDealerId) {
         try {
           const notifRes = await api.get(`/notifications/${resolvedDealerId}`);
           const list = Array.isArray(notifRes.data) ? notifRes.data : [];
           const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
-          setNotifications([...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          const allNotifs = [...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          setNotifications(allNotifs);
+
+          const parsedBankAssignments = {};
+          allNotifs.forEach((notif) => {
+            if (!notif.message) return;
+            const match = notif.message.match(/(.*) has been assigned to (.*?)\./i);
+            if (match) {
+              const customerName = match[1].trim().toLowerCase();
+              const bankName = match[2].trim();
+              if (!parsedBankAssignments[customerName]) {
+                parsedBankAssignments[customerName] = bankName;
+              }
+            }
+          });
+
+          finalUsers = myUsers.map((u) => {
+            const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
+            const bankName = parsedBankAssignments[nameKey];
+            if (bankName) {
+              return {
+                ...u,
+                bankName,
+                assignedBankName: bankName,
+                bankId: 1,
+                assignedBankId: 1,
+                bankStatus: "SENT_TO_BANK",
+              };
+            }
+            return u;
+          });
         } catch {
           setNotifications(getLocalDealerNotifications(resolvedDealerId, resolvedCode));
         }
       }
+
+      setUsers(finalUsers);
+      setPersonalInfos(myInfos);
+      setDocs(uniqueDocuments(myDocs));
     } catch (error) {
       showError(error, "Failed to load dealer dashboard");
     } finally {
@@ -1001,8 +1092,8 @@ const DealerDashboard = () => {
         )}
 
         <main className="min-w-0 flex-1">
-        <div className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 px-4 md:px-6 py-4 backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="sticky top-0 z-20 border-b border-gray-100 bg-white/95 py-4 backdrop-blur">
+          <div className="max-w-[1600px] mx-auto px-4 md:px-6 flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <button
                 type="button"
@@ -1068,7 +1159,7 @@ const DealerDashboard = () => {
           </div>
         </div>
 
-        <div className="p-4 md:p-6">
+        <div className="p-4 md:p-6 max-w-[1600px] mx-auto">
           {loading ? (
             <EmptyState text="Loading dealer dashboard..." />
           ) : (
@@ -1555,9 +1646,9 @@ const UserModal = ({ user, info, docs, counts, onClose, openPreview, openWizard,
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
-        {["pendingCount", "verifiedCount", "approvedCount", "rejectedCount"].map((key) => (
+        {["pendingDocsCount", "verifiedDocsCount", "approvedDocsCount", "rejectedDocsCount"].map((key) => (
           <div key={key} className="rounded-2xl border border-gray-100 p-4">
-            <p className="text-xs font-semibold uppercase text-gray-500">{key.replace("Count", "")}</p>
+            <p className="text-xs font-semibold uppercase text-gray-500">{key.replace("DocsCount", "")}</p>
             <p className="mt-1 text-2xl font-black text-[#0B2A4A]">{counts?.[key] ?? 0}</p>
           </div>
         ))}
