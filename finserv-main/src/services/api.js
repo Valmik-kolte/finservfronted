@@ -3,7 +3,6 @@
 import axios from "axios";
 
 const api = axios.create({
-  // baseURL: "https://v1.vahanfinserv.com/api",
   baseURL: "https://v1.vahanfinserv.com/api",
 });
 

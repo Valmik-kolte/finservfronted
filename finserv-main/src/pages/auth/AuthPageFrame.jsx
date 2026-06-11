@@ -229,12 +229,29 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         top: 30px;
         width: 414px;
         height: 543px;
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.88);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
         animation: authFadeUp 650ms ease-out both;
+        background: transparent;
+        border: 1px solid #ffffff;
+        border-radius: 24px;
+        box-shadow:
+          0 8px 32px rgba(0, 0, 0, 0.25),
+          inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      }
+
+      .auth-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 40%;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.15),
+          transparent
+        );
+        pointer-events: none;
+        border-radius: 24px;
       }
 
       .auth-simple-title {
@@ -244,21 +261,21 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         width: 100%;
         margin: 0;
         text-align: center;
-        color: #061842;
+        color: #ffffff;
         font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-        font-size: 23px;
-        font-weight: 800;
-        line-height: 24px;
+        font-size: 34px;
+        font-weight: 700;
+        line-height: 1.1;
       }
 
       .auth-simple-subtitle {
         position: absolute;
         left: 0;
-        top: 100px;
+        top: 106px;
         width: 100%;
         margin: 0;
         text-align: center;
-        color: #667085;
+        color: rgba(255, 255, 255, 0.8);
         font-family: "Inter", "Noto Sans Devanagari", sans-serif;
         font-size: 13px;
         font-weight: 400;
@@ -267,19 +284,19 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
 
       .auth-simple-divider {
         position: absolute;
-        left: 180px;
-        top: 127px;
+        left: calc(50% - 20px);
+        top: 134px;
         width: 40px;
         height: 2px;
         border-radius: 2px;
-        background: #00c6bd;
+        background: #00D4B4;
       }
 
       .auth-simple-label {
         position: absolute;
         left: 37px;
         margin: 0;
-        color: #061842;
+        color: rgba(255, 255, 255, 0.9);
         font-family: "Inter", "Noto Sans Devanagari", sans-serif;
         font-size: 13px;
         font-weight: 600;
@@ -302,11 +319,10 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         height: 41px;
         display: flex;
         align-items: center;
-        border: 1px solid #d9dee8;
-        border-radius: 6px;
-        background: #ffffff;
-        color: #7b8aa8;
-        box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+        border: 1px solid #ffffff;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.15);
+        color: rgba(255, 255, 255, 0.85);
         transition: border-color 200ms ease, box-shadow 200ms ease;
       }
 
@@ -319,15 +335,15 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
       }
 
       .auth-simple-input-wrap:focus-within {
-        border-color: #00c6bd;
-        box-shadow: 0 0 0 3px rgba(0, 198, 189, 0.14);
+        border-color: #00D4B4;
+        box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.25);
       }
 
       .auth-simple-icon {
         flex: 0 0 auto;
         margin-left: 14px;
         font-size: 17px;
-        color: #7b8aa8;
+        color: rgba(255, 255, 255, 0.7);
       }
 
       .auth-simple-input {
@@ -337,14 +353,24 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         border: 0;
         outline: 0;
         background: transparent;
-        color: #061842;
+        color: #ffffff;
         font-family: "Inter", "Noto Sans Devanagari", sans-serif;
         font-size: 13px;
         font-weight: 500;
       }
 
+      .auth-simple-input:-webkit-autofill,
+      .auth-simple-input:-webkit-autofill:hover, 
+      .auth-simple-input:-webkit-autofill:focus, 
+      .auth-simple-input:-webkit-autofill:active {
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: #ffffff !important;
+        transition: background-color 5000s ease-in-out 0s !important;
+        box-shadow: inset 0 0 20px 20px transparent !important;
+      }
+
       .auth-simple-input::placeholder {
-        color: #98a2b3;
+        color: rgba(255, 255, 255, 0.5);
         font-family: "Inter", "Noto Sans Devanagari", sans-serif;
         font-size: 13px;
         font-weight: 500;
@@ -357,13 +383,14 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         width: 340px;
         height: 43px;
         border: 0;
-        border-radius: 6px;
-        background: linear-gradient(90deg, #14d8c4 0%, #0a55d1 100%);
+        border-radius: 12px;
+        background: linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%);
         color: #ffffff;
         font-family: "Inter", "Noto Sans Devanagari", sans-serif;
         font-size: 16px;
         font-weight: 700;
         cursor: pointer;
+        box-shadow: 0 0 20px rgba(0, 212, 180, 0.35);
         transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
       }
 
@@ -372,8 +399,8 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
       }
 
       .auth-simple-submit:hover:not(:disabled) {
-        transform: translateY(-2px) scale(1.03);
-        box-shadow: 0 16px 34px rgba(10, 85, 209, 0.34);
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 0 26px rgba(0, 212, 180, 0.55), 0 10px 20px rgba(0, 0, 0, 0.15);
       }
 
       .auth-simple-link {
@@ -384,7 +411,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         border: 0;
         padding: 0;
         background: transparent;
-        color: #0047ff;
+        color: #00D4B4;
         font-family: "Inter", "Noto Sans Devanagari", sans-serif;
         font-size: 13px;
         font-weight: 500;
@@ -481,7 +508,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         }
       }
 
-      @media (max-width: 480px) {
+      @media (max-width: 768px) {
         .auth-left {
           min-height: 440px;
           padding: 28px 20px 32px;
@@ -506,14 +533,23 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
         }
 
         .auth-right {
-          padding: 20px 16px 28px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 20px 0;
         }
 
         .auth-card {
-          width: 100%;
+          position: relative !important;
+          left: auto !important;
+          top: auto !important;
+          width: 90% !important;
+          max-width: 380px !important;
           height: auto !important;
           min-height: unset !important;
-          padding: 30px 20px 20px !important;
+          margin: 20px auto !important;
+          transform: translateY(-40px) !important;
+          padding: 32px 24px 24px !important;
           display: flex !important;
           flex-direction: column !important;
         }
@@ -530,7 +566,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
           top: auto !important;
           width: 100% !important;
           margin: 0 0 10px 0 !important;
-          font-size: 23px !important;
+          font-size: 34px !important;
           text-align: center !important;
         }
 
@@ -570,6 +606,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
           width: 100% !important;
           margin: 0 0 16px 0 !important;
           box-sizing: border-box !important;
+          border-radius: 12px !important;
         }
 
         .auth-simple-submit {
@@ -578,6 +615,7 @@ const AuthPageFrame = ({ children, ariaLabel = "Authentication form" }) => (
           top: auto !important;
           width: 100% !important;
           margin: 10px 0 16px 0 !important;
+          border-radius: 12px !important;
         }
 
         .auth-simple-link {

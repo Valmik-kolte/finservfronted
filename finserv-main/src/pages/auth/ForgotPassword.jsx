@@ -57,7 +57,12 @@ const ForgotPassword = () => {
             width: 340,
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: 8,
+            gap: 4,
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            borderRadius: 8,
+            background: "rgba(255, 255, 255, 0.1)",
+            padding: 4,
+            boxSizing: "border-box",
           }}
         >
           {["USER", "DEALER"].map((item) => (
@@ -66,15 +71,17 @@ const ForgotPassword = () => {
               type="button"
               onClick={() => setRole(item)}
               style={{
-                height: 34,
+                height: 28,
                 border: 0,
-                borderRadius: 8,
-                background: role === item ? "#0B2A4A" : "#F4F6F9",
-                color: role === item ? "#FFFFFF" : "#0B2A4A",
+                borderRadius: 6,
+                background: role === item ? "linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%)" : "transparent",
+                color: role === item ? "#FFFFFF" : "rgba(255, 255, 255, 0.7)",
                 fontFamily: '"Inter", sans-serif',
                 fontSize: 12,
                 fontWeight: 800,
                 cursor: "pointer",
+                boxShadow: role === item ? "0 8px 18px rgba(0, 212, 180, 0.22)" : "none",
+                transition: "background 180ms ease, color 180ms ease, box-shadow 180ms ease",
               }}
             >
               {item === "USER" ? "User" : "Dealer"}

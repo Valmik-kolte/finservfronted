@@ -311,36 +311,53 @@ const Register = ({ defaultRole }) => {
           top: 30px;
           width: 414px;
           height: 543px;
-          border-radius: 10px;
-          background: rgba(255, 255, 255, 0.88);
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
           animation: registerFadeUp 650ms ease-out both;
+          background: transparent;
+          border: 1px solid #ffffff;
+          border-radius: 24px;
+          box-shadow:
+            0 8px 32px rgba(0, 0, 0, 0.25),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        .register-card::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 40%;
+          background: linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.15),
+            transparent
+          );
+          pointer-events: none;
+          border-radius: 24px;
         }
 
         .register-title {
           position: absolute;
           left: 0;
-          top: 35px;
+          top: 22px;
           width: 100%;
           margin: 0;
           text-align: center;
-          color: #061842;
+          color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 23px;
-          font-weight: 800;
-          line-height: 24px;
+          font-size: 34px;
+          font-weight: 700;
+          line-height: 1.1;
         }
 
         .register-card-subtitle {
           position: absolute;
           left: 0;
-          top: 69px;
+          top: 66px;
           width: 100%;
           margin: 0;
           text-align: center;
-          color: #667085;
+          color: rgba(255, 255, 255, 0.8);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
@@ -349,27 +366,27 @@ const Register = ({ defaultRole }) => {
 
         .register-divider {
           position: absolute;
-          left: 187px;
-          top: 95px;
+          left: calc(50% - 20px);
+          top: 92px;
           width: 40px;
           height: 2px;
           border-radius: 2px;
-          background: #00c6bd;
+          background: #00D4B4;
         }
 
         .role-switch {
           position: absolute;
           left: 37px;
-          top: 116px;
+          top: 112px;
           width: 340px;
           box-sizing: border-box;
           height: 40px;
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 4px;
-          border: 1px solid #d9dee8;
+          border: 1px solid rgba(255, 255, 255, 0.15);
           border-radius: 8px;
-          background: #f8fafc;
+          background: rgba(255, 255, 255, 0.1);
           padding: 4px;
         }
 
@@ -377,7 +394,7 @@ const Register = ({ defaultRole }) => {
           border: 0;
           border-radius: 6px;
           background: transparent;
-          color: #667085;
+          color: rgba(255, 255, 255, 0.7);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 700;
@@ -386,26 +403,26 @@ const Register = ({ defaultRole }) => {
         }
 
         .role-option.active {
-          background: linear-gradient(90deg, #14d8c4 0%, #0a55d1 100%);
+          background: linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%);
           color: #ffffff;
-          box-shadow: 0 8px 18px rgba(10, 85, 209, 0.22);
+          box-shadow: 0 8px 18px rgba(0, 212, 180, 0.22);
         }
 
         .register-label {
           position: absolute;
           left: 37px;
           margin: 0;
-          color: #061842;
+          color: rgba(255, 255, 255, 0.9);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 600;
           line-height: 1;
         }
 
-        .register-label.name { top: 174px; }
-        .register-label.mobile { top: 240px; }
-        .register-label.email { top: 306px; }
-        .register-label.password { top: 372px; }
+        .register-label.name { top: 168px; }
+        .register-label.mobile { top: 234px; }
+        .register-label.email { top: 300px; }
+        .register-label.password { top: 366px; }
 
         .register-input-wrap {
           position: absolute;
@@ -415,28 +432,27 @@ const Register = ({ defaultRole }) => {
           height: 37px;
           display: flex;
           align-items: center;
-          border: 1px solid #d9dee8;
-          border-radius: 6px;
-          background: #ffffff;
-          color: #7b8aa8;
-          box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+          border: 1px solid #ffffff;
+          border-radius: 12px;
+          background: rgba(255, 255, 255, 0.15);
+          color: rgba(255, 255, 255, 0.85);
           transition: border-color 200ms ease, box-shadow 200ms ease;
         }
 
-        .register-input-wrap.name { top: 191px; }
-        .register-input-wrap.mobile { top: 257px; }
-        .register-input-wrap.email { top: 323px; }
-        .register-input-wrap.password { top: 389px; }
+        .register-input-wrap.name { top: 185px; }
+        .register-input-wrap.mobile { top: 251px; }
+        .register-input-wrap.email { top: 317px; }
+        .register-input-wrap.password { top: 383px; }
 
         .register-input-wrap:focus-within {
-          border-color: #00c6bd;
-          box-shadow: 0 0 0 3px rgba(0, 198, 189, 0.14);
+          border-color: #00D4B4;
+          box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.25);
         }
 
         .register-input-icon {
           flex: 0 0 auto;
           margin-left: 14px;
-          color: #7b8aa8;
+          color: rgba(255, 255, 255, 0.7);
           font-size: 15px;
         }
 
@@ -447,14 +463,24 @@ const Register = ({ defaultRole }) => {
           border: 0;
           outline: 0;
           background: transparent;
-          color: #061842;
+          color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
         }
 
+        .register-input:-webkit-autofill,
+        .register-input:-webkit-autofill:hover, 
+        .register-input:-webkit-autofill:focus, 
+        .register-input:-webkit-autofill:active {
+          -webkit-background-clip: text !important;
+          -webkit-text-fill-color: #ffffff !important;
+          transition: background-color 5000s ease-in-out 0s !important;
+          box-shadow: inset 0 0 20px 20px transparent !important;
+        }
+
         .register-input::placeholder {
-          color: #98a2b3;
+          color: rgba(255, 255, 255, 0.5);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-weight: 500;
         }
@@ -465,7 +491,7 @@ const Register = ({ defaultRole }) => {
           border: 0;
           padding: 0;
           background: transparent;
-          color: #7b8aa8;
+          color: rgba(255, 255, 255, 0.7);
           font-size: 15px;
           line-height: 1;
           cursor: pointer;
@@ -474,23 +500,24 @@ const Register = ({ defaultRole }) => {
         .register-submit {
           position: absolute;
           left: 37px;
-          top: 448px;
+          top: 442px;
           width: 340px;
           height: 43px;
           border: 0;
-          border-radius: 6px;
-          background: linear-gradient(90deg, #14d8c4 0%, #0a55d1 100%);
+          border-radius: 12px;
+          background: linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%);
           color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 16px;
           font-weight: 700;
           cursor: pointer;
+          box-shadow: 0 0 20px rgba(0, 212, 180, 0.35);
           transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
         }
 
         .register-submit:hover:not(:disabled) {
-          transform: translateY(-2px) scale(1.03);
-          box-shadow: 0 16px 34px rgba(10, 85, 209, 0.34);
+          transform: translateY(-2px) scale(1.02);
+          box-shadow: 0 0 26px rgba(0, 212, 180, 0.55), 0 10px 20px rgba(0, 0, 0, 0.15);
         }
 
         .register-submit:disabled {
@@ -501,11 +528,11 @@ const Register = ({ defaultRole }) => {
         .register-login-link {
           position: absolute;
           left: 0;
-          top: 510px;
+          top: 504px;
           width: 100%;
           margin: 0;
           text-align: center;
-          color: #344054;
+          color: rgba(255, 255, 255, 0.8);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
@@ -517,7 +544,7 @@ const Register = ({ defaultRole }) => {
           border: 0;
           padding: 0;
           background: transparent;
-          color: #0047ff;
+          color: #00D4B4;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
@@ -605,7 +632,7 @@ const Register = ({ defaultRole }) => {
           }
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: 768px) {
           .register-left {
             min-height: 440px;
             padding: 28px 20px 32px;
@@ -630,14 +657,23 @@ const Register = ({ defaultRole }) => {
           }
 
           .register-right {
-            padding: 20px 16px 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px 0;
           }
 
           .register-card {
-            width: 100%;
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 90% !important;
+            max-width: 380px !important;
             height: auto !important;
             min-height: unset !important;
-            padding: 30px 20px 20px !important;
+            margin: 20px auto !important;
+            transform: translateY(-40px) !important;
+            padding: 32px 24px 24px !important;
             display: flex !important;
             flex-direction: column !important;
           }
@@ -648,7 +684,7 @@ const Register = ({ defaultRole }) => {
             top: auto !important;
             width: 100% !important;
             margin: 0 0 10px 0 !important;
-            font-size: 23px !important;
+            font-size: 34px !important;
             text-align: center !important;
           }
 
@@ -678,8 +714,9 @@ const Register = ({ defaultRole }) => {
             left: auto !important;
             top: auto !important;
             width: 100% !important;
-            margin: 0 0 20px 0 !important;
+            margin: 0 0 16px 0 !important;
             box-sizing: border-box !important;
+            border-radius: 12px !important;
           }
 
           .register-label {
@@ -705,6 +742,7 @@ const Register = ({ defaultRole }) => {
             top: auto !important;
             width: 100% !important;
             margin: 10px 0 20px 0 !important;
+            border-radius: 12px !important;
           }
 
           .register-login-link {
@@ -714,6 +752,10 @@ const Register = ({ defaultRole }) => {
             width: 100% !important;
             margin: 0 0 10px 0 !important;
             text-align: center !important;
+          }
+
+          .register-input {
+            font-size: 15px;
           }
         }
 

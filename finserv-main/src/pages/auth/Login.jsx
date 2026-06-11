@@ -500,12 +500,25 @@ const Login = () => {
           top: 30px;
           width: 414px;
           height: 543px;
-          border-radius: 10px;
-          background: #ffffff;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
           animation: loginFadeUp 650ms ease-out both;
-          background: rgba(255, 255, 255, 0.25);
-backdrop-filter: blur(14px);
+          background: transparent;
+          border: 3px solid #ffffff;
+          border-radius: 24px;
+          box-shadow:
+            0 8px 32px rgba(0,0,0,0.25),
+            inset 0 1px 0 rgba(255,255,255,0.15);
+        }
+
+        .login-card::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 40%;
+          background: linear-gradient(180deg, rgba(255,255,255,0.15), transparent);
+          pointer-events: none;
+          border-radius: 24px;
         }
 
         .card-title {
@@ -515,21 +528,21 @@ backdrop-filter: blur(14px);
           width: 100%;
           margin: 0;
           text-align: center;
-          color: #061842;
+          color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 23px;
-          font-weight: 800;
-          line-height: 24px;
+          font-size: 34px;
+          font-weight: 700;
+          line-height: 1.1;
         }
 
         .card-subtitle {
           position: absolute;
           left: 0;
-          top: 100px;
+          top: 106px;
           width: 100%;
           margin: 0;
           text-align: center;
-          color: #667085;
+          color: rgba(255,255,255,0.8);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
@@ -538,19 +551,19 @@ backdrop-filter: blur(14px);
 
         .card-divider {
           position: absolute;
-          left: 180px;
-          top: 127px;
+          left: calc(50% - 20px);
+          top: 134px;
           width: 40px;
           height: 2px;
           border-radius: 2px;
-          background: #00c6bd;
+          background: #00D4B4;
         }
 
         .form-label {
           position: absolute;
           left: 37px;
           margin: 0;
-          color: #061842;
+          color: rgba(255, 255, 255, 0.9);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 600;
@@ -567,11 +580,10 @@ backdrop-filter: blur(14px);
           height: 41px;
           display: flex;
           align-items: center;
-          border: 1px solid #d9dee8;
-          border-radius: 6px;
-          background: #ffffff;
-          color: #7b8aa8;
-          box-shadow: 0 2px 8px rgba(16, 24, 40, 0.04);
+          border: 1px solid #ffffff;
+          border-radius: 12px;
+          background: rgba(255,255,255,0.15);
+          color: rgba(255,255,255,0.85);
           transition: border-color 200ms ease, box-shadow 200ms ease;
         }
 
@@ -579,15 +591,15 @@ backdrop-filter: blur(14px);
         .input-wrap.password { top: 264px; }
 
         .input-wrap:focus-within {
-          border-color: #00c6bd;
-          box-shadow: 0 0 0 3px rgba(0, 198, 189, 0.14);
+          border-color: #ffffff;
+          box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.25);
         }
 
         .input-icon {
           flex: 0 0 auto;
           margin-left: 14px;
           font-size: 17px;
-          color: #7b8aa8;
+          color: rgba(255, 255, 255, 0.7);
         }
 
         .form-input {
@@ -597,14 +609,24 @@ backdrop-filter: blur(14px);
           border: 0;
           outline: 0;
           background: transparent;
-          color: #061842;
+          color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
         }
 
+        .form-input:-webkit-autofill,
+        .form-input:-webkit-autofill:hover, 
+        .form-input:-webkit-autofill:focus, 
+        .form-input:-webkit-autofill:active {
+          -webkit-background-clip: text !important;
+          -webkit-text-fill-color: #ffffff !important;
+          transition: background-color 5000s ease-in-out 0s !important;
+          box-shadow: inset 0 0 20px 20px transparent !important;
+        }
+
         .form-input::placeholder {
-          color: #98a2b3;
+          color: rgba(255, 255, 255, 0.5);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-weight: 500;
         }
@@ -615,7 +637,7 @@ backdrop-filter: blur(14px);
           border: 0;
           padding: 0;
           background: transparent;
-          color: #7b8aa8;
+          color: rgba(255, 255, 255, 0.7);
           font-size: 17px;
           line-height: 1;
           cursor: pointer;
@@ -628,7 +650,7 @@ backdrop-filter: blur(14px);
           border: 0;
           padding: 0;
           background: transparent;
-          color: #0047ff;
+          color: #00D4B4;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 12px;
           font-weight: 500;
@@ -645,19 +667,20 @@ backdrop-filter: blur(14px);
           width: 340px;
           height: 43px;
           border: 0;
-          border-radius: 6px;
-          background: linear-gradient(90deg, #14d8c4 0%, #0047d9 100%);
+          border-radius: 12px;
+          background: linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%);
           color: #ffffff;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 16px;
           font-weight: 700;
           cursor: pointer;
+          box-shadow: 0 0 20px rgba(0,212,180,0.35);
           transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
         }
 
         .signin-button:hover:not(:disabled) {
-          transform: translateY(-2px) scale(1.03);
-          box-shadow: 0 16px 34px rgba(10, 85, 209, 0.34);
+          transform: translateY(-2px) scale(1.02);
+          box-shadow: 0 0 26px rgba(0,212,180,0.55), 0 10px 20px rgba(0, 0, 0, 0.15);
         }
 
         .signin-button:disabled { cursor: not-allowed; opacity: 0.6; }
@@ -669,7 +692,7 @@ backdrop-filter: blur(14px);
           width: 100%;
           margin: 0;
           text-align: center;
-          color: #344054;
+          color: rgba(255, 255, 255, 0.8);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 400;
@@ -681,7 +704,7 @@ backdrop-filter: blur(14px);
           border: 0;
           padding: 0;
           background: transparent;
-          color: #0047ff;
+          color: #00D4B4;
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 13px;
           font-weight: 500;
@@ -697,7 +720,7 @@ backdrop-filter: blur(14px);
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
           align-items: center;
-          color: #061842;
+          color: rgba(255, 255, 255, 0.7);
           font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 10px;
           font-weight: 500;
@@ -713,11 +736,11 @@ backdrop-filter: blur(14px);
         }
 
         .trust-item.middle {
-          border-left: 1px solid #d9dee8;
-          border-right: 1px solid #d9dee8;
+          border-left: 1px solid rgba(255, 255, 255, 0.2);
+          border-right: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        .trust-item svg { color: #061842; font-size: 14px; }
+        .trust-item svg { color: #00D4B4; font-size: 14px; }
 
         @media (max-width: 1100px) {
           .right-section {
@@ -811,7 +834,7 @@ backdrop-filter: blur(14px);
           }
         }
 
-        @media (max-width: 480px) {
+        @media (max-width: 768px) {
           .left-section {
             min-height: 440px;
             padding: 28px 20px 32px;
@@ -836,14 +859,23 @@ backdrop-filter: blur(14px);
           }
 
           .right-section {
-            padding: 20px 16px 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px 0;
           }
 
           .login-card {
-            width: 100%;
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 90% !important;
+            max-width: 380px !important;
             height: auto !important;
             min-height: unset !important;
-            padding: 30px 20px 20px !important;
+            margin: 20px auto !important;
+            transform: translateY(-40px) !important;
+            padding: 32px 24px 24px !important;
             display: flex !important;
             flex-direction: column !important;
           }
@@ -854,7 +886,7 @@ backdrop-filter: blur(14px);
             top: auto !important;
             width: 100% !important;
             margin: 0 0 10px 0 !important;
-            font-size: 23px !important;
+            font-size: 34px !important;
             text-align: center !important;
           }
 
@@ -893,6 +925,7 @@ backdrop-filter: blur(14px);
             width: 100% !important;
             margin: 0 0 16px 0 !important;
             box-sizing: border-box !important;
+            border-radius: 12px !important;
           }
 
           .forgot-link {
@@ -911,6 +944,7 @@ backdrop-filter: blur(14px);
             top: auto !important;
             width: 100% !important;
             margin: 0 0 16px 0 !important;
+            border-radius: 12px !important;
           }
 
           .create-account {
@@ -939,6 +973,12 @@ backdrop-filter: blur(14px);
 
           .trust-item {
             gap: 5px;
+            border-color: rgba(255, 255, 255, 0.2) !important;
+          }
+
+          .trust-item.middle {
+            border-left: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.2) !important;
           }
         }
 
