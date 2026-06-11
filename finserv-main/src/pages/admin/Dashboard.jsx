@@ -11,6 +11,7 @@ import {
   FaUniversity,
   FaUsers,
   FaUserTie,
+  FaTrash,
 } from "react-icons/fa";
 import Sidebar from "../../components/admin/Sidebar";
 import api from "../../services/api";
@@ -549,6 +550,7 @@ const Dashboard = () => {
   const [bankForm, setBankForm] = useState(emptyBank);
   const [preview, setPreview] = useState(null);
   const [rawPaymentRequests, setRawPaymentRequests] = useState([]);
+  const [deleteConfirmationUser, setDeleteConfirmationUser] = useState(null);
   const [searchName, setSearchName] = useState("");
   const [passwordForm, setPasswordForm] = useState({
     newPassword: "",
@@ -885,8 +887,9 @@ const Dashboard = () => {
 
   const deleteUserFromDb = async (userId) => {
     const attempts = [
-      () => api.delete(`/user/${userId}`),
       () => api.delete(`/user/delete/${userId}`),
+      () => api.delete(`/delete/${userId}`),
+      () => api.delete(`/user/${userId}`),
       () => api.delete(`/user/delete?userId=${encodeURIComponent(userId)}`),
     ];
 
@@ -902,19 +905,21 @@ const Dashboard = () => {
     throw lastError;
   };
 
-  const deleteUser = async (user) => {
+  const deleteUser = (user) => {
     const userId = user?.userId || user?.id;
     if (!userId) {
       toast.error("Unable to delete user: missing user id.");
       return;
     }
+    setDeleteConfirmationUser(user);
+  };
 
-    const confirmed = window.confirm(
-      `Delete ${user.fullName || "this user"} and all related data permanently?`
-    );
-    if (!confirmed) return;
+  const executeDeleteUser = async (user) => {
+    const userId = user?.userId || user?.id;
+    if (!userId) return;
 
     try {
+      setDeleteConfirmationUser(null);
       await deleteUserFromDb(userId);
       removeUserFromLocalCaches(userId);
       setUsers((prev) => prev.filter((item) => String(item.userId || item.id) !== String(userId)));
@@ -927,7 +932,6 @@ const Dashboard = () => {
         setSelectedUserDocs([]);
         setSelectedUserCounts(null);
       }
-      setPaymentVersion((prev) => prev + 1);
       toast.success("User deleted successfully.");
       await fetchAdminData(false);
     } catch (error) {
@@ -1481,6 +1485,13 @@ const Dashboard = () => {
       <Footer logoutOnNavigate />
 
       {preview && <PreviewModal preview={preview} closePreview={closePreview} />}
+      {deleteConfirmationUser && (
+        <ConfirmDeleteModal
+          user={deleteConfirmationUser}
+          onClose={() => setDeleteConfirmationUser(null)}
+          onConfirm={() => executeDeleteUser(deleteConfirmationUser)}
+        />
+      )}
 
       {/* Chatbot mount only; dashboard logic remains unchanged. */}
       <Chatbot roleOverride="ADMIN" onNavigateSection={setActiveMenu} />
@@ -1812,5 +1823,35 @@ const DashboardOverview = ({
     </div>
   );
 };
+
+const ConfirmDeleteModal = ({ user, onClose, onConfirm }) => (
+  <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
+    <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+      <div className="text-center">
+        <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-50 text-red-500 mb-4">
+          <FaTrash className="h-7 w-7" />
+        </div>
+        <h3 className="text-xl font-extrabold text-[#0B2A4A] mb-2">Confirm Delete</h3>
+        <p className="text-sm text-slate-500 mb-6">
+          Do you want to delete <span className="font-bold text-[#0B2A4A]">{user.fullName || "this user"}</span> completely?
+        </p>
+        <div className="flex gap-3 justify-center">
+          <button
+            onClick={onClose}
+            className="flex-1 bg-slate-100 hover:bg-slate-200 text-[#0B2A4A] font-bold py-3 px-4 rounded-2xl transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-2xl transition"
+          >
+            Yes, Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+);
 
 export default Dashboard;

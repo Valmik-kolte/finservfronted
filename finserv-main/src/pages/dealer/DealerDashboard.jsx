@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -2243,7 +2243,7 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
         <div className="rounded-3xl bg-gradient-to-br from-[#0B2A4A] to-[#1a3d60] p-4 sm:p-6 text-white shadow-lg">
           <span className="text-xs font-bold uppercase tracking-wider text-[#27D3C3]">Applicant Details</span>
           <h3 className="mt-1 text-2xl font-black">{tracking?.customerName || user.fullName}</h3>
-          <p className="text-sm opacity-80">{user.email} â€¢ {user.mobileNumber}</p>
+          <p className="text-sm opacity-80">{user.email} • {user.mobileNumber}</p>
           <div className="mt-4 border-t border-white/10 pt-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center text-xs opacity-75">
             <span>App ID: {tracking?.applicationId || user.applicationId || "N/A"}</span>
             <span>Registered: {formatDate(user.createdAt)}</span>
@@ -2293,7 +2293,7 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
                 <span
                   className={`absolute -left-[40px] top-0.5 flex h-8 w-8 items-center justify-center rounded-full border text-sm font-black transition-all ${circleStyle}`}
                 >
-                  {isDone ? "âœ“" : idx + 1}
+                  {isDone ? "✓" : idx + 1}
                 </span>
 
                 <div className="flex w-full flex-wrap items-center justify-between gap-2">
