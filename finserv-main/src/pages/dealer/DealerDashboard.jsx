@@ -138,57 +138,6 @@ const isRejectedDocumentRemarkNotification = (item = {}) => {
   return hasRemark && hasRejected;
 };
 
-const filterDealerNotifications = (list = []) => {
-  return list.filter((item) => {
-    if (item.role && String(item.role).toUpperCase() === "USER") {
-      return false;
-    }
-    const msg = String(item.message || "");
-    const lowerMsg = msg.toLowerCase();
-
-    // Filter out duplicate/unwanted remark notifications
-    // 1. "Username received a document remark." or "Username received a remark on a rejected document."
-    if (lowerMsg.includes("received a document remark") || lowerMsg.includes("received a remark")) {
-      return false;
-    }
-
-    // 2. "Admin added a remark on DOCUMENT: remark" (does not contain "document for")
-    // Keep: "Admin added remark on DOCUMENT document for Username: remark"
-    if (lowerMsg.includes("added a remark on") || lowerMsg.includes("added remark on")) {
-      if (!lowerMsg.includes("document for")) {
-        return false;
-      }
-    }
-
-    if (msg.startsWith("Your ") && (msg.includes("approved") || msg.includes("rejected") || msg.includes("marked"))) {
-      return false;
-    }
-    if ((msg.includes("marked REJECTED") || msg.includes("marked APPROVED")) && !msg.includes(":")) {
-      return false;
-    }
-    if (msg.toLowerCase().includes("admin rejected") && msg.toLowerCase().includes("document for")) {
-      return false;
-    }
-    if (msg.toLowerCase().includes("admin approved") && msg.toLowerCase().includes("document for")) {
-      return false;
-    }
-    return true;
-  });
-};
-
-const isBellNotification = (item) => {
-  if (isRejectedDocumentRemarkNotification(item)) return true;
-  const msg = String(item.message || "").toLowerCase();
-  return (
-    msg.includes("is approved") ||
-    msg.includes("approved by admin") ||
-    msg.includes("marked rejected") ||
-    msg.includes("marked approved") ||
-    (msg.includes("added remark on") && msg.includes("document for")) ||
-    (msg.includes("added a remark on") && msg.includes("document for"))
-  );
-};
-
 const readDealerSession = () => {
   try {
     const parsed = JSON.parse(localStorage.getItem("dealerData") || "null");
@@ -265,7 +214,7 @@ const mergeUsersById = (...lists) => {
   return Array.from(map.values());
 };
 
-const addLocalAdminNotification = async (message) => {
+const addLocalAdminNotification = (message) => {
   try {
     const notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || "[]");
     localStorage.setItem(
@@ -280,22 +229,11 @@ const addLocalAdminNotification = async (message) => {
         ...notifications,
       ])
     );
-  } catch (e) {
-    console.error("Local storage error:", e);
-  }
-
-  try {
-    const session = readDealerSession();
-    const senderId = session.dealerId || session.id || 1;
-    await api.post("/notifications/send", {
-      receiverId: 1,
-      message,
-      senderId: Number(senderId),
-      receiverRole: "ADMIN",
-      role: "ADMIN"
-    });
-  } catch (err) {
-    console.error("Failed to send admin DB notification:", err);
+  } catch {
+    localStorage.setItem(
+      ADMIN_NOTIFICATIONS_KEY,
+      JSON.stringify([{ id: `local-admin-${Date.now()}`, message, read: false, createdAt: new Date().toISOString() }])
+    );
   }
 };
 
@@ -337,7 +275,7 @@ const uniqueDocuments = (documents) => {
   });
   return Array.from(map.values());
 };
-const isUserAssignedToBank = (user, userDocs = []) =>
+const isUserAssignedToBank = (user) =>
   !!(
     user?.bankId ||
     user?.assignedBankId ||
@@ -345,41 +283,8 @@ const isUserAssignedToBank = (user, userDocs = []) =>
     user?.bankName ||
     user?.bankStatus === "BANK_ASSIGNED" ||
     user?.bankStatus === "SENT_TO_BANK" ||
-    localStorage.getItem(`user_bank_assignment_${user?.userId}`) ||
-    (userDocs && userDocs.length > 0 && userDocs.every((doc) => doc.status === "APPROVED"))
+    localStorage.getItem(`user_bank_assignment_${user?.userId}`)
   );
-
-const documentsForAssignedBankUser = (user, documents = []) => {
-  const hasAssigned = isUserAssignedToBank(user, documents);
-  return hasAssigned
-    ? documents.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }))
-    : documents;
-};
-
-const countsForAssignedBankUser = (user, documents = [], computedCounts = {}) => {
-  const hasAssigned = isUserAssignedToBank(user, documents);
-  if (hasAssigned) {
-    const total = documents.length;
-    return {
-      documentCount: total,
-      pendingCount: 0,
-      verifiedCount: 0,
-      approvedCount: total,
-      rejectedCount: 0,
-      pendingDocsCount: 0,
-      verifiedDocsCount: 0,
-      approvedDocsCount: total,
-      rejectedDocsCount: 0,
-    };
-  }
-  return {
-    ...computedCounts,
-    pendingCount: computedCounts.pendingDocsCount ?? 0,
-    verifiedCount: computedCounts.verifiedDocsCount ?? 0,
-    approvedCount: computedCounts.approvedDocsCount ?? 0,
-    rejectedCount: computedCounts.rejectedDocsCount ?? 0,
-  };
-};
 
 const chunk = (items, size) => {
   const chunks = [];
@@ -432,56 +337,6 @@ const Modal = ({ title, onClose, children, wide = false }) => (
     </div>
   </div>
 );
-
-const mergeBankAssignmentsIntoUsers = (usersList, notificationsList) => {
-  const regex = /^(.+?)\s+has been assigned to\s+([^.]+)/i;
-  const assignments = new Map();
-  notificationsList.forEach((notif) => {
-    const msg = notif.message || notif.msg || "";
-    const match = msg.match(regex);
-    if (match && match[1] && match[2]) {
-      const customerName = match[1].trim().toLowerCase();
-      const bankName = match[2].trim();
-      if (!assignments.has(customerName)) {
-        assignments.set(customerName, bankName);
-      }
-    }
-  });
-
-  return usersList.map((u) => {
-    const key = String(u.fullName || u.name || "").trim().toLowerCase();
-    const bankNameFromNotification = assignments.get(key);
-    
-    // Fallback check on localStorage for same-browser testing
-    const localBankId = localStorage.getItem(`user_bank_assignment_${u.userId}`);
-    let localBankName = "";
-    if (localBankId) {
-      try {
-        const detail = JSON.parse(localStorage.getItem(`user_bank_assignment_detail_${u.userId}`) || "null");
-        localBankName = detail?.bankName || "Assigned Bank";
-      } catch (e) {
-        localBankName = "Assigned Bank";
-      }
-    }
-
-    const resolvedBankName = bankNameFromNotification || localBankName || u.assignedBankName || u.bankName;
-    const resolvedBankId = localBankId ? Number(localBankId) : (bankNameFromNotification ? 1 : (u.bankId || u.assignedBankId));
-
-    if (resolvedBankName || resolvedBankId) {
-      return {
-        ...u,
-        bankName: resolvedBankName || "Assigned Bank",
-        assignedBankName: resolvedBankName || "Assigned Bank",
-        bankId: resolvedBankId || 1,
-        assignedBankId: resolvedBankId || 1,
-        bankStatus: "BANK_ASSIGNED",
-      };
-    }
-    return u;
-  });
-};
-
-// Bank assignments helper removed since dealers do not have permission for admin endpoints.
 
 const DealerDashboard = () => {
   const navigate = useNavigate();
@@ -542,14 +397,14 @@ const DealerDashboard = () => {
 
   const stats = useMemo(
     () => ({
-      users: users.length,
-      docs: docs.length,
-      pending: docs.filter((doc) => doc.status === "PENDING").length,
-      approved: docs.filter((doc) => doc.status === "APPROVED").length,
-      rejected: docs.filter((doc) => doc.status === "REJECTED").length,
-      bankAssigned: users.filter((u) => isUserAssignedToBank(u, docsByUser[u.userId])).length,
+      users: dashboardSummary?.usersCount ?? users.length,
+      docs: dashboardSummary?.documentsCount ?? docs.length,
+      pending: dashboardSummary?.pendingDocsCount ?? docs.filter((doc) => doc.status === "PENDING").length,
+      approved: dashboardSummary?.approvedDocsCount ?? docs.filter((doc) => doc.status === "APPROVED").length,
+      rejected: dashboardSummary?.rejectedDocsCount ?? docs.filter((doc) => doc.status === "REJECTED").length,
+      bankAssigned: dashboardSummary?.bankAssignedCount ?? users.filter(isUserAssignedToBank).length,
     }),
-    [docs, users, docsByUser]
+    [dashboardSummary, docs, users]
   );
 
   const rejectedUsers = useMemo(() => {
@@ -560,10 +415,10 @@ const DealerDashboard = () => {
   const dealerCode = profile.dealerCode;
   const notificationDealerId = profile.dealerId || dealerId;
   const bellNotifications = useMemo(
-    () => notifications.filter((item) => isBellNotification(item) && !isNotificationRead(item)),
+    () => notifications.filter(isRejectedDocumentRemarkNotification),
     [notifications]
   );
-  const unreadCount = bellNotifications.length;
+  const unreadCount = bellNotifications.filter((item) => !isNotificationRead(item)).length;
 
   const fetchDocsForUsers = useCallback(async (ids) => {
     if (!ids || ids.length === 0) return []; // No user IDs, return empty docs
@@ -589,16 +444,15 @@ const DealerDashboard = () => {
     const localList = getLocalDealerNotifications(notificationDealerId, dealerCode);
     let list = [];
     try {
-      list = await getDealerNotifications({ dealerId: notificationDealerId });
+      list = await getDealerNotifications();
     } catch {
       if (!notificationDealerId) return localList;
       const res = await api.get(`/notifications/${notificationDealerId}`);
       list = Array.isArray(res.data) ? res.data : res.data?.data || [];
     }
     const sorted = [...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    const filtered = filterDealerNotifications(sorted);
-    setNotifications(filtered);
-    return filtered;
+    setNotifications(sorted);
+    return sorted;
   }, [dealerCode, notificationDealerId]);
 
   const fetchDealerProfile = useCallback(async () => {
@@ -644,31 +498,13 @@ const DealerDashboard = () => {
         const dealerUsers = await getDealerUsers();
         const [summary, notificationList] = await Promise.all([
           getDealerDashboardSummary().catch(() => null),
-          getDealerNotifications({ dealerId: resolvedDealerId }).catch(() => []),
+          getDealerNotifications().catch(() => []),
         ]);
-        const bankAssignments = new Map();
         const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
         const normalizedUsers = mergeUsersById(Array.isArray(dealerUsers) ? dealerUsers : [], localDealerUsers);
-        
-        // Merge bank assignments from DB search into normalizedUsers
-        const normalizedUsersWithBanks = normalizedUsers.map((u) => {
-          const bank = bankAssignments.get(String(u.userId));
-          if (bank) {
-            return {
-              ...u,
-              bankId: bank.bankId,
-              assignedBankId: bank.bankId,
-              bankName: bank.bankName,
-              assignedBankName: bank.bankName,
-              bankStatus: "BANK_ASSIGNED"
-            };
-          }
-          return u;
-        });
-
         const dealerDocs = [];
         const documentResponses = await Promise.all(
-          normalizedUsersWithBanks.map((user) =>
+          normalizedUsers.map((user) =>
             getDealerUserDocuments(user.userId)
               .then((list) => list.map((doc) => ({ ...doc, userId: doc.userId || user.userId })))
               .catch(() => [])
@@ -676,46 +512,19 @@ const DealerDashboard = () => {
         );
         documentResponses.forEach((list) => dealerDocs.push(...list));
         const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
-        const finalNotifications = [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const updatedUsers = mergeBankAssignmentsIntoUsers(normalizedUsersWithBanks, finalNotifications);
-
-        // Document-based bank assignment fallback check
-        const updatedUsersWithDocumentCheck = updatedUsers.map((user) => {
-          const userDocs = dealerDocs.filter((d) => String(d.userId) === String(user.userId));
-          const allApproved = userDocs.length > 0 && userDocs.every((d) => d.status === "APPROVED");
-          if (allApproved) {
-            return {
-              ...user,
-              bankName: user.bankName || "Assigned Bank",
-              assignedBankName: user.assignedBankName || "Assigned Bank",
-              bankId: user.bankId || 1,
-              assignedBankId: user.assignedBankId || 1,
-              bankStatus: "BANK_ASSIGNED"
-            };
-          }
-          return user;
-        });
-
         setDashboardSummary(summary);
-        setUsers(updatedUsersWithDocumentCheck);
+        setUsers(normalizedUsers);
         setPersonalInfos(
-          updatedUsersWithDocumentCheck.map((user) => ({
+          normalizedUsers.map((user) => ({
             userId: user.userId,
             loanAmount: user.loanAmount,
             applicationId: user.applicationId,
           }))
         );
-        const mappedDocs = dealerDocs.map((doc) => {
-          const userId = doc.userId;
-          const u = updatedUsersWithDocumentCheck.find((item) => String(item.userId) === String(userId));
-          const userDocs = dealerDocs.filter((d) => String(d.userId) === String(userId));
-          if (isUserAssignedToBank(u, userDocs)) {
-            return { ...doc, status: "APPROVED", remarks: "" };
-          }
-          return doc;
-        });
-        setDocs(uniqueDocuments(mappedDocs));
-        setNotifications(filterDealerNotifications(finalNotifications));
+        setDocs(uniqueDocuments(dealerDocs));
+        setNotifications(
+          [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        );
         return;
       } catch (error) {
         if (![403, 404, 500].includes(error?.response?.status)) {
@@ -728,7 +537,6 @@ const DealerDashboard = () => {
         api.get("/user/all"),
         api.get("/personal-info/all"),
       ]);
-      const resolvedBankAssignments = new Map();
 
       const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
       const allUsers = mergeUsersById(
@@ -750,77 +558,30 @@ const DealerDashboard = () => {
           return false;
         });
 
-      const myUsersWithBanks = myUsers.map((u) => {
-        const bank = resolvedBankAssignments.get(String(u.userId));
-        if (bank) {
-          return {
-            ...u,
-            bankId: bank.bankId,
-            assignedBankId: bank.bankId,
-            bankName: bank.bankName,
-            assignedBankName: bank.bankName,
-            bankStatus: "BANK_ASSIGNED"
-          };
-        }
-        return u;
-      });
-
-      const ids = new Set(myUsersWithBanks.map((u) => u.userId));
+      const ids = new Set(myUsers.map((u) => u.userId));
       const localInfos = readLocalDealerPersonalInfos().filter((info) => ids.has(info.userId));
       const apiPersonalInfos =
         personalRes.status === "fulfilled" ? personalRes.value.data?.data || [] : [];
       const myInfos = [...apiPersonalInfos.filter((info) => ids.has(info.userId)), ...localInfos];
       const myDocs = await fetchDocsForUsers([...ids]);
 
-      myUsersWithBanks.sort((a, b) =>
+      myUsers.sort((a, b) =>
         String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" })
       );
-      let finalNotifications = [];
+      setUsers(myUsers);
+      setPersonalInfos(myInfos);
+      setDocs(uniqueDocuments(myDocs));
+
       if (resolvedDealerId) {
         try {
           const notifRes = await api.get(`/notifications/${resolvedDealerId}`);
           const list = Array.isArray(notifRes.data) ? notifRes.data : [];
           const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
-          finalNotifications = [...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          setNotifications([...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
         } catch {
-          finalNotifications = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
+          setNotifications(getLocalDealerNotifications(resolvedDealerId, resolvedCode));
         }
-      } else {
-        finalNotifications = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
       }
-
-      const updatedUsers = mergeBankAssignmentsIntoUsers(myUsersWithBanks, finalNotifications);
-
-      // Document-based bank assignment fallback check
-      const updatedUsersWithDocumentCheck = updatedUsers.map((user) => {
-        const userDocs = myDocs.filter((d) => String(d.userId) === String(user.userId));
-        const allApproved = userDocs.length > 0 && userDocs.every((d) => d.status === "APPROVED");
-        if (allApproved) {
-          return {
-            ...user,
-            bankName: user.bankName || "Assigned Bank",
-            assignedBankName: user.assignedBankName || "Assigned Bank",
-            bankId: user.bankId || 1,
-            assignedBankId: user.assignedBankId || 1,
-            bankStatus: "BANK_ASSIGNED"
-          };
-        }
-        return user;
-      });
-
-      setUsers(updatedUsersWithDocumentCheck);
-      setNotifications(filterDealerNotifications(finalNotifications));
-      setPersonalInfos(myInfos);
-      const mappedDocs = myDocs.map((doc) => {
-        const userId = doc.userId;
-        const u = updatedUsersWithDocumentCheck.find((item) => String(item.userId) === String(userId));
-        const userDocs = myDocs.filter((d) => String(d.userId) === String(userId));
-        if (isUserAssignedToBank(u, userDocs)) {
-          return { ...doc, status: "APPROVED", remarks: "" };
-        }
-        return doc;
-      });
-      setDocs(uniqueDocuments(mappedDocs));
     } catch (error) {
       showError(error, "Failed to load dealer dashboard");
     } finally {
@@ -878,7 +639,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:8081/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");
@@ -964,28 +725,11 @@ const DealerDashboard = () => {
   };
 
   const openUploadWizard = (user) => {
-    if (isUserAssignedToBank(user, docsByUser[user.userId])) {
+    if (isUserAssignedToBank(user)) {
       toast.info("This application is already assigned to a bank. Documents are locked.");
       return;
     }
-    const info = personalInfoFor(user.userId) || {};
-    setPersonalForm({
-      fullName: user.fullName || "",
-      email: user.email || "",
-      mobileNumber: user.mobileNumber || "",
-      address: info.address || "",
-      city: info.city || "",
-      state: info.state || "",
-      pincode: info.pincode || "",
-      loanAmount: info.loanAmount || "",
-    });
-    const userDocs = docsByUser[user.userId] || [];
-    setUploadedDocs(userDocs);
-    const hasSalaried = userDocs.some((d) => SALARIED_INCOME_TYPES.has(d.documentType));
-    const hasSelfEmployed = userDocs.some((d) => SELF_EMPLOYED_INCOME_TYPES.has(d.documentType));
-    setEmploymentType(hasSalaried ? "Salaried" : hasSelfEmployed ? "Self Employed" : "");
-    setFiles({});
-    setWizardOpen(true);
+    toast.info("Document upload wizard is being updated. Please use Status re-upload for rejected documents for now.");
   };
 
   const requiredUploadTypes = () => {
@@ -999,12 +743,11 @@ const DealerDashboard = () => {
   };
 
   const validateFiles = () => {
-    const hasDoc = (type) => files[type] || uploadedDocs.some((d) => d.documentType === type);
-    if (!hasDoc("PAN") || !hasDoc("AADHAAR")) {
+    if (!files.PAN || !files.AADHAAR) {
       toast.error("Upload PAN and Aadhaar");
       return false;
     }
-    if (!hasDoc("LIGHT_BILL") && !hasDoc("RENTAL_AGREEMENT")) {
+    if (!files.LIGHT_BILL && !files.RENTAL_AGREEMENT) {
       toast.error("Upload Light Bill or Rental Agreement");
       return false;
     }
@@ -1012,7 +755,7 @@ const DealerDashboard = () => {
       toast.error("Select employment type");
       return false;
     }
-    const missing = requiredUploadTypes().find((type) => !hasDoc(type));
+    const missing = requiredUploadTypes().find((type) => !files[type]);
     if (missing) {
       toast.error(`Upload ${docLabel(missing)}`);
       return false;
@@ -1066,45 +809,32 @@ const DealerDashboard = () => {
     if (!validateRegistrationForm()) return false;
     setSavingWizard(true);
     try {
-      const isEdit = !!selectedUser;
-      let targetUserId = selectedUser?.userId;
-
-      if (!isEdit) {
-        const registerRes = await api.post("/user/register", {
-          fullName: personalForm.fullName,
-          email: personalForm.email,
-          mobileNumber: personalForm.mobileNumber,
-          password: `${personalForm.mobileNumber}@Vahan`,
-          registrationType: "DEALER",
-          dealerCode: profile.dealerCode,
-          dealerId: profile.dealerId,
-        });
-        targetUserId = await resolveRegisteredUserId(registerRes.data?.data);
-        if (!targetUserId) throw new Error("User registered, but backend did not return a userId");
-        upsertLocalDealerUser({
-          ...(registerRes.data?.data || {}),
-          userId: targetUserId,
-          fullName: personalForm.fullName,
-          email: personalForm.email,
-          mobileNumber: personalForm.mobileNumber,
-          registrationType: "DEALER",
-          dealerCode: profile.dealerCode,
-          dealerId: profile.dealerId,
-          paymentDone: true,
-          paymentStatus: "SUBMITTED_TO_ADMIN",
-        });
-      } else {
-        await api.put(`/user/update/${targetUserId}`, {
-          fullName: personalForm.fullName,
-          email: personalForm.email,
-          mobileNumber: personalForm.mobileNumber,
-          registrationType: selectedUser.registrationType || "DEALER",
-          role: selectedUser.role || "USER",
-        });
-      }
+      const registerRes = await api.post("/user/register", {
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        password: `${personalForm.mobileNumber}@Vahan`,
+        registrationType: "DEALER",
+        dealerCode: profile.dealerCode,
+        dealerId: profile.dealerId,
+      });
+      const newUserId = await resolveRegisteredUserId(registerRes.data?.data);
+      if (!newUserId) throw new Error("User registered, but backend did not return a userId");
+      upsertLocalDealerUser({
+        ...(registerRes.data?.data || {}),
+        userId: newUserId,
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        registrationType: "DEALER",
+        dealerCode: profile.dealerCode,
+        dealerId: profile.dealerId,
+        paymentDone: true,
+        paymentStatus: "SUBMITTED_TO_ADMIN",
+      });
 
       await api.post("/personal-info/save", {
-        userId: Number(targetUserId),
+        userId: Number(newUserId),
         address: personalForm.address,
         mobileNumber: personalForm.mobileNumber,
         city: personalForm.city,
@@ -1113,7 +843,7 @@ const DealerDashboard = () => {
         loanAmount: Number(personalForm.loanAmount),
       });
       upsertLocalDealerPersonalInfo({
-        userId: Number(targetUserId),
+        userId: Number(newUserId),
         fullName: personalForm.fullName,
         email: personalForm.email,
         mobileNumber: personalForm.mobileNumber,
@@ -1124,20 +854,12 @@ const DealerDashboard = () => {
         loanAmount: Number(personalForm.loanAmount),
       });
 
-      const typesToUpload = Object.keys(files).filter((type) => Boolean(files[type]));
+      const selectedTypes = [...requiredUploadTypes(), files.LIGHT_BILL ? "LIGHT_BILL" : "RENTAL_AGREEMENT"];
       const uploaded = [];
 
-      for (const type of typesToUpload) {
-        const existing = uploadedDocs.find((doc) => doc.documentType === type);
-        if (existing?.documentId) {
-          try {
-            await api.delete(`/documents/${existing.documentId}`);
-          } catch (err) {
-            console.error("Failed to delete existing doc:", err);
-          }
-        }
+      for (const type of selectedTypes) {
         const formData = new FormData();
-        formData.append("userId", String(targetUserId));
+        formData.append("userId", String(newUserId));
         formData.append("type", type);
         formData.append("file", files[type]);
         const res = await api.post("/documents/upload", formData);
@@ -1145,13 +867,9 @@ const DealerDashboard = () => {
       }
 
       const uploadedDocuments = uploaded.filter(Boolean);
-      setUploadedDocs((prev) => {
-        const kept = prev.filter((d) => !typesToUpload.includes(d.documentType));
-        return uniqueDocuments([...kept, ...uploadedDocuments]);
-      });
-
+      setUploadedDocs(uploadedDocuments);
       const requestProfile = {
-        userId: Number(targetUserId),
+        userId: Number(newUserId),
         fullName: personalForm.fullName,
         email: personalForm.email,
         mobileNumber: personalForm.mobileNumber,
@@ -1159,30 +877,15 @@ const DealerDashboard = () => {
         dealerId: profile.dealerId,
       };
       addLocalAdminNotification(
-        `${profile.fullName || "Dealer"} ${isEdit ? "updated" : "submitted"} documents for ${
+        `${profile.fullName || "Dealer"} submitted documents for ${
           requestProfile.fullName || "a customer"
         }.`
       );
       await loadDashboard();
-
-      if (selectedUser) {
-        const freshDocs = await getDealerUserDocuments(targetUserId);
-        const effectiveDocs = documentsForAssignedBankUser(selectedUser, freshDocs);
-        setSelectedUserDocs(effectiveDocs);
-        const computedCounts = {
-          documentCount: effectiveDocs.length,
-          pendingDocsCount: effectiveDocs.filter((d) => d.status === "PENDING").length,
-          verifiedDocsCount: effectiveDocs.filter((d) => d.status === "VERIFIED").length,
-          approvedDocsCount: effectiveDocs.filter((d) => d.status === "APPROVED").length,
-          rejectedDocsCount: effectiveDocs.filter((d) => d.status === "REJECTED").length,
-        };
-        setSelectedCounts(countsForAssignedBankUser(selectedUser, effectiveDocs, computedCounts));
-      }
-
       localStorage.removeItem("dealer_registered_users");
       localStorage.removeItem("dealer_registered_personal_info");
       setActiveMenu("Dashboard");
-      toast.success(isEdit ? "Application and documents updated." : "Application and documents submitted to admin.");
+      toast.success("Application and documents submitted to admin.");
       return true;
     } catch (error) {
       showError(error, "Failed to submit loan registration");
@@ -1195,7 +898,7 @@ const DealerDashboard = () => {
   const reuploadDoc = async (userId, type, file) => {
     if (!file) return;
     const user = users.find((item) => item.userId === userId);
-    if (isUserAssignedToBank(user, docsByUser[userId])) {
+    if (isUserAssignedToBank(user)) {
       toast.info("This application is already assigned to a bank. Documents are locked.");
       return;
     }
@@ -1211,16 +914,9 @@ const DealerDashboard = () => {
         `${user?.fullName || "Dealer customer"} reuploaded ${docLabel(type)}.`
       );
       const freshDocs = await fetchDocsForUsers(userIds);
-      const mappedFreshDocs = freshDocs.map((doc) => {
-        const u = users.find((item) => String(item.userId) === String(doc.userId));
-        if (isUserAssignedToBank(u, docsByUser[doc.userId])) {
-          return { ...doc, status: "APPROVED", remarks: "" };
-        }
-        return doc;
-      });
-      setDocs(mappedFreshDocs);
+      setDocs(freshDocs);
       if (selectedUser?.userId === userId) {
-        setSelectedUserDocs(mappedFreshDocs.filter((doc) => doc.userId === userId));
+        setSelectedUserDocs(freshDocs.filter((doc) => doc.userId === userId));
       }
       toast.success(`${docLabel(type)} updated`);
     } catch (error) {
@@ -1348,13 +1044,15 @@ const DealerDashboard = () => {
                     <div className="border-b border-gray-100 px-4 py-3 font-bold text-[#0B2A4A]">Notifications</div>
                     <div className="max-h-96 overflow-y-auto">
                       {bellNotifications.length === 0 ? (
-                        <div className="p-4 text-sm text-gray-500">No notifications</div>
+                        <div className="p-4 text-sm text-gray-500">No rejected document remarks</div>
                       ) : (
                         bellNotifications.slice(0, 8).map((item) => (
                           <button
                             key={item.id}
                             onClick={() => markRead(item.id)}
-                            className="block w-full border-b border-gray-50 px-4 py-3 text-left text-sm bg-[#EAFBF8] text-[#0B2A4A]"
+                            className={`block w-full border-b border-gray-50 px-4 py-3 text-left text-sm ${
+                              isNotificationRead(item) ? "bg-white text-gray-600" : "bg-[#EAFBF8] text-[#0B2A4A]"
+                            }`}
                           >
                             {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
                             <p className="font-semibold">{item.message}</p>
@@ -1382,7 +1080,6 @@ const DealerDashboard = () => {
                   notifications={notifications}
                   users={users}
                   docs={docs}
-                  docsByUser={docsByUser}
                   markRead={markRead}
                   openNewCustomer={openWizard}
                   openUserModal={openUserModal}
@@ -1393,7 +1090,6 @@ const DealerDashboard = () => {
               {normalizedMenu === "Users" && (
                 <UsersTab
                   users={users}
-                  docsByUser={docsByUser}
                   openUserModal={openUserModal}
                   openTrackingModal={openTrackingModal}
                 />
@@ -1439,7 +1135,7 @@ const DealerDashboard = () => {
           openPreview={openPreview}
           openWizard={() => openUploadWizard(selectedUser)}
           reuploadDoc={reuploadDoc}
-          locked={isUserAssignedToBank(selectedUser, docsByUser[selectedUser.userId])}
+          locked={isUserAssignedToBank(selectedUser)}
         />
       )}
 
@@ -1487,38 +1183,12 @@ const DashboardTab = ({
   notifications,
   users,
   docs,
-  docsByUser,
   markRead,
   openNewCustomer,
   openUserModal,
   openTrackingModal,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
-  const [fadingIds, setFadingIds] = useState([]);
-
-  const clearAllNotificationsWithFade = async () => {
-    const unread = notifications.filter((item) => !isNotificationRead(item)).slice(0, 5);
-    if (unread.length === 0) return;
-
-    for (let i = 0; i < unread.length; i++) {
-      const item = unread[i];
-      await new Promise((resolve) => {
-        setTimeout(() => {
-          setFadingIds((prev) => [...prev, item.id]);
-          resolve();
-        }, 200);
-      });
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    for (const item of unread) {
-      await markRead(item.id).catch(() => {});
-    }
-
-    setFadingIds([]);
-  };
-
   const recentUsers = [...users]
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     .slice(0, 5);
@@ -1564,7 +1234,7 @@ const DashboardTab = ({
       label: "Bank Assigned",
       value: stats.bankAssigned || 0,
       items: users
-        .filter((u) => isUserAssignedToBank(u, docsByUser[u.userId]))
+        .filter(isUserAssignedToBank)
         .map((user) => ({ title: user.fullName || `User #${user.userId}`, subtitle: user.assignedBankName || user.bankName || "Assigned" })),
     },
   ];
@@ -1606,48 +1276,28 @@ const DashboardTab = ({
           <SectionTitle title="Recent Users" />
           <UserTable
             users={recentUsers}
-            docsByUser={docsByUser}
             openUserModal={openUserModal}
             openTrackingModal={openTrackingModal}
           />
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-black text-[#0B2A4A]">Latest Notifications</h2>
-            {notifications.filter((item) => !isNotificationRead(item)).length > 0 && (
-              <button
-                onClick={clearAllNotificationsWithFade}
-                className="flex items-center gap-1.5 text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-2xl transition animate-pulse"
-                aria-label="Clear all notifications"
-              >
-                <FaTimes /> Clear All
-              </button>
-            )}
-          </div>
+          <SectionTitle title="Latest Notifications" />
           <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-            {notifications.filter((item) => !isNotificationRead(item)).slice(0, 5).map((item) => {
-              const isFading = fadingIds.includes(item.id);
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => markRead(item.id)}
-                  className={`block w-full border-b border-gray-50 p-4 text-left text-sm bg-[#EAFBF8] transition-all duration-500 ease-in-out ${
-                    isFading ? "opacity-0 max-h-0 py-0 border-b-0 overflow-hidden transform scale-95" : "max-h-[200px]"
-                  }`}
-                  style={{
-                    transitionProperty: "opacity, max-height, padding, border, transform",
-                  }}
-                >
-                  {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
-                  <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
-                  <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
-                </button>
-              );
-            })}
-            {notifications.filter((item) => !isNotificationRead(item)).length === 0 && (
-              <div className="p-4 sm:p-5 text-sm text-gray-500">No notifications</div>
-            )}
+            {notifications.slice(0, 5).map((item) => (
+              <button
+                key={item.id}
+                onClick={() => markRead(item.id)}
+                className={`block w-full border-b border-gray-50 p-4 text-left text-sm ${
+                  isNotificationRead(item) ? "bg-white" : "bg-[#EAFBF8]"
+                }`}
+              >
+                {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
+                <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
+                <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
+              </button>
+            ))}
+            {notifications.length === 0 && <div className="p-4 sm:p-5 text-sm text-gray-500">No notifications</div>}
           </div>
         </section>
       </div>
@@ -1688,19 +1338,19 @@ const SimpleListOverlay = ({ title, items, onClose }) => (
 
 const SectionTitle = ({ title }) => <h2 className="mb-4 text-lg font-black text-[#0B2A4A]">{title}</h2>;
 
-const getUserStatusText = (user, userDocs = []) => {
-  if (isUserAssignedToBank(user, userDocs)) return "Sent to Bank";
+const getUserStatusText = (user) => {
+  if (isUserAssignedToBank(user)) return "Sent to Bank";
   if (user.paymentDone) return "Approved";
   return "Sent to Admin";
 };
 
-const getUserStatusStyle = (user, userDocs = []) => {
-  if (isUserAssignedToBank(user, userDocs)) return "border-green-200 bg-green-50 text-green-700";
+const getUserStatusStyle = (user) => {
+  if (isUserAssignedToBank(user)) return "border-green-200 bg-green-50 text-green-700";
   if (user.paymentDone) return "border-emerald-200 bg-emerald-50 text-emerald-700";
   return "border-sky-200 bg-sky-50 text-sky-700";
 };
 
-const UserTable = ({ users, docsByUser = {}, openUserModal, openTrackingModal }) => (
+const UserTable = ({ users, openUserModal, openTrackingModal }) => (
   <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px] text-left">
@@ -1721,8 +1371,8 @@ const UserTable = ({ users, docsByUser = {}, openUserModal, openTrackingModal })
               <td className="px-5 py-4 text-gray-600">{user.email || "-"}</td>
               <td className="px-5 py-4 text-gray-600">{user.mobileNumber || "-"}</td>
               <td className="px-5 py-4">
-                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getUserStatusStyle(user, docsByUser[user.userId])}`}>
-                  {getUserStatusText(user, docsByUser[user.userId])}
+                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getUserStatusStyle(user)}`}>
+                  {getUserStatusText(user)}
                 </span>
               </td>
               <td className="px-5 py-4 text-gray-600">{formatDate(user.createdAt)}</td>
@@ -1751,12 +1401,11 @@ const UserTable = ({ users, docsByUser = {}, openUserModal, openTrackingModal })
   </div>
 );
 
-const UsersTab = ({ users, docsByUser, openUserModal, openTrackingModal }) => (
+const UsersTab = ({ users, openUserModal, openTrackingModal }) => (
   <div className="space-y-5">
     <SectionTitle title="My Users" />
     <UserTable
       users={users}
-      docsByUser={docsByUser}
       openUserModal={openUserModal}
       openTrackingModal={openTrackingModal}
     />
@@ -2255,45 +1904,10 @@ const WizardModal = ({
           </div>
         </section>
 
-        <UploadStep
-          title="KYC Documents"
-          types={STEP_TYPES[2]}
-          files={files}
-          setFile={handleSetFile}
-          onPreviewFile={openSelectedFilePreview}
-          uploadedDocs={uploadedDocs}
-          onPreviewExisting={openPreview}
-        />
-        <UploadStep
-          title="Residential Proof"
-          types={STEP_TYPES[3]}
-          files={files}
-          setFile={handleSetFile}
-          onPreviewFile={openSelectedFilePreview}
-          uploadedDocs={uploadedDocs}
-          onPreviewExisting={openPreview}
-          note="Upload Light Bill or Rental Agreement."
-        />
-        {incomeTypes.length > 0 && (
-          <UploadStep
-            title="Income Documents"
-            types={incomeTypes}
-            files={files}
-            setFile={handleSetFile}
-            onPreviewFile={openSelectedFilePreview}
-            uploadedDocs={uploadedDocs}
-            onPreviewExisting={openPreview}
-          />
-        )}
-        <UploadStep
-          title="Vehicle Documents"
-          types={STEP_TYPES[5]}
-          files={files}
-          setFile={handleSetFile}
-          onPreviewFile={openSelectedFilePreview}
-          uploadedDocs={uploadedDocs}
-          onPreviewExisting={openPreview}
-        />
+        <UploadStep title="KYC Documents" types={STEP_TYPES[2]} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} />
+        <UploadStep title="Residential Proof" types={STEP_TYPES[3]} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} note="Upload Light Bill or Rental Agreement." />
+        {incomeTypes.length > 0 && <UploadStep title="Income Documents" types={incomeTypes} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} />}
+        <UploadStep title="Vehicle Documents" types={STEP_TYPES[5]} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} />
 
         {uploadedDocs.length > 0 && (
           <section className="space-y-4 rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
@@ -2422,67 +2036,34 @@ const FilePreviewFrame = ({ preview }) => (
   </div>
 );
 
-const UploadStep = ({ title, types, files, setFile, onPreviewFile, uploadedDocs = [], onPreviewExisting, note }) => (
+const UploadStep = ({ title, types, files, setFile, onPreviewFile, note }) => (
   <div>
     <h4 className="font-black text-[#0B2A4A]">{title}</h4>
     {note && <p className="mt-1 text-sm text-gray-500">{note}</p>}
     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {types.map((type) => {
-        const existingDoc = uploadedDocs.find((doc) => doc.documentType === type);
-        return (
-          <div key={type} className="rounded-3xl border border-gray-100 bg-[#F4F6F9] p-4 sm:p-5">
-            <div className="flex items-start justify-between gap-2">
-              <span className="font-black text-[#0B2A4A]">{docLabel(type)}</span>
-              {existingDoc && <Badge status={existingDoc.status} />}
+      {types.map((type) => (
+        <div key={type} className="rounded-3xl border border-gray-100 bg-[#F4F6F9] p-4 sm:p-5">
+          <span className="font-black text-[#0B2A4A]">{docLabel(type)}</span>
+          <input
+            type="file"
+            accept=".jpg,.jpeg,.png,.pdf"
+            onChange={(event) => setFile(type, event.target.files?.[0])}
+            className="mt-4 w-full text-sm"
+          />
+          {files[type] && (
+            <div className="mt-3 rounded-2xl bg-white p-3">
+              <span className="block truncate text-sm font-semibold text-gray-600">{files[type].name}</span>
+              <button
+                type="button"
+                onClick={() => onPreviewFile(type, files[type])}
+                className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
+              >
+                <FaEye /> Preview
+              </button>
             </div>
-
-            {existingDoc && (
-              <div className="mt-2 text-xs text-gray-500">
-                <span className="font-semibold text-gray-400">Uploaded: </span>
-                <span className="truncate block max-w-full font-bold text-[#0B2A4A]">{existingDoc.fileName || "document"}</span>
-                {existingDoc.remarks && (
-                  <span className="block mt-1 text-red-600 font-semibold bg-red-50 p-1.5 rounded-lg border border-red-100">
-                    Remark: {existingDoc.remarks}
-                  </span>
-                )}
-              </div>
-            )}
-
-            <input
-              type="file"
-              accept=".jpg,.jpeg,.png,.pdf"
-              onChange={(event) => setFile(type, event.target.files?.[0])}
-              className="mt-4 w-full text-sm"
-            />
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              {files[type] && (
-                <div className="w-full rounded-2xl bg-white p-3 border border-dashed border-[#27D3C3]">
-                  <span className="block truncate text-xs font-bold text-[#27D3C3] uppercase">New File Chosen</span>
-                  <span className="block truncate text-sm font-semibold text-gray-600 mt-1">{files[type].name}</span>
-                  <button
-                    type="button"
-                    onClick={() => onPreviewFile(type, files[type])}
-                    className="mt-2 inline-flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
-                  >
-                    <FaEye /> Preview New
-                  </button>
-                </div>
-              )}
-
-              {existingDoc && !files[type] && (
-                <button
-                  type="button"
-                  onClick={() => onPreviewExisting(existingDoc)}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-[#F4F6F9] border border-gray-200 px-4 py-2 text-sm font-bold text-[#0B2A4A] hover:bg-white"
-                >
-                  <FaEye /> Preview Existing
-                </button>
-              )}
-            </div>
-          </div>
-        );
-      })}
+          )}
+        </div>
+      ))}
     </div>
   </div>
 );
@@ -2509,7 +2090,7 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
     const underReview = hasDocs && (pendingCount > 0 || verifiedCount > 0);
     const hasRejected = hasDocs && rejectedCount > 0;
 
-    const isSentToBank = isUserAssignedToBank(user, docs);
+    const isSentToBank = !!localStorage.getItem(`user_bank_assignment_${user.userId}`);
 
     // Step 1: Documents Submitted
     let step1Status = "PENDING";
