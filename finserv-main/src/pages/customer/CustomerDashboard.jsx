@@ -350,7 +350,7 @@ const upsertPaymentRequest = ({ userId, status, profile, personalInfo, documents
   }
 };
 
-const addLocalAdminNotification = (message) => {
+const addLocalAdminNotification = async (message) => {
   try {
     const notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || "[]");
     localStorage.setItem(
@@ -365,11 +365,22 @@ const addLocalAdminNotification = (message) => {
         ...notifications,
       ])
     );
-  } catch {
-    localStorage.setItem(
-      ADMIN_NOTIFICATIONS_KEY,
-      JSON.stringify([{ id: `local-admin-${Date.now()}`, message, read: false, createdAt: new Date().toISOString() }])
-    );
+  } catch (e) {
+    console.error("Local storage error:", e);
+  }
+
+  try {
+    const session = getUserSession();
+    const senderId = session?.id || session?.userId || 1;
+    await api.post("/notifications/send", {
+      receiverId: 1,
+      message,
+      senderId: Number(senderId),
+      receiverRole: "ADMIN",
+      role: "ADMIN"
+    });
+  } catch (err) {
+    console.error("Failed to send admin DB notification:", err);
   }
 };
 
@@ -795,7 +806,7 @@ const CustomerDashboard = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `ttp://localhost:8081/api/documents/preview/${documentId}`,
+        `http://localhost:8081/api/documents/preview/${documentId}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
@@ -1052,18 +1063,16 @@ const CustomerDashboard = () => {
                 {showNotifications && (
                   <div className="absolute right-0 z-30 mt-3 w-[calc(100vw-2rem)] sm:w-80 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl">
                     <h3 className="mb-3 font-bold text-[#0B2A4A]">Notifications</h3>
-                    {notifications.length === 0 ? (
+                    {notifications.filter((item) => !item.read).length === 0 ? (
                       <p className="text-sm text-slate-500">No notifications.</p>
                     ) : (
                       <div className="max-h-80 space-y-2 overflow-y-auto">
-                        {notifications.slice(0, 8).map((item) => (
+                        {notifications.filter((item) => !item.read).slice(0, 8).map((item) => (
                           <button
                             type="button"
                             key={item.id}
-                            onClick={() => !item.read && markNotificationRead(item.id)}
-                            className={`w-full rounded-2xl p-3 text-left text-sm ${
-                              item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
-                            }`}
+                            onClick={() => markNotificationRead(item.id)}
+                            className="w-full rounded-2xl p-3 text-left text-sm bg-[#EAFBF8]"
                           >
                             <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
                             <p className="mt-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
@@ -1561,17 +1570,15 @@ const DashboardTab = ({
 
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Notifications</h2>
-        {notifications.length === 0 ? (
+        {notifications.filter((item) => !item.read).length === 0 ? (
           <p className="text-sm text-slate-500">No notifications yet.</p>
         ) : (
           <div className="space-y-3">
-            {notifications.map((item) => (
+            {notifications.filter((item) => !item.read).map((item) => (
               <button
                 key={item.id}
-                onClick={() => !item.read && markNotificationRead(item.id)}
-                className={`w-full text-left p-4 rounded-2xl border ${
-                  item.read ? "bg-slate-50 border-slate-100" : "bg-[#EAFBF8] border-[#27D3C3]/30"
-                }`}
+                onClick={() => markNotificationRead(item.id)}
+                className="w-full text-left p-4 rounded-2xl border bg-[#EAFBF8] border-[#27D3C3]/30"
               >
                 <p className="text-sm font-semibold text-[#0B2A4A]">{item.message}</p>
                 <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>

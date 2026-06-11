@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { FaEye, FaChevronDown, FaChevronUp, FaSearch } from "react-icons/fa";
+import { toast } from "react-toastify";
 import { DOCUMENT_LABELS, formatDate, StatusBadge } from "./adminShared";
 
 const FILTER_TABS = ["All", "Pending", "Verified", "Approved", "Rejected"];
@@ -302,6 +303,7 @@ const Documents = ({
                       updateDocumentStatus={updateDocumentStatus}
                       saveRemark={saveRemark}
                       openPreview={openPreview}
+                      user={user}
                     />
                   ))}
                 </div>
@@ -314,90 +316,128 @@ const Documents = ({
   );
 };
 
-const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark, openPreview }) => (
-  <div
-    className={`rounded-2xl p-4 sm:p-5 border ${
-      doc.status === "REJECTED"
-        ? "bg-red-50 border-red-200"
-        : doc.status === "APPROVED"
-        ? "bg-emerald-50 border-emerald-200"
-        : "bg-[#F8FAFC] border-slate-200"
-    }`}
-  >
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div>
-        <p className="font-bold text-[#0B2A4A]">
-          {DOCUMENT_LABELS[doc.documentType] || doc.documentType}
-        </p>
-        <p className="text-xs text-slate-500 mt-0.5 break-all">{doc.fileName}</p>
-        <p className="text-xs text-slate-400 mt-0.5">{formatDate(doc.uploadedAt)}</p>
-        {doc.remarks && (
-          <p className="text-xs text-amber-700 mt-1 bg-amber-50 rounded-xl px-2 py-1">
-            Remark: {doc.remarks}
+const isUserAssignedToBank = (user) =>
+  !!(
+    user?.bankId ||
+    user?.assignedBankId ||
+    user?.assignedBankName ||
+    user?.bankName ||
+    user?.bankStatus === "BANK_ASSIGNED" ||
+    user?.bankStatus === "SENT_TO_BANK" ||
+    localStorage.getItem(`user_bank_assignment_${user?.userId}`)
+  );
+
+const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark, openPreview, user }) => {
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [localRemark, setLocalRemark] = useState(remark || "");
+
+  const handleTextChange = (val) => {
+    setLocalRemark(val);
+    setRemark(val);
+  };
+
+  const handleSubmitReject = async () => {
+    if (!localRemark.trim()) {
+      toast.error("Please enter a remark for rejection.");
+      return;
+    }
+    try {
+      await saveRemark(doc.documentId);
+      await updateDocumentStatus(doc, "REJECTED");
+      setShowRejectInput(false);
+    } catch (err) {
+      console.error("Failed to reject document:", err);
+    }
+  };
+
+  const hasAssigned = isUserAssignedToBank(user);
+  const displayStatus = hasAssigned ? "APPROVED" : doc.status;
+  const canAction = !hasAssigned && (doc.status === "PENDING" || doc.status === "VERIFIED");
+
+  return (
+    <div
+      className={`rounded-2xl p-4 sm:p-5 border ${
+        displayStatus === "REJECTED"
+          ? "bg-red-50 border-red-200"
+          : displayStatus === "APPROVED"
+          ? "bg-emerald-50 border-emerald-200"
+          : "bg-[#F8FAFC] border-slate-200"
+      }`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-bold text-[#0B2A4A]">
+            {DOCUMENT_LABELS[doc.documentType] || doc.documentType}
           </p>
+          <p className="text-xs text-slate-500 mt-0.5 break-all">{doc.fileName}</p>
+          <p className="text-xs text-slate-400 mt-0.5">{formatDate(doc.uploadedAt)}</p>
+          {doc.remarks && !hasAssigned && (
+            <p className="text-xs text-amber-700 mt-1 bg-amber-50 rounded-xl px-2 py-1">
+              Remark: {doc.remarks}
+            </p>
+          )}
+        </div>
+        <StatusBadge status={displayStatus} />
+      </div>
+
+      {/* Action Buttons */}
+      <div className="mt-3 flex flex-wrap gap-2 items-center">
+        <button
+          onClick={() => openPreview(doc.documentId)}
+          className="px-3 py-2 rounded-2xl bg-white border border-slate-200 text-[#0B2A4A] font-bold text-xs flex items-center gap-1"
+        >
+          <FaEye /> Preview
+        </button>
+        
+        {canAction && !showRejectInput && (
+          <>
+            <button
+              onClick={() => updateDocumentStatus(doc, "APPROVED")}
+              className="px-3 py-2 rounded-2xl bg-emerald-600 text-white font-bold text-xs"
+            >
+              Approve
+            </button>
+            
+            <button
+              onClick={() => setShowRejectInput(true)}
+              className="px-3 py-2 rounded-2xl bg-red-600 text-white font-bold text-xs"
+            >
+              Reject
+            </button>
+          </>
         )}
       </div>
-      <StatusBadge status={doc.status} />
-    </div>
 
-    {/* Action Buttons */}
-    <div className="mt-3 flex flex-wrap gap-2">
-      <button
-        onClick={() => openPreview(doc.documentId)}
-        className="px-3 py-2 rounded-2xl bg-white border border-slate-200 text-[#0B2A4A] font-bold text-xs flex items-center gap-1"
-      >
-        <FaEye /> Preview
-      </button>
-      {doc.status === "PENDING" && (
-        <>
-          <button
-            onClick={() => updateDocumentStatus(doc, "VERIFIED")}
-            className="px-3 py-2 rounded-2xl bg-sky-600 text-white font-bold text-xs"
-          >
-            Verify
-          </button>
-          <button
-            onClick={() => updateDocumentStatus(doc, "REJECTED")}
-            className="px-3 py-2 rounded-2xl bg-red-600 text-white font-bold text-xs"
-          >
-            Reject
-          </button>
-        </>
-      )}
-      {doc.status === "VERIFIED" && (
-        <>
-          <button
-            onClick={() => updateDocumentStatus(doc, "APPROVED")}
-            className="px-3 py-2 rounded-2xl bg-emerald-600 text-white font-bold text-xs"
-          >
-            Approve
-          </button>
-          <button
-            onClick={() => updateDocumentStatus(doc, "REJECTED")}
-            className="px-3 py-2 rounded-2xl bg-red-600 text-white font-bold text-xs"
-          >
-            Reject
-          </button>
-        </>
+      {/* Remark / Reject Input */}
+      {showRejectInput && (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={localRemark}
+            onChange={(e) => handleTextChange(e.target.value)}
+            placeholder="Add rejection remark..."
+            className="w-full flex-1 rounded-2xl border border-slate-200 px-3 py-2 outline-none text-xs bg-white"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSubmitReject}
+              className="bg-red-600 text-white rounded-2xl px-4 py-2 font-bold text-xs"
+            >
+              Submit
+            </button>
+            <button
+              onClick={() => {
+                setShowRejectInput(false);
+                handleTextChange("");
+              }}
+              className="bg-slate-200 text-[#0B2A4A] rounded-2xl px-4 py-2 font-bold text-xs"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </div>
-
-    {/* Remark Input */}
-    <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-      <input
-        value={remark}
-        onChange={(e) => setRemark(e.target.value)}
-        placeholder="Add admin remark..."
-        className="w-full flex-1 rounded-2xl border border-slate-200 px-3 py-2 outline-none text-xs bg-white"
-      />
-      <button
-        onClick={() => saveRemark(doc.documentId)}
-        className="bg-[#0B2A4A] text-white rounded-2xl px-4 py-2 font-bold text-xs"
-      >
-        Save
-      </button>
-    </div>
-  </div>
-);
+  );
+};
 
 export default Documents;

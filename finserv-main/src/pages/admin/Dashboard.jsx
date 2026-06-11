@@ -144,6 +144,16 @@ const getApiFailureSummary = (entries) =>
 
 const readAssignedBankId = (userId) => localStorage.getItem(`user_bank_assignment_${userId}`) || "";
 const getAssignedBankDetailKey = (userId) => `user_bank_assignment_detail_${userId}`;
+const isUserAssignedToBank = (user) =>
+  !!(
+    user?.bankId ||
+    user?.assignedBankId ||
+    user?.assignedBankName ||
+    user?.bankName ||
+    user?.bankStatus === "BANK_ASSIGNED" ||
+    user?.bankStatus === "SENT_TO_BANK" ||
+    localStorage.getItem(`user_bank_assignment_${user?.userId}`)
+  );
 
 const DEALER_NOTIFICATIONS_KEY = "dealer_assignment_notifications";
 const ADMIN_NOTIFICATIONS_KEY = "admin_activity_notifications";
@@ -158,11 +168,18 @@ const PAYMENT_STATUS = {
 };
 
 const approveDocuments = async (documents) => {
-  const docsToApprove = documents.filter((doc) => doc.documentId && doc.status !== "APPROVED");
+  const docsToApprove = documents.filter((doc) => doc.documentId);
   if (docsToApprove.length === 0) return { approved: 0, failed: 0 };
 
   const results = await Promise.allSettled(
-    docsToApprove.map((doc) => api.put(`/documents/status/${doc.documentId}?status=APPROVED`))
+    docsToApprove.map(async (doc) => {
+      try {
+        await api.put(`/documents/status/${doc.documentId}?status=VERIFIED`);
+      } catch (err) {
+        console.error(`Failed to verify document ${doc.documentId} before approval:`, err);
+      }
+      return api.put(`/documents/status/${doc.documentId}?status=APPROVED`);
+    })
   );
 
   return {
@@ -253,6 +270,7 @@ const addLocalDealerNotification = async ({ dealerId, dealerCode, message }) => 
       receiverId: dealerId ? Number(dealerId) : null,
       message,
       senderId: Number(adminId),
+      receiverRole: "DEALER",
       role: "DEALER"
     });
   } catch (err) {
@@ -269,6 +287,7 @@ const addLocalCustomerNotification = async ({ userId, message }) => {
       receiverId: Number(userId),
       message,
       senderId: Number(adminId),
+      receiverRole: "USER",
       role: "USER"
     });
   } catch (err) {
@@ -315,11 +334,108 @@ const readLocalAdminNotifications = () => {
   }
 };
 
-const mergeNotifications = (...lists) =>
-  lists
-    .flat()
-    .filter(Boolean)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+const mergeNotifications = (adminId, ...lists) => {
+  const flat = lists.flat().filter(Boolean);
+  const seen = new Set();
+  const deduped = [];
+  flat.forEach((item) => {
+    const id = String(item.id || item.message);
+    if (!seen.has(id)) {
+      seen.add(id);
+      deduped.push(item);
+    }
+  });
+
+  const filtered = deduped.filter((item) => {
+    if (item.receiverRole && item.receiverRole !== "ADMIN") {
+      return false;
+    }
+    if (
+      item.senderRole === "ADMIN" ||
+      Number(item.senderId) === Number(adminId) ||
+      item.senderId === 1
+    ) {
+      return false;
+    }
+    const msg = String(item.message || "").toLowerCase();
+    if (
+      msg.startsWith("admin ") ||
+      msg.includes("approved by admin") ||
+      msg.includes("rejected by admin") ||
+      msg.startsWith("your ") ||
+      msg.includes("marked approved") ||
+      msg.includes("marked rejected") ||
+      msg.includes("marked verified") ||
+      msg.includes("is approved") ||
+      msg.includes("is rejected") ||
+      msg.includes("document remark") ||
+      msg.includes("received a remark")
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const sorted = filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  const seenKeys = new Set();
+  const consolidated = [];
+
+  sorted.forEach((item) => {
+    const msg = String(item.message || "").trim();
+
+    // 1. Reupload consolidated per customer
+    const reuploadMatch = msg.match(/^(.+?)\s+(?:reuploaded|replaced)\s+(.+?)\.?$/i);
+    if (reuploadMatch) {
+      const name = reuploadMatch[1].trim();
+      const key = `reupload:${name.toLowerCase()}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        consolidated.push({
+          ...item,
+          message: `${name} reuploaded documents.`
+        });
+      }
+      return;
+    }
+
+    // 2. Customer submission consolidated
+    const submitCustomerMatch = msg.match(/^(.+?)\s+has submitted documents for payment verification\.?$/i);
+    if (submitCustomerMatch) {
+      const name = submitCustomerMatch[1].trim();
+      const key = `submission:${name.toLowerCase()}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        consolidated.push({
+          ...item,
+          message: `${name} submitted documents for payment verification.`
+        });
+      }
+      return;
+    }
+
+    // 3. Dealer submission/update consolidated
+    const submitDealerMatch = msg.match(/^(.+?)\s+(?:submitted|updated)\s+documents for\s+(.+?)\.?$/i);
+    if (submitDealerMatch) {
+      const dealerName = submitDealerMatch[1].trim();
+      const customerName = submitDealerMatch[2].trim();
+      const key = `submission:${customerName.toLowerCase()}`;
+      const action = msg.toLowerCase().includes("updated") ? "updated" : "submitted";
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        consolidated.push({
+          ...item,
+          message: `${dealerName} ${action} documents for ${customerName}.`
+        });
+      }
+      return;
+    }
+
+    consolidated.push(item);
+  });
+
+  return consolidated;
+};
 
 const getPaymentUserId = (request) =>
   firstPresent(
@@ -620,7 +736,7 @@ const Dashboard = () => {
           setPersonalInfos(asList(personalRes.value));
         }
         if (notificationsRes.status === "fulfilled") {
-          setNotifications(mergeNotifications(readLocalAdminNotifications(), asList(notificationsRes.value)));
+          setNotifications(mergeNotifications(adminId, readLocalAdminNotifications(), asList(notificationsRes.value)));
         }
         if (paymentRequestsRes.status === "fulfilled") {
           setRawPaymentRequests(
@@ -636,9 +752,17 @@ const Dashboard = () => {
 
         if (loadedUsers.length > 0) {
           const docs = await fetchDocumentsForUsersInBatches(loadedUsers);
-          setAllDocuments(docs);
-          setPendingDocs(docs.filter((doc) => doc.status === "PENDING"));
-          setVerifiedDocs(docs.filter((doc) => doc.status === "VERIFIED"));
+          const mappedDocs = docs.map((doc) => {
+            const userId = getDocumentOwnerId(doc);
+            const u = loadedUsers.find((item) => String(item.userId) === String(userId));
+            if (isUserAssignedToBank(u)) {
+              return { ...doc, status: "APPROVED", remarks: "" };
+            }
+            return doc;
+          });
+          setAllDocuments(mappedDocs);
+          setPendingDocs(mappedDocs.filter((doc) => doc.status === "PENDING"));
+          setVerifiedDocs(mappedDocs.filter((doc) => doc.status === "VERIFIED"));
         } else {
           setAllDocuments([]);
           setPendingDocs([]);
@@ -659,9 +783,17 @@ const Dashboard = () => {
     try {
       if (users.length > 0) {
         const docs = await fetchDocumentsForUsersInBatches(users);
-        setAllDocuments(docs);
-        setPendingDocs(docs.filter((doc) => doc.status === "PENDING"));
-        setVerifiedDocs(docs.filter((doc) => doc.status === "VERIFIED"));
+        const mappedDocs = docs.map((doc) => {
+          const userId = getDocumentOwnerId(doc);
+          const u = users.find((item) => String(item.userId) === String(userId));
+          if (isUserAssignedToBank(u)) {
+            return { ...doc, status: "APPROVED", remarks: "" };
+          }
+          return doc;
+        });
+        setAllDocuments(mappedDocs);
+        setPendingDocs(mappedDocs.filter((doc) => doc.status === "PENDING"));
+        setVerifiedDocs(mappedDocs.filter((doc) => doc.status === "VERIFIED"));
       } else {
         setAllDocuments([]);
         setPendingDocs([]);
@@ -682,10 +814,10 @@ const Dashboard = () => {
       fetchDocumentLists();
       api
         .get(`/notifications/${adminId}`)
-        .then((res) => setNotifications(mergeNotifications(readLocalAdminNotifications(), asList(res))))
+        .then((res) => setNotifications(mergeNotifications(adminId, readLocalAdminNotifications(), asList(res))))
         .catch((error) => {
           if (error?.response?.status === 403) {
-            setNotifications(readLocalAdminNotifications());
+            setNotifications(mergeNotifications(adminId, readLocalAdminNotifications()));
           }
         });
     }, 30000);
@@ -828,6 +960,8 @@ const Dashboard = () => {
     try {
       setAssigningBank(true);
       await assignBankToUser(selectedUser.userId, assignBankId);
+      localStorage.setItem(`user_bank_assignment_${selectedUser.userId}`, assignBankId);
+      localStorage.setItem(getAssignedBankDetailKey(selectedUser.userId), JSON.stringify(assignedBank));
       let docsToApprove = selectedUserDocs;
       if (docsToApprove.length === 0) {
         const docsRes = await api.get(`/documents/user/${selectedUser.userId}`);
@@ -913,25 +1047,36 @@ const Dashboard = () => {
 
   const updateDocumentStatus = async (doc, status) => {
     try {
+      if (status === "APPROVED" && doc.status !== "VERIFIED") {
+        await api.put(`/documents/status/${doc.documentId}?status=VERIFIED`);
+      }
       await api.put(`/documents/status/${doc.documentId}?status=${status}`);
       const userId = getDocumentOwnerId(doc);
       const user = users.find((item) => String(item.userId) === String(userId));
       const documentName = formatDocumentType(doc.documentType);
-      const message =
+      
+      const customerMsg =
         status === "APPROVED"
-          ? `Your ${documentName} was approved by admin.`
+          ? `${user?.fullName || "Customer"} - ${documentName} is approved`
           : `${documentName} marked ${status}.`;
-      addLocalCustomerNotification({ userId, message });
+          
+      addLocalCustomerNotification({ userId, message: customerMsg });
+      
       if (user) {
         const dealer = dealers.find(
           (item) =>
             String(item.dealerCode || "").toLowerCase() === String(user.dealerCode || "").toLowerCase() ||
             String(item.dealerId || item.id || "") === String(user.dealerId || user.assignedDealerId || "")
         );
+        const dealerMsg =
+          status === "APPROVED"
+            ? `${user.fullName} - ${documentName} is approved`
+            : `${user.fullName}: ${documentName} marked ${status}.`;
+            
         addLocalDealerNotification({
           dealerId: dealer?.dealerId || dealer?.id || user.dealerId || user.assignedDealerId,
           dealerCode: dealer?.dealerCode || user.dealerCode,
-          message: `${user.fullName || "Customer"}: ${message}`,
+          message: dealerMsg,
           type: "DOCUMENT_STATUS",
           documentStatus: status,
           documentId: doc.documentId,
@@ -989,7 +1134,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`ttp://localhost:8081/api/documents/preview/${documentId}`, {
+      const response = await fetch(`http://localhost:8081/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");
@@ -1284,17 +1429,15 @@ const Dashboard = () => {
               {showNotifications && (
                 <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
                   <h3 className="font-bold text-[#0B2A4A] mb-3">Notifications</h3>
-                  {notifications.length === 0 ? (
+                  {notifications.filter((item) => !item.read).length === 0 ? (
                     <p className="text-sm text-slate-500">No notifications.</p>
                   ) : (
                     <div className="space-y-2 max-h-80 overflow-y-auto">
-                      {notifications.map((item) => (
+                      {notifications.filter((item) => !item.read).map((item) => (
                         <button
                           key={item.id}
                           onClick={() => markNotificationRead(item.id)}
-                          className={`w-full text-left rounded-2xl p-3 text-sm ${
-                            item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
-                          }`}
+                          className="w-full text-left rounded-2xl p-3 text-sm bg-[#EAFBF8]"
                         >
                           <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
                           <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>

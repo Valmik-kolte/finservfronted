@@ -28,7 +28,7 @@ export const getDocumentCounts = (userId) =>
   api.get(`/documents/count/${userId}`);
 
 export const getDocumentPreviewUrl = (documentId) =>
-  `ttp://localhost:8081/api/documents/preview/${documentId}`;
+  `http://localhost:8081/api/documents/preview/${documentId}`;
 
 export const getDocumentDownloadUrl = (documentId) =>
-  `ttp://localhost:8081/api/documents/download/${documentId}`;
+  `http://localhost:8081/api/documents/download/${documentId}`;
