@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { getAllDealers } from "../../services/dealerService";
 
 const DealerSettings = () => {
   const [dealer, setDealer] = useState({});
@@ -8,15 +7,7 @@ const DealerSettings = () => {
     const raw = localStorage.getItem("dealerData");
     if (!raw) return;
     const d = JSON.parse(raw);
-    const id = d.dealerId || d.id;
-
-    getAllDealers()
-      .then((list) => {
-        const found = list?.find((item) => item.dealerId === id);
-        if (found) setDealer(found);
-        else setDealer(d);
-      })
-      .catch(() => setDealer(d));
+    setDealer(d);
   }, []);
 
   return (

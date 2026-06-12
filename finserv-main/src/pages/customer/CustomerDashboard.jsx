@@ -815,7 +815,7 @@ const CustomerDashboard = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`,
+        `http://localhost:8082/api/documents/preview/${documentId}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }

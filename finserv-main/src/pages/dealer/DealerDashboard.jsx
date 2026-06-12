@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -465,27 +465,15 @@ const DealerDashboard = () => {
   }, [dealerCode, notificationDealerId]);
 
   const fetchDealerProfile = useCallback(async () => {
-    try {
-      return await getDealerProfile();
-    } catch {
-      // Fall back to the older admin-style endpoint until /dealer/me is available.
-    }
-    try {
-      const res = await api.get("/dealer/all");
-      const dealers = res.data?.data || [];
-      const found = dealers.find((d) => {
-        const candidateId = d.dealerId || d.id;
-        return (
-          sameId(candidateId, dealerId) ||
-          sameCode(d.dealerCode, storedDealerCode) ||
-          sameCode(d.email, session.email)
-        );
-      });
-      return found || null;
-    } catch {
-      return null;
-    }
-  }, [dealerId, session.email, storedDealerCode]);
+    return {
+      dealerId,
+      fullName: session.fullName || session.name || "",
+      email: session.email || "",
+      mobileNumber: session.mobileNumber || "",
+      dealerCode: storedDealerCode,
+      role: session.role || "DEALER",
+    };
+  }, [dealerId, session, storedDealerCode]);
 
   const loadDashboard = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
@@ -505,10 +493,9 @@ const DealerDashboard = () => {
 
       try {
         const dealerUsers = await getDealerUsers();
-        const [summary, notificationList, personalRes] = await Promise.all([
+        const [summary, notificationList] = await Promise.all([
           getDealerDashboardSummary().catch(() => null),
           getDealerNotifications({ dealerId: resolvedDealerId }).catch(() => []),
-          api.get("/personal-info/all").catch(() => null),
         ]);
         const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
         const normalizedUsers = mergeUsersById(Array.isArray(dealerUsers) ? dealerUsers : [], localDealerUsers);
@@ -557,7 +544,7 @@ const DealerDashboard = () => {
         setUsers(enrichedUsers);
         const ids = new Set(normalizedUsers.map((u) => u.userId));
         const localInfos = readLocalDealerPersonalInfos().filter((info) => ids.has(info.userId));
-        const apiPersonalInfos = personalRes?.data?.data || personalRes?.data || [];
+        const apiPersonalInfos = [];
         
         const infoMap = {};
         normalizedUsers.forEach((user) => {
@@ -595,10 +582,7 @@ const DealerDashboard = () => {
         setDashboardSummary(null);
       }
 
-      const [userRes, personalRes] = await Promise.allSettled([
-        api.get("/user/all"),
-        api.get("/personal-info/all"),
-      ]);
+      const [userRes, personalRes] = [ { status: "rejected" }, { status: "rejected" } ];
 
       const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
       const allUsers = mergeUsersById(
@@ -730,7 +714,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`http://localhost:8082/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");
