@@ -86,6 +86,9 @@ const Register = ({ defaultRole }) => {
           codeMap[data.dealerCode] = data.dealerId;
           localStorage.setItem("dealerCodeMap", JSON.stringify(codeMap));
         }
+        if (form.email && form.mobile) {
+          localStorage.setItem(`dealer_mobile_${form.email.toLowerCase().trim()}`, form.mobile);
+        }
         toast.success("Dealer registered successfully");
       } else {
         await registerUser(payload);

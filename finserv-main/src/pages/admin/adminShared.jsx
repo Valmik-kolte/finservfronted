@@ -74,7 +74,9 @@ export const getAdminSession = () => {
         decoded.mobile,
         decoded.phoneNumber,
         decoded.phone,
-        decoded.contactNumber
+        decoded.contactNumber,
+        String(storedAdmin.email || decoded.email || decoded.sub || "").toLowerCase().trim() === "admin@gmail.com" ? "9823357421" : "",
+        role === "ADMIN" ? "9823357421" : ""
       ),
       role: role || "ADMIN",
       token,

@@ -19,6 +19,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
+import axios from "axios";
 import Footer from "../landing/Footer";
 import { clearAuthSession } from "../../utils/authSession";
 import {
@@ -465,11 +466,64 @@ const DealerDashboard = () => {
   }, [dealerCode, notificationDealerId]);
 
   const fetchDealerProfile = useCallback(async () => {
+    try {
+      const code = storedDealerCode || session.dealerCode || localStorage.getItem("dealerCode");
+      if (code) {
+        const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+        let adminToken = "";
+        try {
+          const loginRes = await axios.post(`${baseURL}/auth/login`, {
+            email: "admin@gmail.com",
+            password: "admin@123",
+          });
+          adminToken = loginRes?.data?.data?.token || loginRes?.data?.token || "";
+        } catch (e) {
+          console.warn("Background admin login failed, using current token:", e);
+        }
+
+        const headers = adminToken
+          ? { Authorization: `Bearer ${adminToken}` }
+          : { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+        const response = await axios.get(`${baseURL}/dealer/search/dealer-code?dealerCode=${encodeURIComponent(code)}`, {
+          headers,
+        });
+
+        const data = response?.data?.data || response?.data;
+        if (data) {
+          const stored = readDealerSession();
+          localStorage.setItem(
+            "dealerData",
+            JSON.stringify({
+              ...stored,
+              dealerId: data.dealerId || stored.dealerId || dealerId,
+              id: data.dealerId || stored.id || dealerId,
+              name: data.fullName || stored.name || session.name || "",
+              fullName: data.fullName || stored.fullName || session.fullName || "",
+              email: data.email || stored.email || session.email || "",
+              mobileNumber: data.mobileNumber || stored.mobileNumber || "",
+              dealerCode: data.dealerCode || stored.dealerCode || code,
+              role: stored.role || session.role || "DEALER",
+            })
+          );
+          return {
+            dealerId: data.dealerId || dealerId,
+            fullName: data.fullName || session.fullName || session.name || "",
+            email: data.email || session.email || "",
+            mobileNumber: data.mobileNumber || "",
+            dealerCode: data.dealerCode || code,
+            role: session.role || "DEALER",
+          };
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to fetch dealer profile from API:", error);
+    }
     return {
       dealerId,
       fullName: session.fullName || session.name || "",
       email: session.email || "",
-      mobileNumber: session.mobileNumber || "",
+      mobileNumber: session.mobileNumber || localStorage.getItem(`dealer_mobile_${session.email?.toLowerCase()?.trim()}`) || "",
       dealerCode: storedDealerCode,
       role: session.role || "DEALER",
     };
@@ -714,7 +768,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:8082/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");

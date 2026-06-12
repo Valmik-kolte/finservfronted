@@ -254,6 +254,8 @@ const Login = () => {
           decoded?.phoneNumber,
           decoded?.phone,
           decoded?.contactNumber,
+          role === "DEALER" ? localStorage.getItem(`dealer_mobile_${form.email.toLowerCase().trim()}`) : null,
+          role === "USER" ? localStorage.getItem(`user_mobile_${form.email.toLowerCase().trim()}`) : null,
           null
         ),
         role,

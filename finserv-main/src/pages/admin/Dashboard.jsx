@@ -243,7 +243,9 @@ const normalizeAdminProfile = (profile = {}) => ({
     profile.mobile,
     profile.phoneNumber,
     profile.phone,
-    profile.contactNumber
+    profile.contactNumber,
+    String(profile.email || "").toLowerCase().trim() === "admin@gmail.com" ? "9823357421" : "",
+    profile.role === "ADMIN" ? "9823357421" : ""
   ),
   role: firstPresent(profile.role, "ADMIN"),
 });
@@ -1145,7 +1147,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`http://localhost:8082/api/documents/preview/${documentId}`, {
+      const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");

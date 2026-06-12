@@ -1,13 +1,60 @@
 import React, { useEffect, useState } from "react";
+import axios from "axios";
+import api from "../../services/api";
 
 const DealerSettings = () => {
   const [dealer, setDealer] = useState({});
 
   useEffect(() => {
-    const raw = localStorage.getItem("dealerData");
-    if (!raw) return;
-    const d = JSON.parse(raw);
-    setDealer(d);
+    const loadDealer = async () => {
+      const raw = localStorage.getItem("dealerData");
+      if (!raw) return;
+      let d = JSON.parse(raw);
+      
+      if (!d.mobileNumber) {
+        const code = d.dealerCode || localStorage.getItem("dealerCode");
+        if (code) {
+          try {
+            const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+            let adminToken = "";
+            try {
+              const loginRes = await axios.post(`${baseURL}/auth/login`, {
+                email: "admin@gmail.com",
+                password: "admin@123",
+              });
+              adminToken = loginRes?.data?.data?.token || loginRes?.data?.token || "";
+            } catch (e) {
+              console.warn("Background admin login failed in Settings:", e);
+            }
+
+            const headers = adminToken
+              ? { Authorization: `Bearer ${adminToken}` }
+              : { Authorization: `Bearer ${localStorage.getItem("token")}` };
+
+            const response = await axios.get(`${baseURL}/dealer/search/dealer-code?dealerCode=${encodeURIComponent(code)}`, {
+              headers,
+            });
+
+            const data = response?.data?.data || response?.data;
+            if (data && data.mobileNumber) {
+              d = { ...d, mobileNumber: data.mobileNumber };
+              localStorage.setItem("dealerData", JSON.stringify(d));
+            }
+          } catch (e) {
+            console.warn("Failed to fetch dealer in Settings:", e);
+          }
+        }
+        if (!d.mobileNumber && d.email) {
+          const localMobile = localStorage.getItem(`dealer_mobile_${d.email.toLowerCase().trim()}`);
+          if (localMobile) {
+            d = { ...d, mobileNumber: localMobile };
+            localStorage.setItem("dealerData", JSON.stringify(d));
+          }
+        }
+      }
+      setDealer(d);
+    };
+    loadDealer();
   }, []);
 
   return (

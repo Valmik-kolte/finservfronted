@@ -32,9 +32,12 @@ const DealerRegister = () => {
           codeMap[dealerCode] = dealerId;
           localStorage.setItem("dealerCodeMap", JSON.stringify(codeMap));
         }
+        if (form.email && form.mobileNumber) {
+          localStorage.setItem(`dealer_mobile_${form.email.toLowerCase().trim()}`, form.mobileNumber);
+        }
       }
       toast.success("Registration Successful! Please login.");
-      navigate("/");
+      navigate("/login");
     } catch (err) {
       toast.error(err.response?.data?.message || "Registration failed.");
     } finally {
