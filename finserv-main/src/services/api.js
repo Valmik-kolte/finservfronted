@@ -3,8 +3,8 @@
 import axios from "axios";
 
 const api = axios.create({
-  // baseURL: "http://localhost:8081/api",
-  baseURL: "http://localhost:8081/api",
+  // baseURL: "https://v1.vahanfinserv.com/api",
+  baseURL: ",https://v1.vahanfinserv.com/api"
 });
 
 // Attach JWT token automatically
@@ -13,7 +13,7 @@ api.interceptors.request.use((config) => {
     delete config.skipAuth;
     if (config.headers) delete config.headers.Authorization;
     return config;
-  }
+  } 
 
   const token = localStorage.getItem("token");
 
