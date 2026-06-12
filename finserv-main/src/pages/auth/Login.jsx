@@ -23,7 +23,7 @@ const quoteClose = "\u201D";
 const quoteLine1 =
   "\u0924\u0941\u092e\u091a\u094d\u092f\u093e \u0938\u094d\u0935\u092a\u094d\u0928\u093e\u0924\u0940\u0932 \u0935\u093e\u0939\u0928\u093e\u0938\u093e\u0920\u0940";
 const quoteLine2 =
-  "\u0935\u093f\u0936\u094d\u0935\u093e\u0938\u093e\u0930\u094d\u0939 \u0906\u0930\u094d\u0925\u093f\u0915 \u0938\u093e\u0925";
+  "\u0935\u093f\u0936\u094d\u0935\u093e\u0938\u093e\u091a\u0940 \u0906\u0930\u094d\u0925\u093f\u0915 \u0938\u093e\u0925";
 
 const features = [
   { label: "Car Loan", icon: <FaCar />, left: 70 },
@@ -593,6 +593,11 @@ const Login = () => {
         .input-wrap:focus-within {
           border-color: #ffffff;
           box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.25);
+        }
+
+        .input-wrap:focus-within,
+        .input-wrap:has(input:not(:placeholder-shown)) {
+          background: rgba(0, 0, 0, 0.45) !important;
         }
 
         .input-icon {
