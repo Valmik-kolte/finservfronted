@@ -1,9 +1,9 @@
 // src/services/api.js
 
 import axios from "axios";
+import { getAuthToken } from "../utils/authSession";
 
 const api = axios.create({
-  // baseURL: "https://v1.vahanfinserv.com/api",
   baseURL: "https://v1.vahanfinserv.com/api"
 });
 
@@ -15,7 +15,7 @@ api.interceptors.request.use((config) => {
     return config;
   } 
 
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;

@@ -1,32 +1,38 @@
-const fs = require('fs');
-const path = require('path');
-
-const file = path.join(__dirname, 'src/pages/dealer/DealerDashboard.jsx');
-let c = fs.readFileSync(file, 'utf8');
-
-// 1. Replace storedDealer useEffect with getDealerById fetch
-const oldEffect = /useEffect\(\(\) => \{[\s\S]*?storedDealer[\s\S]*?\}, \[\]\);/;
-const newEffect = `useEffect(() => {
-    const dealerId = localStorage.getItem("dealerId");
-    if (!dealerId) return;
-    getDealerById(dealerId)
-      .then((res) => {
-        const d = res.data;
-        setProfileData({
-          name: d.fullName || d.name || "Dealer",
-          phone: d.mobileNumber || d.phone || "",
-          email: d.email || "",
-          dealerCode: d.dealerCode || "\u2014",
-        });
-        localStorage.setItem("dealerCode", d.dealerCode || "");
+async function test() {
+  const baseURL = 'https://v1.vahanfinserv.com/api';
+  try {
+    const loginRes = await fetch(`${baseURL}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'motors@gmail.com',
+        password: '123456'
       })
-      .catch((err) => console.log("Profile fetch error:", err));
-  }, []);`;
+    });
+    
+    const loginData = await loginRes.json();
+    const token = loginData?.data?.token || loginData?.token;
+    console.log('Dealer login successful');
 
-c = c.replace(oldEffect, newEffect);
+    const headers = { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}` 
+    };
 
-// 2. Replace hardcoded DLR2091 with profileData.dealerCode
-c = c.split('DLR2091').join('{profileData.dealerCode}');
+    // Try PUT /personal-info/update/2
+    const res = await fetch(`${baseURL}/personal-info/update/2`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({})
+    });
+    console.log('PUT /personal-info/update/2 status:', res.status);
+    if (res.ok) {
+      console.log('User 2 personal info:', await res.json());
+    }
 
-fs.writeFileSync(file, c, 'utf8');
-console.log('Done');
+  } catch (err) {
+    console.error('Error:', err.message);
+  }
+}
+
+test();

@@ -12,7 +12,6 @@ import {
 const getAssignedBankId = (user) =>
   user.bankId ||
   user.assignedBankId ||
-  localStorage.getItem(`user_bank_assignment_${user.userId}`) ||
   "";
 
 const getAssignedBankName = (user, banks) => {

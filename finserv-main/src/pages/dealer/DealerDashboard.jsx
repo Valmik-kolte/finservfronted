@@ -21,7 +21,7 @@ import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
 import axios from "axios";
 import Footer from "../landing/Footer";
-import { clearAuthSession } from "../../utils/authSession";
+import { clearAuthSession, getAuthToken } from "../../utils/authSession";
 import {
   getDealerNotifications,
   getDealerUserDocuments,
@@ -146,6 +146,18 @@ const readDealerSession = () => {
   } catch {
     return {};
   }
+};
+
+const isBackendGeneratedNotification = (msg) => {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return (
+    lower.startsWith("admin approved") ||
+    lower.startsWith("admin verified") ||
+    lower.startsWith("admin rejected") ||
+    lower.startsWith("admin added remark") ||
+    lower.startsWith("admin added a remark")
+  );
 };
 
 const DEALER_NOTIFICATIONS_KEY = "dealer_assignment_notifications";
@@ -283,15 +295,31 @@ const isUserAssignedToBank = (user) =>
     user?.assignedBankName ||
     user?.bankName ||
     user?.bankStatus === "BANK_ASSIGNED" ||
-    user?.bankStatus === "SENT_TO_BANK" ||
-    localStorage.getItem(`user_bank_assignment_${user?.userId}`)
+    user?.bankStatus === "SENT_TO_BANK"
   );
 
 const documentsForAssignedBankUser = (user, userDocs = []) => {
+  if (isUserAssignedToBank(user)) {
+    return userDocs.map((doc) => ({
+      ...doc,
+      status: "APPROVED",
+      remarks: "",
+    }));
+  }
   return userDocs;
 };
 
 const countsForAssignedBankUser = (user, userDocs = [], computedCounts) => {
+  if (isUserAssignedToBank(user)) {
+    const total = userDocs.length;
+    return {
+      documentCount: total,
+      pendingDocsCount: 0,
+      verifiedDocsCount: 0,
+      approvedDocsCount: total,
+      rejectedDocsCount: 0,
+    };
+  }
   return computedCounts;
 };
 
@@ -353,7 +381,7 @@ const DealerDashboard = () => {
   const session = useMemo(() => readDealerSession(), []);
   const dealerId = session.dealerId || session.id;
   const storedDealerCode = session.dealerCode || localStorage.getItem("dealerCode") || "";
-  const token = localStorage.getItem("token");
+  const token = getAuthToken();
 
   const [sidebarOpen, setSidebarOpen] = useState(() =>
     typeof window === "undefined" ? true : window.innerWidth >= 768
@@ -396,31 +424,47 @@ const DealerDashboard = () => {
   const pollRef = useRef(null);
 
   const userIds = useMemo(() => users.map((u) => u.userId), [users]);
+
+  const adjustedDocs = useMemo(() => {
+    const userMap = new Map(users.map((u) => [String(u.userId || u.id), u]));
+    return docs.map((doc) => {
+      const user = userMap.get(String(doc.userId));
+      if (user && isUserAssignedToBank(user)) {
+        return {
+          ...doc,
+          status: "APPROVED",
+          remarks: "",
+        };
+      }
+      return doc;
+    });
+  }, [docs, users]);
+
   const docsByUser = useMemo(() => {
     const grouped = {};
-    docs.forEach((doc) => {
+    adjustedDocs.forEach((doc) => {
       grouped[doc.userId] = grouped[doc.userId] || [];
       grouped[doc.userId].push(doc);
     });
     return grouped;
-  }, [docs]);
+  }, [adjustedDocs]);
 
   const stats = useMemo(
     () => ({
-      users: dashboardSummary?.usersCount ?? users.length,
-      docs: dashboardSummary?.documentsCount ?? docs.length,
-      pending: dashboardSummary?.pendingDocsCount ?? docs.filter((doc) => doc.status === "PENDING").length,
-      approved: dashboardSummary?.approvedDocsCount ?? docs.filter((doc) => doc.status === "APPROVED").length,
-      rejected: dashboardSummary?.rejectedDocsCount ?? docs.filter((doc) => doc.status === "REJECTED").length,
-      bankAssigned: dashboardSummary?.bankAssignedCount ?? users.filter(isUserAssignedToBank).length,
+      users: users.length,
+      docs: adjustedDocs.length,
+      pending: adjustedDocs.filter((doc) => doc.status === "PENDING").length,
+      approved: adjustedDocs.filter((doc) => doc.status === "APPROVED").length,
+      rejected: adjustedDocs.filter((doc) => doc.status === "REJECTED").length,
+      bankAssigned: users.filter(isUserAssignedToBank).length,
     }),
-    [dashboardSummary, docs, users]
+    [adjustedDocs, users]
   );
 
   const rejectedUsers = useMemo(() => {
-    const rejectedIds = new Set(docs.filter((doc) => doc.status === "REJECTED").map((doc) => doc.userId));
+    const rejectedIds = new Set(adjustedDocs.filter((doc) => doc.status === "REJECTED").map((doc) => doc.userId));
     return users.filter((user) => rejectedIds.has(user.userId));
-  }, [docs, users]);
+  }, [adjustedDocs, users]);
 
   const dealerCode = profile.dealerCode;
   const notificationDealerId = profile.dealerId || dealerId;
@@ -454,20 +498,27 @@ const DealerDashboard = () => {
     const localList = getLocalDealerNotifications(notificationDealerId, dealerCode);
     let list = [];
     try {
-      list = await getDealerNotifications();
+      list = await getDealerNotifications({ dealerId: notificationDealerId });
     } catch {
       if (!notificationDealerId) return localList;
       const res = await api.get(`/notifications/${notificationDealerId}`);
       list = Array.isArray(res.data) ? res.data : res.data?.data || [];
     }
-    const sorted = [...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const filteredList = list.filter((notif) => {
+      const role = notif.receiverRole || notif.role;
+      if (role && role !== "DEALER") return false;
+      if (isBackendGeneratedNotification(notif.message)) return false;
+      return true;
+    });
+    const sorted = [...localList, ...filteredList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     setNotifications(sorted);
     return sorted;
   }, [dealerCode, notificationDealerId]);
 
   const fetchDealerProfile = useCallback(async () => {
     try {
-      const code = storedDealerCode || session.dealerCode || localStorage.getItem("dealerCode");
+      const sessionData = readDealerSession();
+      const code = sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
       if (code) {
         const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
         let adminToken = "";
@@ -483,7 +534,7 @@ const DealerDashboard = () => {
 
         const headers = adminToken
           ? { Authorization: `Bearer ${adminToken}` }
-          : { Authorization: `Bearer ${localStorage.getItem("token")}` };
+          : { Authorization: `Bearer ${getAuthToken()}` };
 
         const response = await axios.get(`${baseURL}/dealer/search/dealer-code?dealerCode=${encodeURIComponent(code)}`, {
           headers,
@@ -496,45 +547,47 @@ const DealerDashboard = () => {
             "dealerData",
             JSON.stringify({
               ...stored,
-              dealerId: data.dealerId || stored.dealerId || dealerId,
-              id: data.dealerId || stored.id || dealerId,
-              name: data.fullName || stored.name || session.name || "",
-              fullName: data.fullName || stored.fullName || session.fullName || "",
-              email: data.email || stored.email || session.email || "",
+              dealerId: data.dealerId || stored.dealerId || stored.id,
+              id: data.dealerId || stored.id,
+              name: data.fullName || stored.name || sessionData.name || "",
+              fullName: data.fullName || stored.fullName || sessionData.fullName || "",
+              email: data.email || stored.email || sessionData.email || "",
               mobileNumber: data.mobileNumber || stored.mobileNumber || "",
               dealerCode: data.dealerCode || stored.dealerCode || code,
-              role: stored.role || session.role || "DEALER",
+              role: stored.role || sessionData.role || "DEALER",
             })
           );
           return {
-            dealerId: data.dealerId || dealerId,
-            fullName: data.fullName || session.fullName || session.name || "",
-            email: data.email || session.email || "",
+            dealerId: data.dealerId || stored.dealerId || stored.id,
+            fullName: data.fullName || sessionData.fullName || sessionData.name || "",
+            email: data.email || sessionData.email || "",
             mobileNumber: data.mobileNumber || "",
             dealerCode: data.dealerCode || code,
-            role: session.role || "DEALER",
+            role: sessionData.role || "DEALER",
           };
         }
       }
     } catch (error) {
       console.warn("Failed to fetch dealer profile from API:", error);
     }
+    const sessionData = readDealerSession();
     return {
-      dealerId,
-      fullName: session.fullName || session.name || "",
-      email: session.email || "",
-      mobileNumber: session.mobileNumber || localStorage.getItem(`dealer_mobile_${session.email?.toLowerCase()?.trim()}`) || "",
-      dealerCode: storedDealerCode,
-      role: session.role || "DEALER",
+      dealerId: sessionData.dealerId || sessionData.id,
+      fullName: sessionData.fullName || sessionData.name || "",
+      email: sessionData.email || "",
+      mobileNumber: sessionData.mobileNumber || localStorage.getItem(`dealer_mobile_${sessionData.email?.toLowerCase()?.trim()}`) || "",
+      dealerCode: sessionData.dealerCode || localStorage.getItem("dealerCode") || "",
+      role: sessionData.role || "DEALER",
     };
-  }, [dealerId, session, storedDealerCode]);
+  }, []);
 
   const loadDashboard = useCallback(async (showLoader = true) => {
     if (showLoader) setLoading(true);
     try {
       const dealerProfile = await fetchDealerProfile();
-      const resolvedDealerId = dealerProfile?.dealerId || dealerProfile?.id || dealerId;
-      const resolvedCode = dealerProfile?.dealerCode || storedDealerCode;
+      const sessionData = readDealerSession();
+      const resolvedDealerId = dealerProfile?.dealerId || dealerProfile?.id || sessionData.dealerId || sessionData.id;
+      const resolvedCode = dealerProfile?.dealerCode || sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
 
       setProfile((prev) => ({
         dealerId: resolvedDealerId || prev.dealerId,
@@ -598,7 +651,14 @@ const DealerDashboard = () => {
         setUsers(enrichedUsers);
         const ids = new Set(normalizedUsers.map((u) => u.userId));
         const localInfos = readLocalDealerPersonalInfos().filter((info) => ids.has(info.userId));
-        const apiPersonalInfos = [];
+        const personalInfoResponses = await Promise.all(
+          normalizedUsers.map((user) =>
+            api.put(`/personal-info/update/${user.userId}`, {})
+              .then((res) => res.data?.data || res.data)
+              .catch(() => null)
+          )
+        );
+        const apiPersonalInfos = personalInfoResponses.filter(Boolean);
         
         const infoMap = {};
         normalizedUsers.forEach((user) => {
@@ -671,8 +731,14 @@ const DealerDashboard = () => {
         try {
           const notifRes = await api.get(`/notifications/${resolvedDealerId}`);
           const list = Array.isArray(notifRes.data) ? notifRes.data : [];
+          const filteredList = list.filter((notif) => {
+            const role = notif.receiverRole || notif.role;
+            if (role && role !== "DEALER") return false;
+            if (isBackendGeneratedNotification(notif.message)) return false;
+            return true;
+          });
           const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
-          const allNotifs = [...localList, ...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+          const allNotifs = [...localList, ...filteredList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
           setNotifications(allNotifs);
 
           const parsedBankAssignments = {};
@@ -716,21 +782,26 @@ const DealerDashboard = () => {
     } finally {
       if (showLoader) setLoading(false);
     }
-  }, [dealerId, storedDealerCode, fetchDealerProfile, fetchDocsForUsers]);
+  }, [fetchDealerProfile, fetchDocsForUsers]);
+
+  const loadDashboardRef = useRef(loadDashboard);
+  useEffect(() => {
+    loadDashboardRef.current = loadDashboard;
+  }, [loadDashboard]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      loadDashboard(true);
+      loadDashboardRef.current(true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [loadDashboard]);
+  }, []);
 
   useEffect(() => {
     pollRef.current = window.setInterval(() => {
-      loadDashboard(false);
+      loadDashboardRef.current(false);
     }, 30000);
     return () => window.clearInterval(pollRef.current);
-  }, [loadDashboard]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -2219,7 +2290,7 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
     const underReview = hasDocs && (pendingCount > 0 || verifiedCount > 0);
     const hasRejected = hasDocs && rejectedCount > 0;
 
-    const isSentToBank = !!localStorage.getItem(`user_bank_assignment_${user.userId}`);
+    const isSentToBank = isUserAssignedToBank(user);
 
     // Step 1: Documents Submitted
     let step1Status = "PENDING";

@@ -323,8 +323,7 @@ const isUserAssignedToBank = (user) =>
     user?.assignedBankName ||
     user?.bankName ||
     user?.bankStatus === "BANK_ASSIGNED" ||
-    user?.bankStatus === "SENT_TO_BANK" ||
-    localStorage.getItem(`user_bank_assignment_${user?.userId}`)
+    user?.bankStatus === "SENT_TO_BANK"
   );
 
 const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark, openPreview, user }) => {
@@ -351,7 +350,7 @@ const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark
   };
 
   const hasAssigned = isUserAssignedToBank(user);
-  const displayStatus = hasAssigned ? "APPROVED" : doc.status;
+  const displayStatus = doc.status;
   const canAction = !hasAssigned && (doc.status === "PENDING" || doc.status === "VERIFIED");
 
   return (

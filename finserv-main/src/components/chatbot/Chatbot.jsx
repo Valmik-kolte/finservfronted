@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import ChatbotButton from "./ChatbotButton";
 import ChatbotWindow from "./ChatbotWindow";
 import { CHATBOT_MENUS, CHATBOT_WELCOME_MESSAGES } from "./chatbotMenus";
+import { getAuthToken } from "../../utils/authSession";
 
 const parseSession = (role) => {
   const key =
@@ -60,7 +61,7 @@ const Chatbot = ({ roleOverride = "", onNavigateSection }) => {
   // Resolve auth/session from the same localStorage keys already used by the dashboards.
   useEffect(() => {
     const storedRole = normalizeRole(roleOverride) || detectStoredRole();
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     if (!token || !storedRole) {
       setRole(null);
       setSessionUser(null);
@@ -95,7 +96,7 @@ const Chatbot = ({ roleOverride = "", onNavigateSection }) => {
 
   const handleAction = useCallback(
     async (item) => {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       if (!token || !role) {
         setMessages((prev) => [
           ...prev,
@@ -157,7 +158,7 @@ const Chatbot = ({ roleOverride = "", onNavigateSection }) => {
     [role, sessionUser]
   );
 
-  if (!localStorage.getItem("token") || !role || menuItems.length === 0) return null;
+  if (!getAuthToken() || !role || menuItems.length === 0) return null;
 
   return (
     <>

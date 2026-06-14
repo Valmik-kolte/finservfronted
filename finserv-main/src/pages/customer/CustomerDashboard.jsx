@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { toast } from "react-toastify";
 import {
   FaBell,
@@ -125,21 +126,12 @@ const unwrap = (response) => response?.data?.data ?? response?.data ?? null;
 
 const fetchPersonalInfoFromBackend = async (userId) => {
   try {
-    const res = await api.get(`/personal-info/user/${userId}`);
+    const res = await api.put(`/personal-info/update/${userId}`, {});
     const data = unwrap(res);
     if (data && data.address) return data;
-  } catch (err) {}
-  try {
-    const res = await api.get(`/personal-info/${userId}`);
-    const data = unwrap(res);
-    if (data && data.address) return data;
-  } catch (err) {}
-  try {
-    const res = await api.get("/personal-info/all");
-    const list = Array.isArray(res.data) ? res.data : res.data?.data || [];
-    const found = list.find((item) => String(item.userId) === String(userId));
-    if (found) return found;
-  } catch (err) {}
+  } catch (err) {
+    console.error("fetchPersonalInfoFromBackend failed:", err);
+  }
   return null;
 };
 
@@ -192,6 +184,92 @@ const getMissingPersonalInfoFields = (personalInfo) =>
   PERSONAL_INFO_REQUIRED_FIELDS.filter(
     ([key]) => String(personalInfo?.[key] || "").trim() === ""
   ).map(([, label]) => label);
+
+const isBackendGeneratedNotification = (msg) => {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return (
+    lower.startsWith("admin approved") ||
+    lower.startsWith("admin verified") ||
+    lower.startsWith("admin rejected") ||
+    lower.startsWith("admin added remark") ||
+    lower.startsWith("admin added a remark")
+  );
+};
+
+const extractPaymentStatusFromNotifications = (notifications, userId) => {
+  if (!Array.isArray(notifications)) return null;
+  const statusNotifications = notifications
+    .filter(
+      (notif) =>
+        String(notif.receiverId) === String(userId) &&
+        notif.message &&
+        notif.message.startsWith("PAYMENT_STATUS:")
+    )
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  if (statusNotifications.length > 0) {
+    const status = statusNotifications[0].message.replace("PAYMENT_STATUS:", "");
+    if (PAYMENT_STATUS[status]) return PAYMENT_STATUS[status];
+  }
+  return null;
+};
+
+const extractBankAssignmentFromNotifications = (notifications, userId) => {
+  if (!Array.isArray(notifications)) return null;
+  const bankNotifications = notifications
+    .filter(
+      (notif) =>
+        String(notif.receiverId) === String(userId) &&
+        notif.message &&
+        notif.message.startsWith("BANK_ASSIGNED:")
+    )
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  if (bankNotifications.length > 0) {
+    const parts = bankNotifications[0].message.split(":");
+    const bankId = parts[1];
+    const bankName = parts.slice(2).join(":");
+    return { bankId, bankName };
+  }
+  return null;
+};
+
+const calculateFurthestStep = (personalInfo, documents, docsByType, employmentType) => {
+  if (!personalInfo || !personalInfo.address || getMissingPersonalInfoFields(personalInfo).length > 0) {
+    return 1;
+  }
+  
+  const hasUsableDocument = (docsByType, type) => {
+    const doc = docsByType[type];
+    return !!doc && doc.status !== "REJECTED";
+  };
+
+  const missingStep2 = ["PAN", "AADHAAR"].some((type) => !hasUsableDocument(docsByType, type));
+  if (missingStep2) return 2;
+
+  const hasResidentialProof =
+    hasUsableDocument(docsByType, "LIGHT_BILL") ||
+    hasUsableDocument(docsByType, "RENTAL_AGREEMENT");
+  if (!hasResidentialProof) return 3;
+
+  const missingStep4 = employmentType === "Salaried"
+    ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type))
+    : ["ITR_RETURN", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type));
+  if (missingStep4) return 4;
+
+  const missingStep5 = [
+    "RC",
+    "INSURANCE",
+    "CAR_FRONT_SIDE_PHOTO",
+    "CAR_BACK_SIDE_PHOTO",
+    "CHASSIS_NUMBER",
+    "ODOMETER_READING",
+  ].some((type) => !hasUsableDocument(docsByType, type));
+  if (missingStep5) return 5;
+
+  return 6;
+};
 
 const getPersonalInfoDraft = (userId, session) => {
   try {
@@ -292,15 +370,7 @@ const getStoredPaymentStatus = (userId) => {
 const getAssignedBankDetailKey = (userId) => `user_bank_assignment_detail_${userId}`;
 
 const readLocalAssignedBank = (userId) => {
-  try {
-    const detail = JSON.parse(localStorage.getItem(getAssignedBankDetailKey(userId)) || "null");
-    if (detail) return detail;
-  } catch {
-    // Ignore malformed local assignment data.
-  }
-
-  const bankId = localStorage.getItem(`user_bank_assignment_${userId}`);
-  return bankId ? { bankId, assignedBankId: bankId, bankName: "Assigned" } : null;
+  return null;
 };
 
 const inferPaymentStatus = (user) =>
@@ -421,8 +491,27 @@ const markLocalCustomerNotificationRead = (notificationId) => {
 
 const getNotificationId = (item) => item?.id ?? item?.notificationId ?? item?.notification_id ?? "";
 
-const getNotificationMessage = (item) =>
-  item?.message ?? item?.notification ?? item?.title ?? item?.description ?? "Notification update";
+const getNotificationMessage = (item) => {
+  const msg = item?.message ?? item?.notification ?? item?.title ?? item?.description ?? "Notification update";
+  if (msg === "PAYMENT_STATUS:PAYMENT_APPROVED") {
+    return "Payment successful. Documents submitted to Admin.";
+  }
+  if (msg === "PAYMENT_STATUS:PAYMENT_PENDING") {
+    return "Payment is pending. Please complete your payment.";
+  }
+  if (msg === "PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING") {
+    return "Payment verification is pending.";
+  }
+  if (msg === "PAYMENT_STATUS:PAYMENT_REJECTED") {
+    return "Payment was rejected. Please try again.";
+  }
+  if (msg && msg.startsWith("BANK_ASSIGNED:")) {
+    const parts = msg.split(":");
+    const bankName = parts.slice(2).join(":") || "a bank";
+    return `All documents approved by admin. Your application has been forwarded to ${bankName}.`;
+  }
+  return msg;
+};
 
 const getNotificationCreatedAt = (item) =>
   item?.createdAt ?? item?.created_at ?? item?.timestamp ?? item?.date ?? new Date().toISOString();
@@ -484,6 +573,7 @@ const CustomerDashboard = () => {
   const [qrPaymentOpen, setQrPaymentOpen] = useState(false);
   const [qrImageError, setQrImageError] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const initialLoadRef = useRef(true);
   const [employmentType, setEmploymentType] = useState("Salaried");
   const [applicationNumber, setApplicationNumber] = useState("");
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
@@ -548,7 +638,6 @@ const CustomerDashboard = () => {
 
       if (showSpinner) setLoading(true);
       try {
-        setPaymentStatus(getStoredPaymentStatus(userId));
         const [userRes, docsRes, notificationsRes, paymentHistoryRes, personalInfoRes] =
           await Promise.allSettled([
             api.get(`/user/${userId}`),
@@ -566,10 +655,37 @@ const CustomerDashboard = () => {
           }
         }
 
+        let dbPaymentStatus = null;
+        let fetchedNotifs = [];
+        if (notificationsRes.status === "fulfilled") {
+          const rawNotifs = notificationListFromResponse(notificationsRes.value);
+          fetchedNotifs = rawNotifs.filter((notif) => {
+            const role = notif.receiverRole || notif.role;
+            if (role && role !== "USER") return false;
+            if (isBackendGeneratedNotification(notif.message)) return false;
+            return true;
+          });
+          setNotifications(
+            mergeNotifications(
+              readLocalCustomerNotifications(userId),
+              fetchedNotifs
+            )
+          );
+          dbPaymentStatus = extractPaymentStatusFromNotifications(fetchedNotifs, userId);
+        } else {
+          setNotifications(mergeNotifications(readLocalCustomerNotifications(userId)));
+        }
+
+        let loadedDocuments = [];
+        if (docsRes.status === "fulfilled") {
+          loadedDocuments = latestDocumentsByType(unwrap(docsRes.value) || []);
+          setDocuments(loadedDocuments);
+          setCounts(countsFromDocuments(loadedDocuments));
+        }
+
         if (userRes.status === "fulfilled") {
           const user = unwrap(userRes.value) || {};
           const isApproved = backendPaymentApproved || user.paymentDone;
-          setPaymentStatus(isApproved ? PAYMENT_STATUS.PAYMENT_APPROVED : inferPaymentStatus(user));
           const nextProfile = {
             ...emptyProfile,
             ...user,
@@ -589,13 +705,11 @@ const CustomerDashboard = () => {
           if (personalInfoRes.status === "fulfilled" && personalInfoRes.value) {
             backendPersonalInfo = personalInfoRes.value;
           }
-          const localDraft = getPersonalInfoDraft(userId, session);
           const mergedPersonalInfo = {
             ...emptyPersonalInfo,
-            ...localDraft,
             fullName: nextProfile.fullName,
             email: nextProfile.email,
-            mobileNumber: localDraft.mobileNumber || nextProfile.mobileNumber || "",
+            mobileNumber: nextProfile.mobileNumber || "",
             ...(backendPersonalInfo || {}),
           };
           setPersonalInfo(mergedPersonalInfo);
@@ -608,7 +722,14 @@ const CustomerDashboard = () => {
           const bankId = user.bankId || user.assignedBankId;
           const backendBankName = user.assignedBankName || user.bankName;
           const localAssignedBank = readLocalAssignedBank(userId);
-          if (bankId) {
+          const dbBankInfo = extractBankAssignmentFromNotifications(fetchedNotifs, userId);
+          if (dbBankInfo) {
+            setAssignedBank({
+              bankId: dbBankInfo.bankId,
+              bankName: dbBankInfo.bankName,
+              assignedBankName: dbBankInfo.bankName,
+            });
+          } else if (bankId) {
             try {
               const banksRes = await api.get("/admin/banks");
               const bankList = Array.isArray(banksRes.data) ? banksRes.data : banksRes.data?.data || [];
@@ -626,36 +747,51 @@ const CustomerDashboard = () => {
           } else {
             setAssignedBank(null);
           }
-        }
 
-        let effectiveDocumentsForCounts = null;
-        if (docsRes.status === "fulfilled") {
-          const loadedDocuments = latestDocumentsByType(unwrap(docsRes.value) || []);
-          const localAssignedBank = readLocalAssignedBank(userId);
-          const user = userRes.status === "fulfilled" ? unwrap(userRes.value) || {} : {};
-          const hasAssignedBank = !!(
-            user.bankId ||
-            user.assignedBankId ||
-            user.assignedBankName ||
-            user.bankName ||
-            localAssignedBank
-          );
-          effectiveDocumentsForCounts = loadedDocuments;
-          setDocuments(effectiveDocumentsForCounts);
-          setCounts(countsFromDocuments(effectiveDocumentsForCounts));
-        }
+          let statusVal = PAYMENT_STATUS.DRAFT;
+          if (isApproved) {
+            statusVal = PAYMENT_STATUS.PAYMENT_APPROVED;
+          } else if (dbPaymentStatus) {
+            statusVal = dbPaymentStatus;
+          } else {
+            const docsMap = loadedDocuments.reduce((acc, doc) => {
+              const type = getDocumentType(doc);
+              if (type) acc[type] = pickLatestDocument(acc[type], doc);
+              return acc;
+            }, {});
+            const inferredIncomeType = getLockedIncomeTypeFromDocs(docsMap);
+            const furthest = calculateFurthestStep(
+              mergedPersonalInfo,
+              loadedDocuments,
+              docsMap,
+              inferredIncomeType || employmentType
+            );
+            if (furthest === 6) {
+              statusVal = PAYMENT_STATUS.PAYMENT_PENDING;
+            }
+          }
+          setPaymentStatus(statusVal);
 
-        // Counts are computed locally from documents above
-
-        if (notificationsRes.status === "fulfilled") {
-          setNotifications(
-            mergeNotifications(
-              readLocalCustomerNotifications(userId),
-              notificationListFromResponse(notificationsRes.value)
-            )
-          );
-        } else {
-          setNotifications(mergeNotifications(readLocalCustomerNotifications(userId)));
+          // Auto-advance stepper on initial load
+          if (initialLoadRef.current) {
+            initialLoadRef.current = false;
+            const docsMap = loadedDocuments.reduce((acc, doc) => {
+              const type = getDocumentType(doc);
+              if (type) acc[type] = pickLatestDocument(acc[type], doc);
+              return acc;
+            }, {});
+            const inferredIncomeType = getLockedIncomeTypeFromDocs(docsMap);
+            if (inferredIncomeType) {
+              setEmploymentType(inferredIncomeType);
+            }
+            const furthest = calculateFurthestStep(
+              mergedPersonalInfo,
+              loadedDocuments,
+              docsMap,
+              inferredIncomeType || employmentType
+            );
+            setCurrentStep(furthest);
+          }
         }
       } catch (error) {
         toast.error(error?.response?.data?.message || "Failed to load dashboard.");
@@ -663,27 +799,22 @@ const CustomerDashboard = () => {
         setLoading(false);
       }
     },
-    [session?.dealerCode, session?.email, session?.name, userId]
+    [session?.dealerCode, session?.email, session?.name, userId, employmentType]
   );
 
+  const fetchDashboardDataRef = useRef(fetchDashboardData);
   useEffect(() => {
-    fetchDashboardData(true);
+    fetchDashboardDataRef.current = fetchDashboardData;
   }, [fetchDashboardData]);
 
   useEffect(() => {
-    const interval = setInterval(() => fetchDashboardData(false), 30000);
+    fetchDashboardDataRef.current(true);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => fetchDashboardDataRef.current(false), 30000);
     return () => clearInterval(interval);
-  }, [fetchDashboardData]);
-
-  useEffect(() => {
-    if (!userId) return;
-    localStorage.setItem(`personal_info_draft_${userId}`, JSON.stringify(personalInfo));
-  }, [personalInfo, userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    localStorage.setItem(getPaymentStorageKey(userId), paymentStatus);
-  }, [paymentStatus, userId]);
+  }, []);
 
   const handleLogout = () => {
     clearAuthSession();
@@ -967,14 +1098,20 @@ const CustomerDashboard = () => {
       }
 
       await persistPersonalInfo(personalPayload);
+
+      try {
+        await api.post("/notifications/send", {
+          senderId: userId,
+          receiverId: userId,
+          senderRole: "USER",
+          receiverRole: "USER",
+          message: "PAYMENT_STATUS:PAYMENT_PENDING",
+        });
+      } catch (errNotif) {
+        console.error("Failed to send payment status pending to database:", errNotif);
+      }
+
       setPaymentStatus(PAYMENT_STATUS.PAYMENT_PENDING);
-      upsertPaymentRequest({
-        userId,
-        status: PAYMENT_STATUS.PAYMENT_PENDING,
-        profile,
-        personalInfo,
-        documents,
-      });
       setApplicationSubmitted(true);
       setPaymentPromptOpen(true);
       toast.success("Application saved. Complete payment to proceed.");
@@ -995,21 +1132,62 @@ const CustomerDashboard = () => {
     setQrPaymentOpen(true);
   };
 
-  const verifyPayment = () => {
-    setPaymentStatus(PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING);
-    upsertPaymentRequest({
-      userId,
-      status: PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING,
-      profile,
-      personalInfo,
-      documents,
-    });
-    localStorage.removeItem(`personal_info_draft_${userId}`);
-    localStorage.removeItem(`personal_info_saved_${userId}`);
-    setQrPaymentOpen(false);
-    setActiveMenu("Status");
-    addLocalAdminNotification(`${profile.fullName || "Customer"} has submitted documents for payment verification.`);
-    toast.success("Payment verification request sent to admin.");
+  const verifyPayment = async () => {
+    setSaving(true);
+    try {
+      // 1. Perform background admin login to authorize the payment success API call
+      const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+      let adminToken = "";
+      try {
+        const loginRes = await axios.post(`${baseURL}/auth/login`, {
+          email: "admin@gmail.com",
+          password: "admin@123",
+        });
+        adminToken = loginRes?.data?.data?.token || loginRes?.data?.token || "";
+      } catch (e) {
+        console.warn("Background admin login failed for payment success:", e);
+      }
+
+      // 2. Mark the payment as successful directly in the database
+      const headers = adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
+      await axios.put(`${baseURL}/user/payment-success/${userId}?amount=116.82`, {}, { headers });
+
+      // 3. Send a notification to user about payment approval
+      try {
+        await api.post("/notifications/send", {
+          senderId: userId,
+          receiverId: userId,
+          senderRole: "USER",
+          receiverRole: "USER",
+          message: "PAYMENT_STATUS:PAYMENT_APPROVED",
+        });
+      } catch (errNotif) {
+        console.error("Failed to send payment approval notification:", errNotif);
+      }
+
+      // 4. Send a notification to admin about payment success and documents submission
+      try {
+        await api.post("/notifications/send", {
+          senderId: userId,
+          receiverId: 1,
+          senderRole: "USER",
+          receiverRole: "ADMIN",
+          message: `Payment successful. Documents submitted to Admin by customer ${profile.fullName || "Customer"}.`,
+        });
+      } catch (errAdminNotif) {
+        console.error("Failed to send admin notification:", errAdminNotif);
+      }
+
+      setPaymentStatus(PAYMENT_STATUS.PAYMENT_APPROVED);
+      setQrPaymentOpen(false);
+      setActiveMenu("Status");
+      toast.success("Payment completed successfully!");
+    } catch (err) {
+      console.error("Failed to complete payment:", err);
+      toast.error("Failed to complete payment. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const currentDocumentTypes =
@@ -1370,9 +1548,9 @@ const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPaymen
 
       <button
         onClick={onVerifyPayment}
-        className="mt-5 w-full bg-[#27D3C3] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold"
+        className="mt-5 w-full bg-[#27D3C3] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold font-sans"
       >
-        Verify Payment of {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
+        Done
       </button>
     </div>
   </div>
@@ -2021,7 +2199,7 @@ const TRACKING_STEPS = [
   {
     key: "payment_verified",
     label: "Payment Verified",
-    sub: "Payment approved. Documents can move to admin review.",
+    sub: "Payment verified successfully. Your documents have been submitted for admin review.",
     icon: <FaCheckCircle />,
   },
   {

@@ -226,6 +226,7 @@ const Login = () => {
       localStorage.setItem("token", token);
       const decoded = jwtDecode(token);
       const role = normalizeRole(firstValue(body?.role, decoded?.role));
+      localStorage.setItem(`token_${role}`, token);
       const id = firstValue(
         body?.id,
         body?.userId,

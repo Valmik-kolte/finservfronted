@@ -19,7 +19,25 @@ export const getDealerUserDocuments = async (userId) => {
 export const getDealerNotifications = async ({ dealerId } = {}) => {
   if (!dealerId) return [];
   const response = await api.get(`/notifications/${dealerId}`);
-  return unwrap(response) || [];
+  const list = unwrap(response) || [];
+  return list.filter((notif) => {
+    const role = notif.receiverRole || notif.role;
+    if (role && role !== "DEALER") return false;
+    const msg = notif.message;
+    if (msg) {
+      const lower = msg.toLowerCase();
+      if (
+        lower.startsWith("admin approved") ||
+        lower.startsWith("admin verified") ||
+        lower.startsWith("admin rejected") ||
+        lower.startsWith("admin added remark") ||
+        lower.startsWith("admin added a remark")
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
 };
 
 export const markDealerNotificationRead = async (notificationId) => {

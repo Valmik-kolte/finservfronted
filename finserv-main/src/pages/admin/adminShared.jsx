@@ -1,6 +1,7 @@
 import React from "react";
 import { FaTimes } from "react-icons/fa";
 import { jwtDecode } from "jwt-decode";
+import { getAuthToken } from "../../utils/authSession";
 
 export const DOCUMENT_LABELS = {
   AADHAAR: "Aadhaar",
@@ -50,7 +51,7 @@ export const getAdminSession = () => {
     const storedAdmin = safeParse("adminData");
     const storedUser = safeParse("user");
     const storedUserData = safeParse("userData");
-    const token = localStorage.getItem("token");
+    const token = getAuthToken();
     const decoded = token ? jwtDecode(token) : {};
     const role = String(firstPresent(storedAdmin.role, decoded.role, localStorage.getItem("role"))).replace(/^ROLE_/, "").toUpperCase();
 

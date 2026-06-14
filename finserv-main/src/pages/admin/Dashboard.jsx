@@ -27,7 +27,7 @@ import {
   getPaymentVerificationRequests,
   rejectPayment as rejectPaymentRequest,
 } from "../../services/paymentService";
-import { clearAuthSession } from "../../utils/authSession";
+import { clearAuthSession, getAuthToken } from "../../utils/authSession";
 import {
   READY2DRIVE_BASE_AMOUNT,
   READY2DRIVE_FEE_LABEL,
@@ -143,7 +143,7 @@ const getApiFailureSummary = (entries) =>
     .filter((entry) => entry.status)
     .map((entry) => `${entry.label} (${entry.status})`);
 
-const readAssignedBankId = (userId) => localStorage.getItem(`user_bank_assignment_${userId}`) || "";
+const readAssignedBankId = (userId) => "";
 const getAssignedBankDetailKey = (userId) => `user_bank_assignment_detail_${userId}`;
 const isUserAssignedToBank = (user) =>
   !!(
@@ -152,8 +152,7 @@ const isUserAssignedToBank = (user) =>
     user?.assignedBankName ||
     user?.bankName ||
     user?.bankStatus === "BANK_ASSIGNED" ||
-    user?.bankStatus === "SENT_TO_BANK" ||
-    localStorage.getItem(`user_bank_assignment_${user?.userId}`)
+    user?.bankStatus === "SENT_TO_BANK"
   );
 
 const DEALER_NOTIFICATIONS_KEY = "dealer_assignment_notifications";
@@ -311,6 +310,22 @@ const isDealerAddedUser = (user) => {
   );
 };
 
+const adjustDocumentStatusesForBankAssignedUsers = (docs, usersList) => {
+  const userMap = new Map(usersList.map((u) => [String(u.userId || u.id), u]));
+  return docs.map((doc) => {
+    const ownerId = getDocumentOwnerId(doc);
+    const user = userMap.get(String(ownerId));
+    if (user && isUserAssignedToBank(user)) {
+      return {
+        ...doc,
+        status: "APPROVED",
+        remarks: "",
+      };
+    }
+    return doc;
+  });
+};
+
 const mergeUsersById = (...lists) => {
   const map = new Map();
   lists.flat().filter(Boolean).forEach((user) => {
@@ -337,6 +352,18 @@ const readLocalAdminNotifications = () => {
   }
 };
 
+const isBackendGeneratedNotification = (msg) => {
+  if (!msg) return false;
+  const lower = msg.toLowerCase();
+  return (
+    lower.startsWith("admin approved") ||
+    lower.startsWith("admin verified") ||
+    lower.startsWith("admin rejected") ||
+    lower.startsWith("admin added remark") ||
+    lower.startsWith("admin added a remark")
+  );
+};
+
 const mergeNotifications = (adminId, ...lists) => {
   const flat = lists.flat().filter(Boolean);
   const seen = new Set();
@@ -350,7 +377,11 @@ const mergeNotifications = (adminId, ...lists) => {
   });
 
   const filtered = deduped.filter((item) => {
-    if (item.receiverRole && item.receiverRole !== "ADMIN") {
+    const role = item.receiverRole || item.role;
+    if (role && role !== "ADMIN") {
+      return false;
+    }
+    if (isBackendGeneratedNotification(item.message)) {
       return false;
     }
     if (
@@ -611,8 +642,8 @@ const Dashboard = () => {
   const effectivePendingDocs = adminVisibleDocs.filter((doc) => doc.status === "PENDING");
   const effectiveVerifiedDocs = adminVisibleDocs.filter((doc) => doc.status === "VERIFIED");
   const unreadCount = notifications.filter((item) => !item.read).length;
-  const pendingPaymentRequests = paymentRequests.filter(
-    (request) => request.status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
+  const paidPaymentRequests = paymentRequests.filter(
+    (request) => request.status === PAYMENT_STATUS.PAYMENT_APPROVED
   );
 
   const fetchAdminData = useCallback(
@@ -666,6 +697,35 @@ const Dashboard = () => {
 
         loadedUsers = mergeUsersById(usersList, chatbotUsersList, userHistoryList);
 
+        const currentAdminSession = getAdminSession();
+        const currentAdminId = currentAdminSession?.id || adminId;
+        const currentAdminEmail = currentAdminSession?.email || "admin@gmail.com";
+        let dbAdmin = usersList.find(
+          (u) =>
+            (String(u.email || "").toLowerCase().trim() === String(currentAdminEmail).toLowerCase().trim() ||
+             String(u.userId || u.id) === String(currentAdminId)) &&
+            (u.role === "ADMIN" || String(u.email || "").toLowerCase().includes("admin"))
+        );
+        if (!dbAdmin && currentAdminId) {
+          try {
+            const adminDetailRes = await api.get(`/user/${currentAdminId}`);
+            const detailData = adminDetailRes?.data?.data || adminDetailRes?.data;
+            if (detailData && (detailData.role === "ADMIN" || String(detailData.email || "").toLowerCase().includes("admin"))) {
+              dbAdmin = detailData;
+            }
+          } catch (e) {
+            console.warn("Failed to fetch admin details directly:", e);
+          }
+        }
+        if (dbAdmin) {
+          const updatedAdmin = normalizeAdminProfile({ ...currentAdminSession, ...dbAdmin });
+          if (updatedAdmin.role === "ADMIN") {
+            if (updatedAdmin.mobileNumber !== admin.mobileNumber || updatedAdmin.fullName !== admin.fullName) {
+              setAdmin(updatedAdmin);
+            }
+          }
+        }
+
         let loadedBanks = [];
         if (banksRes.status === "fulfilled") {
           loadedBanks = asList(banksRes.value);
@@ -694,8 +754,8 @@ const Dashboard = () => {
                       bankName: bank.bankName,
                       assignedBankName: bank.bankName,
                       representativeName: bank.representativeName,
-                      email: bank.email,
-                      contactNumber: bank.contactNumber,
+                      bankEmail: bank.email,
+                      bankContactNumber: bank.contactNumber,
                     });
                   }
                 });
@@ -756,17 +816,10 @@ const Dashboard = () => {
 
         if (loadedUsers.length > 0) {
           const docs = await fetchDocumentsForUsersInBatches(loadedUsers);
-          const mappedDocs = docs.map((doc) => {
-            const userId = getDocumentOwnerId(doc);
-            const u = loadedUsers.find((item) => String(item.userId) === String(userId));
-            if (isUserAssignedToBank(u)) {
-              return { ...doc, status: "APPROVED", remarks: "" };
-            }
-            return doc;
-          });
-          setAllDocuments(mappedDocs);
-          setPendingDocs(mappedDocs.filter((doc) => doc.status === "PENDING"));
-          setVerifiedDocs(mappedDocs.filter((doc) => doc.status === "VERIFIED"));
+          const adjustedDocs = adjustDocumentStatusesForBankAssignedUsers(docs, loadedUsers);
+          setAllDocuments(adjustedDocs);
+          setPendingDocs(adjustedDocs.filter((doc) => doc.status === "PENDING"));
+          setVerifiedDocs(adjustedDocs.filter((doc) => doc.status === "VERIFIED"));
         } else {
           setAllDocuments([]);
           setPendingDocs([]);
@@ -787,17 +840,10 @@ const Dashboard = () => {
     try {
       if (users.length > 0) {
         const docs = await fetchDocumentsForUsersInBatches(users);
-        const mappedDocs = docs.map((doc) => {
-          const userId = getDocumentOwnerId(doc);
-          const u = users.find((item) => String(item.userId) === String(userId));
-          if (isUserAssignedToBank(u)) {
-            return { ...doc, status: "APPROVED", remarks: "" };
-          }
-          return doc;
-        });
-        setAllDocuments(mappedDocs);
-        setPendingDocs(mappedDocs.filter((doc) => doc.status === "PENDING"));
-        setVerifiedDocs(mappedDocs.filter((doc) => doc.status === "VERIFIED"));
+        const adjustedDocs = adjustDocumentStatusesForBankAssignedUsers(docs, users);
+        setAllDocuments(adjustedDocs);
+        setPendingDocs(adjustedDocs.filter((doc) => doc.status === "PENDING"));
+        setVerifiedDocs(adjustedDocs.filter((doc) => doc.status === "VERIFIED"));
       } else {
         setAllDocuments([]);
         setPendingDocs([]);
@@ -808,6 +854,11 @@ const Dashboard = () => {
     }
   }, [users]);
 
+  const fetchDocumentListsRef = React.useRef(fetchDocumentLists);
+  useEffect(() => {
+    fetchDocumentListsRef.current = fetchDocumentLists;
+  }, [fetchDocumentLists]);
+
   useEffect(() => {
     fetchAdminData(true);
   }, [fetchAdminData]);
@@ -815,7 +866,7 @@ const Dashboard = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       if (permissionError) return;
-      fetchDocumentLists();
+      fetchDocumentListsRef.current();
       api
         .get(`/notifications/${adminId}`)
         .then((res) => setNotifications(mergeNotifications(adminId, readLocalAdminNotifications(), asList(res))))
@@ -826,7 +877,7 @@ const Dashboard = () => {
         });
     }, 30000);
     return () => clearInterval(interval);
-  }, [adminId, fetchDocumentLists, permissionError]);
+  }, [adminId, permissionError]);
 
   const handleLogout = () => {
     clearAuthSession();
@@ -837,6 +888,20 @@ const Dashboard = () => {
     setSelectedUser(user);
     setAssigningBank(false);
     setAssignBankId(String(user.bankId || user.assignedBankId || readAssignedBankId(user.userId) || ""));
+
+    // Fetch user personal info (address, city, state, pincode) dynamically from database
+    try {
+      const personalRes = await api.put(`/personal-info/update/${user.userId}`, {});
+      const personalData = unwrap(personalRes);
+      if (personalData) {
+        setPersonalInfos((prev) => {
+          const filtered = prev.filter((info) => String(info.userId) !== String(user.userId));
+          return [...filtered, personalData];
+        });
+      }
+    } catch (err) {
+      console.warn("Failed to fetch personal info for user:", err);
+    }
 
     const paymentStatus = paymentRequestByUserId.get(String(user.userId));
     if (!isDealerAddedUser(user) && paymentStatus !== PAYMENT_STATUS.PAYMENT_APPROVED) {
@@ -973,8 +1038,6 @@ const Dashboard = () => {
     try {
       setAssigningBank(true);
       await assignBankToUser(selectedUser.userId, assignBankId);
-      localStorage.setItem(`user_bank_assignment_${selectedUser.userId}`, assignBankId);
-      localStorage.setItem(getAssignedBankDetailKey(selectedUser.userId), JSON.stringify(assignedBank));
       let docsToApprove = selectedUserDocs;
       if (docsToApprove.length === 0) {
         const docsRes = await api.get(`/documents/user/${selectedUser.userId}`);
@@ -984,19 +1047,21 @@ const Dashboard = () => {
       const approvedDocs = docsToApprove.map((doc) => ({ ...doc, status: "APPROVED", remarks: "" }));
       const totalApprovedDocuments = docsToApprove.length;
 
+      const dealer = dealers.find(
+        (item) =>
+          String(item.dealerCode || "").toLowerCase() === String(selectedUser.dealerCode || "").toLowerCase() ||
+          String(item.dealerId || item.id || "") === String(selectedUser.dealerId || selectedUser.assignedDealerId || "")
+      );
       addLocalDealerNotification({
-        dealerId: selectedDealer?.dealerId || selectedDealer?.id || selectedUser.dealerId || selectedUser.assignedDealerId,
-        dealerCode: selectedDealer?.dealerCode || selectedUser.dealerCode,
+        dealerId: dealer?.dealerId || dealer?.id || selectedUser.dealerId || selectedUser.assignedDealerId || selectedDealer?.dealerId || selectedDealer?.id,
+        dealerCode: dealer?.dealerCode || selectedUser.dealerCode || selectedDealer?.dealerCode,
         message: `${selectedUser.fullName || "Customer"} has been assigned to ${
           assignedBank?.bankName || "a bank"
         }. ${totalApprovedDocuments || "All"} document(s) were approved by admin.`,
       });
       addLocalCustomerNotification({
         userId: selectedUser.userId,
-        message:
-          totalApprovedDocuments > 1
-            ? `All documents approved by admin. Your application has been forwarded to ${assignedBank?.bankName || "a bank"}.`
-            : `Your ${formatDocumentType(docsToApprove[0]?.documentType)} was approved by admin. Your application has been forwarded to ${assignedBank?.bankName || "a bank"}.`,
+        message: `BANK_ASSIGNED:${assignBankId}:${assignedBank?.bankName || "a bank"}`,
       });
       toast.success("Bank assigned successfully and documents approved.");
       const bankFields = {
@@ -1070,8 +1135,8 @@ const Dashboard = () => {
       
       const customerMsg =
         status === "APPROVED"
-          ? `${user?.fullName || "Customer"} - ${documentName} is approved`
-          : `${documentName} marked ${status}.`;
+          ? `${user?.fullName || "Customer"} - ${documentName} is approved by admin.`
+          : `${user?.fullName || "Customer"} - ${documentName} is rejected by admin.`;
           
       addLocalCustomerNotification({ userId, message: customerMsg });
       
@@ -1083,8 +1148,8 @@ const Dashboard = () => {
         );
         const dealerMsg =
           status === "APPROVED"
-            ? `${user.fullName} - ${documentName} is approved`
-            : `${user.fullName}: ${documentName} marked ${status}.`;
+            ? `${user.fullName} - ${documentName} is approved by admin.`
+            : `${user.fullName} - ${documentName} is rejected by admin.`;
             
         addLocalDealerNotification({
           dealerId: dealer?.dealerId || dealer?.id || user.dealerId || user.assignedDealerId,
@@ -1115,28 +1180,8 @@ const Dashboard = () => {
       const user = users.find((item) => String(item.userId) === String(userId));
       const documentStatus = doc?.status || "";
       const isRejectedDocument = String(documentStatus).toUpperCase() === "REJECTED";
-      const message = `Admin added a remark on ${doc?.documentType || "your document"}${remark ? `: ${remark}` : "."}`;
-      addLocalCustomerNotification({ userId, message });
-      if (user) {
-        const dealer = dealers.find(
-          (item) =>
-            String(item.dealerCode || "").toLowerCase() === String(user.dealerCode || "").toLowerCase() ||
-            String(item.dealerId || item.id || "") === String(user.dealerId || user.assignedDealerId || "")
-        );
-        addLocalDealerNotification({
-          dealerId: dealer?.dealerId || dealer?.id || user.dealerId || user.assignedDealerId,
-          dealerCode: dealer?.dealerCode || user.dealerCode,
-          message: isRejectedDocument
-            ? `${user.fullName || "Customer"} received a remark on a rejected document.`
-            : `${user.fullName || "Customer"} received a document remark.`,
-          type: isRejectedDocument ? "REJECTED_DOCUMENT_REMARK" : "DOCUMENT_REMARK",
-          documentStatus,
-          documentId,
-          documentType: doc?.documentType,
-          remarks: remark,
-          userId,
-        });
-      }
+      // The remark is stored in the database and displayed directly on the document card.
+      // We do not dispatch any extra notification to keep notifications consolidated.
       toast.success("Remark saved.");
       await fetchDocumentLists();
     } catch (error) {
@@ -1146,7 +1191,7 @@ const Dashboard = () => {
 
   const openPreview = async (documentId) => {
     try {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -1339,8 +1384,6 @@ const Dashboard = () => {
       return (
         <PaymentsPanel
           paymentRequests={paymentRequests}
-          approvePayment={(userId) => updatePaymentRequest(userId, PAYMENT_STATUS.PAYMENT_APPROVED)}
-          rejectPayment={(userId) => updatePaymentRequest(userId, PAYMENT_STATUS.PAYMENT_REJECTED)}
         />
       );
     }
@@ -1392,7 +1435,7 @@ const Dashboard = () => {
         pendingDocs={effectivePendingDocs}
         verifiedDocs={effectiveVerifiedDocs}
         personalInfos={personalInfos}
-        pendingPaymentRequests={pendingPaymentRequests}
+        paidPaymentRequests={paidPaymentRequests}
         setActiveMenu={setActiveMenu}
       />
     );
@@ -1559,140 +1602,41 @@ const PaymentStatusBadge = ({ status }) => (
   </span>
 );
 
-const PaymentsPanel = ({ paymentRequests, approvePayment, rejectPayment }) => {
-  const [detailRequest, setDetailRequest] = useState(null);
-
-  return (
-  <div className="space-y-6">
-    <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
-        <div>
-          <h2 className="text-xl font-bold text-[#0B2A4A]">Payment Requests</h2>
-          <p className="text-sm text-slate-500 mt-1">
-            Verify Ready2Drive payments submitted by customers.
-          </p>
-        </div>
-        <div className="bg-[#EAFBF8] text-[#0B2A4A] px-4 py-3 rounded-2xl text-sm font-bold">
-          {paymentRequests.filter((request) => request.status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING).length} pending verification
-        </div>
-      </div>
-
-      {paymentRequests.length === 0 ? (
-        <div className="bg-[#F4F6F9] rounded-2xl p-4 sm:p-6 text-sm text-slate-500">
-          No payment requests yet.
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {paymentRequests.map((request) => {
-            const { user, status, personalInfo, documentCount, updatedAt } = request;
-            const paymentBreakdown = getPaymentBreakdown(request);
-            const canReview =
-              status === PAYMENT_STATUS.PAYMENT_PENDING ||
-              status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING ||
-              status === PAYMENT_STATUS.PAYMENT_APPROVED;
-            return (
-              <div
-                key={user.userId}
-                className="border border-slate-200 rounded-2xl p-5 bg-white flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <p className="text-left text-lg font-bold text-[#0B2A4A]">
-                      {user.fullName || `User ${user.userId}`}
-                    </p>
-                    <PaymentStatusBadge status={status} />
-                  </div>
-                  <p className="text-sm text-slate-500 mt-1 break-all">{user.email}</p>
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                    <div className="bg-[#F4F6F9] rounded-2xl p-3">
-                      <p className="text-xs font-bold uppercase text-slate-400">Ready2Drive Amount</p>
-                      <p className="font-bold text-[#0B2A4A]">
-                        {formatINR(paymentBreakdown.payableAmount)}
-                      </p>
-                    </div>
-                    <div className="bg-[#F4F6F9] rounded-2xl p-3">
-                      <p className="text-xs font-bold uppercase text-slate-400">Documents</p>
-                      <p className="font-bold text-[#0B2A4A]">{documentCount}</p>
-                    </div>
-                    <div className="bg-[#F4F6F9] rounded-2xl p-3">
-                      <p className="text-xs font-bold uppercase text-slate-400">User ID</p>
-                      <p className="font-bold text-[#0B2A4A]">{user.userId}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <button
-                    onClick={() => setDetailRequest(request)}
-                    className="bg-[#F4F6F9] text-[#0B2A4A] px-4 py-3 rounded-2xl font-bold"
-                  >
-                    View Details
-                  </button>
-                  <button
-                    onClick={() => approvePayment(user.userId)}
-                    disabled={!canReview}
-                    className="bg-emerald-600 text-white px-4 py-3 rounded-2xl font-bold disabled:opacity-50"
-                  >
-                    {status === PAYMENT_STATUS.PAYMENT_APPROVED ? "Sync Documents" : "Approve Payment"}
-                  </button>
-                  {status !== PAYMENT_STATUS.PAYMENT_APPROVED && (
-                    <button
-                      onClick={() => rejectPayment(user.userId)}
-                      disabled={!canReview}
-                      className="bg-red-600 text-white px-4 py-3 rounded-2xl font-bold disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-    {detailRequest && (
-      <PaymentDetailsModal request={detailRequest} onClose={() => setDetailRequest(null)} />
-    )}
-  </div>
+const PaymentsPanel = ({ paymentRequests }) => {
+  const paidRequests = paymentRequests.filter(
+    (req) => req.status === PAYMENT_STATUS.PAYMENT_APPROVED
   );
-};
-
-const PaymentDetailsModal = ({ request, onClose }) => {
-  const { user, status, personalInfo, documentCount, updatedAt } = request;
-  const approvedAt = status === PAYMENT_STATUS.PAYMENT_APPROVED ? updatedAt : "";
-  const paymentBreakdown = getPaymentBreakdown(request);
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 p-4 flex items-center justify-center">
-      <div className="bg-white rounded-3xl w-full max-w-2xl p-4 sm:p-6 shadow-xl">
-        <div className="flex items-start justify-between gap-4 mb-5">
+    <div className="space-y-6">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
           <div>
-            <h2 className="text-xl font-bold text-[#0B2A4A]">Payment Details</h2>
-            <p className="text-sm text-slate-500 mt-1">{user.fullName || `User ${user.userId}`}</p>
+            <h2 className="text-xl font-bold text-[#0B2A4A]">Payment History</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              List of completed Ready2Drive payments.
+            </p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-red-600 font-bold">Close</button>
+          <div className="bg-[#EAFBF8] text-[#0B2A4A] px-4 py-3 rounded-2xl text-sm font-bold">
+            {paidRequests.length} Payments
+          </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {[
-            ["Name", user.fullName || "N/A"],
-            ["Email", user.email || "N/A"],
-            ["Mobile", user.mobileNumber || "N/A"],
-            ["Payment Status", formatPaymentStatus(status)],
-            ["Plan", paymentBreakdown.feeName],
-            ["Base Amount", formatINR(paymentBreakdown.feeBaseAmount)],
-            [READY2DRIVE_GST_LABEL, formatINR(paymentBreakdown.gstAmount)],
-            ["Total Amount", formatINR(paymentBreakdown.payableAmount)],
-            ["Documents", documentCount || 0],
-            ["Payment Requested", formatDate(updatedAt)],
-            ["Payment Approved", approvedAt ? formatDate(approvedAt) : "Not approved yet"],
-          ].map(([label, value]) => (
-            <div key={label} className="bg-[#F4F6F9] rounded-2xl p-4">
-              <p className="text-xs font-bold uppercase text-slate-400">{label}</p>
-              <p className="mt-1 font-bold text-[#0B2A4A] break-words">{value}</p>
-            </div>
-          ))}
-        </div>
+
+        {paidRequests.length === 0 ? (
+          <div className="bg-[#F4F6F9] rounded-2xl p-4 sm:p-6 text-sm text-slate-500">
+            No completed payments found.
+          </div>
+        ) : (
+          <DataTable
+            headers={["User Name", "Mobile Number", "Payment Amount", "Payment Date & Time"]}
+            rows={paidRequests.map((req) => [
+              req.fullName || req.user?.fullName || `User ${req.userId}`,
+              req.mobileNumber || req.user?.mobileNumber || "—",
+              formatINR(req.paymentAmount || 116.82),
+              formatDate(req.createdAt),
+            ])}
+          />
+        )}
       </div>
     </div>
   );
@@ -1704,7 +1648,7 @@ const DashboardOverview = ({
   pendingDocs,
   verifiedDocs,
   personalInfos,
-  pendingPaymentRequests,
+  paidPaymentRequests,
   setActiveMenu,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
@@ -1722,12 +1666,12 @@ const DashboardOverview = ({
       items: dealers.map((dealer) => ({ title: dealer.fullName || `Dealer #${dealer.dealerId || dealer.id}` })),
     },
     {
-      label: "Payment Requests",
-      value: pendingPaymentRequests.length,
+      label: "Completed Payments",
+      value: paidPaymentRequests.length,
       icon: <FaRupeeSign />,
-      items: pendingPaymentRequests.map(({ user, status }) => ({
-        title: user.fullName || `User #${user.userId}`,
-        subtitle: status,
+      items: paidPaymentRequests.map((req) => ({
+        title: req.fullName || req.user?.fullName || `User #${req.userId}`,
+        subtitle: `Amount: ${formatINR(req.paymentAmount || 116.82)}`,
       })),
     },
     {
@@ -1777,22 +1721,7 @@ const DashboardOverview = ({
         />
       )}
 
-      {pendingPaymentRequests.length > 0 && (
-        <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-sky-800">Payment requests need verification</h2>
-            <p className="text-sm text-sky-700 mt-1">
-              {pendingPaymentRequests.length} customer payment request(s) waiting.
-            </p>
-          </div>
-          <button
-            onClick={() => setActiveMenu("Payments")}
-            className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold"
-          >
-            Go to Payments
-          </button>
-        </div>
-      )}
+
 
       {pendingDocs.length > 0 && (
         <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
