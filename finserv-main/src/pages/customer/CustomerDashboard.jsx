@@ -565,6 +565,7 @@ const CustomerDashboard = () => {
     typeof window === "undefined" ? true : window.innerWidth >= 768
   );
   const [activeMenu, setActiveMenu] = useState("Dashboard");
+  const [statusVisited, setStatusVisited] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingType, setUploadingType] = useState("");
@@ -812,9 +813,15 @@ const CustomerDashboard = () => {
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => fetchDashboardDataRef.current(false), 30000);
-    return () => clearInterval(interval);
-  }, []);
+    setStatusVisited(false);
+  }, [documents, assignedBank]);
+
+  useEffect(() => {
+    if (activeMenu === "Status") {
+      setStatusVisited(true);
+    }
+  }, [activeMenu]);
+
 
   const handleLogout = () => {
     clearAuthSession();
@@ -946,7 +953,7 @@ const CustomerDashboard = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`,
+        `http://localhost:8082/api/documents/preview/${documentId}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
@@ -1136,7 +1143,7 @@ const CustomerDashboard = () => {
     setSaving(true);
     try {
       // 1. Perform background admin login to authorize the payment success API call
-      const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+      const baseURL = api.defaults.baseURL || "http://localhost:8082/api";
       let adminToken = "";
       try {
         const loginRes = await axios.post(`${baseURL}/auth/login`, {
@@ -1192,6 +1199,14 @@ const CustomerDashboard = () => {
 
   const currentDocumentTypes =
     currentStep === 4 ? incomeTypes : STEPS.find((step) => step.id === currentStep)?.types || [];
+  const showAlertDot = useMemo(() => {
+    if (statusVisited) return false;
+    const hasRejectedDoc = documents.some((doc) => doc.status === "REJECTED");
+    const hasRemark = documents.some((doc) => !!doc.remarks);
+    const hasBank = !!assignedBank;
+    return hasRejectedDoc || hasRemark || hasBank;
+  }, [documents, assignedBank, statusVisited]);
+
   const unreadCount = notifications.filter((item) => !item.read).length;
 
   return (
@@ -1203,6 +1218,7 @@ const CustomerDashboard = () => {
           activeMenu={activeMenu}
           setActiveMenu={setActiveMenu}
           handleLogout={handleLogout}
+          showAlertDot={showAlertDot}
         />
         {sidebarOpen && (
           <button
@@ -2108,22 +2124,6 @@ const VerifySubmitStep = ({
       )}
     </div>
 
-    {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
-      <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-amber-800">Ready2Drive payment pending</h2>
-          <p className="text-sm text-amber-700 mt-1">
-            Your application is saved. Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)} to move it to admin verification.
-          </p>
-        </div>
-        <button
-          onClick={onPayNow}
-          className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold"
-        >
-          Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
-        </button>
-      </div>
-    )}
 
     {paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING && (
       <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 sm:p-6">
@@ -2153,7 +2153,7 @@ const VerifySubmitStep = ({
             : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
             ? "Documents will go to admin after payment is approved."
             : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
-            ? `Complete ${READY2DRIVE_FEE_LABEL} payment. Total payable is ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}.`
+            ? "Pay now to proceed."
             : "Final submit saves your details and asks you to complete payment."}
         </p>
       </div>
@@ -2185,24 +2185,6 @@ const VerifySubmitStep = ({
 
 const TRACKING_STEPS = [
   {
-    key: "payment_pending",
-    label: "Payment Pending",
-    sub: `Complete ${READY2DRIVE_FEE_LABEL} payment. Total payable is ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}.`,
-    icon: <FaRupeeSign />,
-  },
-  {
-    key: "payment_verification_pending",
-    label: "Payment Verification Pending",
-    sub: "Admin is verifying your payment.",
-    icon: <FaFileAlt />,
-  },
-  {
-    key: "payment_verified",
-    label: "Payment Verified",
-    sub: "Payment verified successfully. Your documents have been submitted for admin review.",
-    icon: <FaCheckCircle />,
-  },
-  {
     key: "documents_submitted",
     label: "Documents Submitted For Approval",
     sub: "Your details and documents are submitted to admin.",
@@ -2230,13 +2212,13 @@ const TRACKING_STEPS = [
 
 const getActiveTrackingStep = (documents, counts, assignedBank, paymentStatus) => {
   if (!documents.length) return -1;
-  if (assignedBank) return 6;
-  if (paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING) return 0;
-  if (paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING) return 1;
+  if (assignedBank) return 3;
+  if (paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING) return -1;
+  if (paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING) return -1;
   if (paymentStatus !== PAYMENT_STATUS.PAYMENT_APPROVED) return -1;
-  if (counts.approvedCount > 0 && counts.pendingCount === 0 && counts.rejectedCount === 0) return 5;
-  if (counts.verifiedCount > 0 || counts.pendingCount > 0 || counts.rejectedCount > 0) return 4;
-  return 3;
+  if (counts.approvedCount > 0 && counts.pendingCount === 0 && counts.rejectedCount === 0) return 2;
+  if (counts.verifiedCount > 0 || counts.pendingCount > 0 || counts.rejectedCount > 0) return 1;
+  return 0;
 };
 
 const StatusTab = ({
@@ -2254,22 +2236,6 @@ const StatusTab = ({
 
   return (
     <div className="space-y-6">
-      {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
-        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-amber-800">Ready2Drive payment pending</h2>
-            <p className="text-sm text-amber-700 mt-1">
-              Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)} to continue your application.
-            </p>
-          </div>
-          <button
-            onClick={onPayNow}
-            className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
-          >
-            Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
-          </button>
-        </div>
-      )}
 
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <h2 className="text-lg font-bold text-[#0B2A4A] mb-6">Application Tracking</h2>

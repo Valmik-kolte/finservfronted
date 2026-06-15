@@ -863,21 +863,6 @@ const Dashboard = () => {
     fetchAdminData(true);
   }, [fetchAdminData]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (permissionError) return;
-      fetchDocumentListsRef.current();
-      api
-        .get(`/notifications/${adminId}`)
-        .then((res) => setNotifications(mergeNotifications(adminId, readLocalAdminNotifications(), asList(res))))
-        .catch((error) => {
-          if (error?.response?.status === 403) {
-            setNotifications(mergeNotifications(adminId, readLocalAdminNotifications()));
-          }
-        });
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [adminId, permissionError]);
 
   const handleLogout = () => {
     clearAuthSession();
@@ -1192,7 +1177,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
+      const response = await fetch(`http://localhost:8082/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");
@@ -1476,40 +1461,49 @@ const Dashboard = () => {
               <p className="text-sm text-slate-500 mt-1">Welcome back, {admin?.name || "Admin"}</p>
               </div>
             </div>
-            <div className="relative">
+            <div className="flex items-center gap-3">
               <button
-                onClick={() => setShowNotifications((prev) => !prev)}
-                className="relative w-11 h-11 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] flex items-center justify-center"
-                aria-label="Notifications"
+                type="button"
+                onClick={() => fetchAdminData(true)}
+                className="bg-[#F4F6F9] hover:bg-slate-200 px-4 h-11 rounded-2xl text-sm font-semibold text-[#0B2A4A] transition-colors"
               >
-                <FaBell />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[11px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
-                    {unreadCount}
-                  </span>
-                )}
+                Refresh
               </button>
-              {showNotifications && (
-                <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
-                  <h3 className="font-bold text-[#0B2A4A] mb-3">Notifications</h3>
-                  {notifications.filter((item) => !item.read).length === 0 ? (
-                    <p className="text-sm text-slate-500">No notifications.</p>
-                  ) : (
-                    <div className="space-y-2 max-h-80 overflow-y-auto">
-                      {notifications.filter((item) => !item.read).map((item) => (
-                        <button
-                          key={item.id}
-                          onClick={() => markNotificationRead(item.id)}
-                          className="w-full text-left rounded-2xl p-3 text-sm bg-[#EAFBF8]"
-                        >
-                          <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
-                          <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>
-                        </button>
-                      ))}
-                    </div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifications((prev) => !prev)}
+                  className="relative w-11 h-11 rounded-2xl bg-[#F4F6F9] text-[#0B2A4A] flex items-center justify-center"
+                  aria-label="Notifications"
+                >
+                  <FaBell />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[11px] rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
+                      {unreadCount}
+                    </span>
                   )}
-                </div>
-              )}
+                </button>
+                {showNotifications && (
+                  <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
+                    <h3 className="font-bold text-[#0B2A4A] mb-3">Notifications</h3>
+                    {notifications.filter((item) => !item.read).length === 0 ? (
+                      <p className="text-sm text-slate-500">No notifications.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-80 overflow-y-auto">
+                        {notifications.filter((item) => !item.read).map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => markNotificationRead(item.id)}
+                            className="w-full text-left rounded-2xl p-3 text-sm bg-[#EAFBF8]"
+                          >
+                            <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
+                            <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

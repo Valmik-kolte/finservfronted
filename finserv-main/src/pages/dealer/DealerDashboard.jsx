@@ -421,7 +421,6 @@ const DealerDashboard = () => {
   const [savingWizard, setSavingWizard] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
-  const pollRef = useRef(null);
 
   const userIds = useMemo(() => users.map((u) => u.userId), [users]);
 
@@ -520,7 +519,7 @@ const DealerDashboard = () => {
       const sessionData = readDealerSession();
       const code = sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
       if (code) {
-        const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+        const baseURL = api.defaults.baseURL || "http://localhost:8082/api";
         let adminToken = "";
         try {
           const loginRes = await axios.post(`${baseURL}/auth/login`, {
@@ -796,12 +795,6 @@ const DealerDashboard = () => {
     return () => window.clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    pollRef.current = window.setInterval(() => {
-      loadDashboardRef.current(false);
-    }, 30000);
-    return () => window.clearInterval(pollRef.current);
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -839,7 +832,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`http://localhost:8082/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");
@@ -1219,6 +1212,14 @@ const DealerDashboard = () => {
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => loadDashboard(true)}
+                className="bg-white border border-gray-100 hover:bg-slate-50 px-4 h-12 rounded-2xl text-sm font-semibold text-[#0B2A4A] shadow-sm transition-colors"
+              >
+                Refresh
+              </button>
+
               <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-[#F4F6F9] px-4 py-3">
                 <span className="text-sm font-bold text-[#0B2A4A]">{dealerCode || "No Code"}</span>
                 <button onClick={copyDealerCode} className="text-[#0B2A4A]" aria-label="Copy dealer code">
