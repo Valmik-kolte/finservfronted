@@ -136,7 +136,7 @@ const isRejectedDocumentRemarkNotification = (item = {}) => {
     .toLowerCase();
   const hasRemark = haystack.includes("remark") || Boolean(item.remarks || item.remark);
   const hasRejected = haystack.includes("reject");
-  return hasRemark && hasRejected;
+  return hasRemark || hasRejected;
 };
 
 const readDealerSession = () => {
@@ -227,7 +227,7 @@ const mergeUsersById = (...lists) => {
   return Array.from(map.values());
 };
 
-const addLocalAdminNotification = (message) => {
+const addLocalAdminNotification = async (message, senderId) => {
   try {
     const notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || "[]");
     localStorage.setItem(
@@ -247,6 +247,18 @@ const addLocalAdminNotification = (message) => {
       ADMIN_NOTIFICATIONS_KEY,
       JSON.stringify([{ id: `local-admin-${Date.now()}`, message, read: false, createdAt: new Date().toISOString() }])
     );
+  }
+  try {
+    await api.post("/notifications/send", {
+      senderId: senderId ? Number(senderId) : null,
+      receiverId: 1,
+      senderRole: "DEALER",
+      receiverRole: "ADMIN",
+      role: "ADMIN",
+      message,
+    });
+  } catch (err) {
+    console.error("Failed to send admin database notification:", err);
   }
 };
 
@@ -405,6 +417,7 @@ const DealerDashboard = () => {
   });
 
   const [notifOpen, setNotifOpen] = useState(false);
+  const [fadingNotifications, setFadingNotifications] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedUserDocs, setSelectedUserDocs] = useState([]);
   const [selectedCounts, setSelectedCounts] = useState(null);
@@ -824,6 +837,34 @@ const DealerDashboard = () => {
     }
   };
 
+  const clearAllNotifications = async () => {
+    const unread = notifications.filter((item) => !isNotificationRead(item));
+    if (unread.length === 0) return;
+    setFadingNotifications(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const item of unread) {
+      if (String(item.id).startsWith("local-bank-")) {
+        markLocalDealerNotificationRead(item.id);
+      } else {
+        try {
+          try {
+            await markDealerNotificationRead(item.id);
+          } catch {
+            await api.put(`/notifications/read/${item.id}`);
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    setNotifications((prev) =>
+      prev.map((item) => ({ ...item, read: true, isRead: true }))
+    );
+    setFadingNotifications(false);
+    setNotifOpen(false);
+  };
+
+
   const openPreview = async (doc) => {
     if (!doc?.documentId) return;
     if (!token) {
@@ -1103,8 +1144,9 @@ const DealerDashboard = () => {
       formData.append("type", type);
       formData.append("file", file);
       await api.post("/documents/upload", formData);
-      addLocalAdminNotification(
-        `${user?.fullName || "Dealer customer"} reuploaded ${docLabel(type)}.`
+      await addLocalAdminNotification(
+        `${profile.fullName || "Dealer"} has reuploaded ${docLabel(type)} for ${user?.fullName || "Customer"}.`,
+        profile.dealerId
       );
       const freshDocs = await fetchDocsForUsers(userIds);
       setDocs(freshDocs);
@@ -1241,25 +1283,35 @@ const DealerDashboard = () => {
                   )}
                 </button>
                 {notifOpen && (
-                  <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl">
-                    <div className="border-b border-gray-100 px-4 py-3 font-bold text-[#0B2A4A]">Notifications</div>
+                  <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-xl z-30">
+                    <div className="flex justify-between items-center border-b border-gray-100 px-4 py-3">
+                      <div className="font-bold text-[#0B2A4A]">Notifications</div>
+                      {bellNotifications.filter((item) => !isNotificationRead(item)).length > 0 && (
+                        <button
+                          onClick={clearAllNotifications}
+                          className="text-xs font-semibold text-red-500 hover:text-red-700 transition"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                     <div className="max-h-96 overflow-y-auto">
-                      {bellNotifications.length === 0 ? (
+                      {bellNotifications.filter((item) => !isNotificationRead(item)).length === 0 ? (
                         <div className="p-4 text-sm text-gray-500">No rejected document remarks</div>
                       ) : (
-                        bellNotifications.slice(0, 8).map((item) => (
-                          <button
-                            key={item.id}
-                            onClick={() => markRead(item.id)}
-                            className={`block w-full border-b border-gray-50 px-4 py-3 text-left text-sm ${
-                              isNotificationRead(item) ? "bg-white text-gray-600" : "bg-[#EAFBF8] text-[#0B2A4A]"
-                            }`}
-                          >
-                            {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
-                            <p className="font-semibold">{item.message}</p>
-                            <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
-                          </button>
-                        ))
+                        <div className={`transition-all duration-300 ${fadingNotifications ? "opacity-0 scale-95 pointer-events-none" : "opacity-100 scale-100"}`}>
+                          {bellNotifications.filter((item) => !isNotificationRead(item)).slice(0, 8).map((item) => (
+                            <button
+                              key={item.id}
+                              onClick={() => markRead(item.id)}
+                              className="block w-full border-b border-gray-50 px-4 py-3 text-left text-sm bg-[#EAFBF8] text-[#0B2A4A]"
+                            >
+                              {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
+                              <p className="font-semibold">{item.message}</p>
+                              <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
+                            </button>
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1285,6 +1337,8 @@ const DealerDashboard = () => {
                   openNewCustomer={openWizard}
                   openUserModal={openUserModal}
                   openTrackingModal={openTrackingModal}
+                  clearAllNotifications={clearAllNotifications}
+                  fadingNotifications={fadingNotifications}
                 />
               )}
 
@@ -1388,6 +1442,8 @@ const DashboardTab = ({
   openNewCustomer,
   openUserModal,
   openTrackingModal,
+  clearAllNotifications,
+  fadingNotifications,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
   const recentUsers = [...users]
@@ -1396,8 +1452,8 @@ const DashboardTab = ({
   const userNameById = new Map(users.map((user) => [String(user.userId), user.fullName || `User #${user.userId}`]));
   const documentItems = (list) =>
     list.map((doc) => ({
-      title: docLabel(doc.documentType),
-      subtitle: userNameById.get(String(doc.userId)) || doc.fileName || "Customer",
+      title: userNameById.get(String(doc.userId)) || "Customer",
+      subtitle: doc.fileName || docLabel(doc.documentType) || "Uploaded",
     }));
   const statCards = [
     {
@@ -1483,22 +1539,35 @@ const DashboardTab = ({
         </section>
 
         <section>
-          <SectionTitle title="Latest Notifications" />
-          <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
-            {notifications.slice(0, 5).map((item) => (
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-black text-[#0B2A4A]">Latest Notifications</h2>
+            {notifications.filter((item) => !isNotificationRead(item)).length > 0 && (
               <button
-                key={item.id}
-                onClick={() => markRead(item.id)}
-                className={`block w-full border-b border-gray-50 p-4 text-left text-sm ${
-                  isNotificationRead(item) ? "bg-white" : "bg-[#EAFBF8]"
-                }`}
+                onClick={clearAllNotifications}
+                className="text-sm font-semibold text-red-500 hover:text-red-700 transition"
               >
-                {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
-                <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
-                <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
+                Clear
               </button>
-            ))}
-            {notifications.length === 0 && <div className="p-4 sm:p-5 text-sm text-gray-500">No notifications</div>}
+            )}
+          </div>
+          <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
+            {notifications.filter((item) => !isNotificationRead(item)).length === 0 ? (
+              <div className="p-4 sm:p-5 text-sm text-gray-500">No notifications</div>
+            ) : (
+              <div className={`transition-all duration-300 ${fadingNotifications ? "opacity-0 scale-95 pointer-events-none" : "opacity-100 scale-100"}`}>
+                {notifications.filter((item) => !isNotificationRead(item)).slice(0, 5).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => markRead(item.id)}
+                    className="block w-full border-b border-gray-50 p-4 text-left text-sm bg-[#EAFBF8]"
+                  >
+                    {item.title && <p className="text-xs font-black uppercase text-[#27D3C3]">{item.title}</p>}
+                    <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
+                    <p className="mt-1 text-xs text-gray-400">{formatDate(item.createdAt)}</p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -2339,7 +2408,6 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
     }
 
     return [
-      { title: "Application Tracking", status: "DONE", detail: "Loan application created." },
       { title: "Documents Submitted", status: step1Status, detail: step1Detail },
       { title: "Under Review", status: step2Status, detail: step2Detail },
       { title: "Documents Approved", status: step3Status, detail: step3Detail },

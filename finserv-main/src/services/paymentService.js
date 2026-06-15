@@ -75,6 +75,7 @@ export const approvePayment = async (userId) => {
       receiverId: userId,
       senderRole: "ADMIN",
       receiverRole: "USER",
+      role: "USER",
       message: "PAYMENT_STATUS:PAYMENT_APPROVED",
     });
   } catch (e) {
@@ -94,6 +95,7 @@ export const rejectPayment = async (userId) => {
       receiverId: userId,
       senderRole: "ADMIN",
       receiverRole: "USER",
+      role: "USER",
       message: "PAYMENT_STATUS:PAYMENT_REJECTED",
     });
   } catch (e) {

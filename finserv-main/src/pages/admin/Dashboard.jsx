@@ -386,8 +386,7 @@ const mergeNotifications = (adminId, ...lists) => {
     }
     if (
       item.senderRole === "ADMIN" ||
-      Number(item.senderId) === Number(adminId) ||
-      item.senderId === 1
+      (item.senderRole !== "USER" && item.senderRole !== "DEALER" && (Number(item.senderId) === Number(adminId) || item.senderId === 1))
     ) {
       return false;
     }
@@ -569,6 +568,7 @@ const Dashboard = () => {
   const [banks, setBanks] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [fadingNotifications, setFadingNotifications] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [selectedUserDocs, setSelectedUserDocs] = useState([]);
   const [selectedUserCounts, setSelectedUserCounts] = useState(null);
@@ -706,7 +706,7 @@ const Dashboard = () => {
              String(u.userId || u.id) === String(currentAdminId)) &&
             (u.role === "ADMIN" || String(u.email || "").toLowerCase().includes("admin"))
         );
-        if (!dbAdmin && currentAdminId) {
+        if (!dbAdmin && currentAdminId && currentAdminSession?.role !== "ADMIN" && String(currentAdminSession?.role).toUpperCase() !== "ADMIN") {
           try {
             const adminDetailRes = await api.get(`/user/${currentAdminId}`);
             const detailData = adminDetailRes?.data?.data || adminDetailRes?.data;
@@ -1235,6 +1235,14 @@ const Dashboard = () => {
   };
 
   const saveBank = async () => {
+    if (!bankForm.contactNumber) {
+      toast.error("Contact number is required.");
+      return;
+    }
+    if (bankForm.contactNumber.length !== 10) {
+      toast.error("Mobile number must be exactly 10 digits.");
+      return;
+    }
     try {
       if (bankModal?.mode === "edit") {
         await api.put(`/admin/banks/${bankModal.bank.bankId}`, bankForm);
@@ -1278,6 +1286,30 @@ const Dashboard = () => {
       toast.error("Failed to mark notification as read.");
     }
   };
+
+  const clearAllNotifications = async () => {
+    const unread = notifications.filter((item) => !item.read);
+    if (unread.length === 0) return;
+    setFadingNotifications(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const item of unread) {
+      if (String(item.id).startsWith("local-admin-")) {
+        markLocalAdminNotificationRead(item.id);
+      } else {
+        try {
+          await api.put(`/notifications/read/${item.id}`);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    setNotifications((prev) =>
+      prev.map((item) => ({ ...item, read: true }))
+    );
+    setFadingNotifications(false);
+    setShowNotifications(false);
+  };
+
 
   const changePassword = async () => {
     if (!passwordForm.newPassword) {
@@ -1482,13 +1514,23 @@ const Dashboard = () => {
                     </span>
                   )}
                 </button>
-                {showNotifications && (
+                 {showNotifications && (
                   <div className="absolute right-0 mt-3 w-[calc(100vw-2rem)] sm:w-80 bg-white rounded-3xl shadow-xl border border-slate-100 z-30 p-4">
-                    <h3 className="font-bold text-[#0B2A4A] mb-3">Notifications</h3>
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-bold text-[#0B2A4A]">Notifications</h3>
+                      {notifications.filter((item) => !item.read).length > 0 && (
+                        <button
+                          onClick={clearAllNotifications}
+                          className="text-xs font-semibold text-red-500 hover:text-red-700 transition"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
                     {notifications.filter((item) => !item.read).length === 0 ? (
                       <p className="text-sm text-slate-500">No notifications.</p>
                     ) : (
-                      <div className="space-y-2 max-h-80 overflow-y-auto">
+                      <div className={`space-y-2 max-h-80 overflow-y-auto transition-all duration-300 ${fadingNotifications ? "opacity-0 scale-95 pointer-events-none" : "opacity-100 scale-100"}`}>
                         {notifications.filter((item) => !item.read).map((item) => (
                           <button
                             key={item.id}

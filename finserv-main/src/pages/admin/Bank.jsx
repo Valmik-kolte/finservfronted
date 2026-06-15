@@ -92,7 +92,14 @@ const Bank = ({ banks, setBankModal, setBankForm, bankModal, bankForm, saveBank,
               key={key}
               label={label}
               value={bankForm[key]}
-              onChange={(value) => setBankForm({ ...bankForm, [key]: value })}
+              onChange={(value) => {
+                if (key === "contactNumber") {
+                  const cleaned = value.replace(/\D/g, "").slice(0, 10);
+                  setBankForm({ ...bankForm, [key]: cleaned });
+                } else {
+                  setBankForm({ ...bankForm, [key]: value });
+                }
+              }}
             />
           ))}
         </div>

@@ -440,7 +440,7 @@ const upsertPaymentRequest = ({ userId, status, profile, personalInfo, documents
   }
 };
 
-const addLocalAdminNotification = (message) => {
+const addLocalAdminNotification = async (message, userId) => {
   try {
     const notifications = JSON.parse(localStorage.getItem(ADMIN_NOTIFICATIONS_KEY) || "[]");
     localStorage.setItem(
@@ -460,6 +460,18 @@ const addLocalAdminNotification = (message) => {
       ADMIN_NOTIFICATIONS_KEY,
       JSON.stringify([{ id: `local-admin-${Date.now()}`, message, read: false, createdAt: new Date().toISOString() }])
     );
+  }
+  try {
+    await api.post("/notifications/send", {
+      senderId: userId ? Number(userId) : null,
+      receiverId: 1,
+      senderRole: "USER",
+      receiverRole: "ADMIN",
+      role: "ADMIN",
+      message,
+    });
+  } catch (err) {
+    console.error("Failed to send admin database notification:", err);
   }
 };
 
@@ -603,6 +615,7 @@ const CustomerDashboard = () => {
   });
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [fadingNotifications, setFadingNotifications] = useState(false);
   const [assignedBank, setAssignedBank] = useState(null);
   const [settingsForm, setSettingsForm] = useState({
     fullName: session?.name || "",
@@ -928,11 +941,10 @@ const CustomerDashboard = () => {
         }
       }
       await api.post("/documents/upload", formData);
-      if (existingDocumentId && paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED) {
-        addLocalAdminNotification(
-          `${profile.fullName || "Customer"} ${wasRejected ? "reuploaded" : "replaced"} ${
-            DOCUMENT_LABELS[type] || type
-          }.`
+      if (existingDocumentId) {
+        await addLocalAdminNotification(
+          `${profile.fullName || "Customer"} has reuploaded ${DOCUMENT_LABELS[type] || type}.`,
+          userId
         );
       }
       toast.success(
@@ -1003,6 +1015,29 @@ const CustomerDashboard = () => {
     } catch {
       toast.error("Failed to update notification.");
     }
+  };
+
+  const clearAllNotifications = async () => {
+    const unread = notifications.filter((item) => !item.read);
+    if (unread.length === 0) return;
+    setFadingNotifications(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const item of unread) {
+      if (String(item.id).startsWith("local-customer-")) {
+        markLocalCustomerNotificationRead(item.id);
+      } else {
+        try {
+          await api.put(`/notifications/read/${item.id}`);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    setNotifications((prev) =>
+      prev.map((item) => ({ ...item, read: true }))
+    );
+    setFadingNotifications(false);
+    setShowNotifications(false);
   };
 
   const saveSettings = async () => {
@@ -1112,6 +1147,7 @@ const CustomerDashboard = () => {
           receiverId: userId,
           senderRole: "USER",
           receiverRole: "USER",
+          role: "USER",
           message: "PAYMENT_STATUS:PAYMENT_PENDING",
         });
       } catch (errNotif) {
@@ -1166,6 +1202,7 @@ const CustomerDashboard = () => {
           receiverId: userId,
           senderRole: "USER",
           receiverRole: "USER",
+          role: "USER",
           message: "PAYMENT_STATUS:PAYMENT_APPROVED",
         });
       } catch (errNotif) {
@@ -1179,6 +1216,7 @@ const CustomerDashboard = () => {
           receiverId: 1,
           senderRole: "USER",
           receiverRole: "ADMIN",
+          role: "ADMIN",
           message: `Payment successful. Documents submitted to Admin by customer ${profile.fullName || "Customer"}.`,
         });
       } catch (errAdminNotif) {
@@ -1265,19 +1303,28 @@ const CustomerDashboard = () => {
                 </button>
                 {showNotifications && (
                   <div className="absolute right-0 z-30 mt-3 w-[calc(100vw-2rem)] sm:w-80 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl">
-                    <h3 className="mb-3 font-bold text-[#0B2A4A]">Notifications</h3>
-                    {notifications.length === 0 ? (
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-bold text-[#0B2A4A]">Notifications</h3>
+                      {notifications.filter((item) => !item.read).length > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearAllNotifications}
+                          className="text-xs font-semibold text-red-500 hover:text-red-700 transition"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {notifications.filter((item) => !item.read).length === 0 ? (
                       <p className="text-sm text-slate-500">No notifications.</p>
                     ) : (
-                      <div className="max-h-80 space-y-2 overflow-y-auto">
-                        {notifications.slice(0, 8).map((item) => (
+                      <div className={`max-h-80 space-y-2 overflow-y-auto transition-all duration-300 ${fadingNotifications ? "opacity-0 scale-95 pointer-events-none" : "opacity-100 scale-100"}`}>
+                        {notifications.filter((item) => !item.read).slice(0, 8).map((item) => (
                           <button
                             type="button"
                             key={item.id}
-                            onClick={() => !item.read && markNotificationRead(item.id)}
-                            className={`w-full rounded-2xl p-3 text-left text-sm ${
-                              item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
-                            }`}
+                            onClick={() => markNotificationRead(item.id)}
+                            className="w-full rounded-2xl p-3 text-left text-sm bg-[#EAFBF8]"
                           >
                             <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
                             <p className="mt-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
@@ -1317,6 +1364,8 @@ const CustomerDashboard = () => {
                   onPayNow={openQrPayment}
                   setActiveMenu={setActiveMenu}
                   markNotificationRead={markNotificationRead}
+                  clearAllNotifications={clearAllNotifications}
+                  fadingNotifications={fadingNotifications}
                 />
               )}
 
@@ -1609,6 +1658,8 @@ const DashboardTab = ({
   onPayNow,
   setActiveMenu,
   markNotificationRead,
+  clearAllNotifications,
+  fadingNotifications,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
   const cards = [
@@ -1774,18 +1825,26 @@ const DashboardTab = ({
       )}
 
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Notifications</h2>
-        {notifications.length === 0 ? (
+        <div className="flex justify-between items-center mb-5">
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Notifications</h2>
+          {notifications.filter((item) => !item.read).length > 0 && (
+            <button
+              onClick={clearAllNotifications}
+              className="text-sm font-semibold text-red-500 hover:text-red-700 transition"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        {notifications.filter((item) => !item.read).length === 0 ? (
           <p className="text-sm text-slate-500">No notifications yet.</p>
         ) : (
-          <div className="space-y-3">
-            {notifications.map((item) => (
+          <div className={`space-y-3 transition-all duration-300 ${fadingNotifications ? "opacity-0 scale-95 pointer-events-none" : "opacity-100 scale-100"}`}>
+            {notifications.filter((item) => !item.read).map((item) => (
               <button
                 key={item.id}
-                onClick={() => !item.read && markNotificationRead(item.id)}
-                className={`w-full text-left p-4 rounded-2xl border ${
-                  item.read ? "bg-slate-50 border-slate-100" : "bg-[#EAFBF8] border-[#27D3C3]/30"
-                }`}
+                onClick={() => markNotificationRead(item.id)}
+                className="w-full text-left p-4 rounded-2xl border bg-[#EAFBF8] border-[#27D3C3]/30"
               >
                 <p className="text-sm font-semibold text-[#0B2A4A]">{item.message}</p>
                 <p className="text-xs text-slate-500 mt-1">{formatDate(item.createdAt)}</p>
