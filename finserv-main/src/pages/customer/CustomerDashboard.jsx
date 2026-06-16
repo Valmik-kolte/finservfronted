@@ -376,7 +376,7 @@ const readLocalAssignedBank = (userId) => {
 const inferPaymentStatus = (user) =>
   user?.paymentDone
     ? PAYMENT_STATUS.PAYMENT_APPROVED
-    : getStoredPaymentStatus(user?.userId || user?.id);
+    : PAYMENT_STATUS.DRAFT;
 
 const upsertPaymentRequest = ({ userId, status, profile, personalInfo, documents }) => {
   if (!userId) return;
@@ -500,7 +500,7 @@ const getNotificationMessage = (item) => {
     return "Payment is pending. Please complete your payment.";
   }
   if (msg === "PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING") {
-    return "Payment verification is pending.";
+    return "Payment successful. Payment approval pending.";
   }
   if (msg === "PAYMENT_STATUS:PAYMENT_REJECTED") {
     return "Payment was rejected. Please try again.";
@@ -567,6 +567,7 @@ const CustomerDashboard = () => {
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [fadingNotifications, setFadingNotifications] = useState(false);
   const [uploadingType, setUploadingType] = useState("");
   const [preview, setPreview] = useState(null);
   const [paymentPromptOpen, setPaymentPromptOpen] = useState(false);
@@ -577,9 +578,7 @@ const CustomerDashboard = () => {
   const [employmentType, setEmploymentType] = useState("Salaried");
   const [applicationNumber, setApplicationNumber] = useState("");
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState(() =>
-    getStoredPaymentStatus(userId)
-  );
+  const [paymentStatus, setPaymentStatus] = useState(PAYMENT_STATUS.DRAFT);
   const [profile, setProfile] = useState({
     ...emptyProfile,
     userId,
@@ -818,25 +817,15 @@ const CustomerDashboard = () => {
   };
 
   const persistPersonalInfo = async (payload) => {
-    if (hasPersonalInfo) {
-      try {
-        await api.put(`/personal-info/update/${userId}`, payload);
-        return;
-      } catch (error) {
-        if (![404, 409, 500].includes(error?.response?.status)) {
-          throw error;
-        }
-      }
-    }
-
     try {
-      await api.post("/personal-info/save", payload);
+      await api.put(`/personal-info/update/${userId}`, payload);
+      return;
     } catch (error) {
-      if ([400, 409, 500].includes(error?.response?.status)) {
+      try {
+        await api.post("/personal-info/save", payload);
+      } catch (saveError) {
         await api.put(`/personal-info/update/${userId}`, payload);
-        return;
       }
-      throw error;
     }
   };
 
@@ -942,7 +931,7 @@ const CustomerDashboard = () => {
     try {
       const token = localStorage.getItem("token");
       const response = await fetch(
-        `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`,
+        `http://localhost:8082/api/documents/preview/${documentId}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
@@ -992,6 +981,29 @@ const CustomerDashboard = () => {
     } catch {
       toast.error("Failed to update notification.");
     }
+  };
+
+  const clearAllNotifications = async () => {
+    const unread = notifications.filter((item) => !item.read);
+    if (unread.length === 0) return;
+    setFadingNotifications(true);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const item of unread) {
+      if (String(item.id).startsWith("local-customer-")) {
+        markLocalCustomerNotificationRead(item.id);
+      } else {
+        try {
+          await api.put(`/notifications/read/${item.id}`);
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+    setNotifications((prev) =>
+      prev.map((item) => ({ ...item, read: true }))
+    );
+    setFadingNotifications(false);
+    setShowNotifications(false);
   };
 
   const saveSettings = async () => {
@@ -1131,56 +1143,39 @@ const CustomerDashboard = () => {
   const verifyPayment = async () => {
     setSaving(true);
     try {
-      // 1. Perform background admin login to authorize the payment success API call
-      const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
-      let adminToken = "";
-      try {
-        const loginRes = await axios.post(`${baseURL}/auth/login`, {
-          email: "admin@gmail.com",
-          password: "admin@123",
-        });
-        adminToken = loginRes?.data?.data?.token || loginRes?.data?.token || "";
-      } catch (e) {
-        console.warn("Background admin login failed for payment success:", e);
-      }
-
-      // 2. Mark the payment as successful directly in the database
-      const headers = adminToken ? { Authorization: `Bearer ${adminToken}` } : {};
-      await axios.put(`${baseURL}/user/payment-success/${userId}?amount=116.82`, {}, { headers });
-
-      // 3. Send a notification to user about payment approval
+      // 1. Send notification of PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING to user
       try {
         await api.post("/notifications/send", {
           senderId: userId,
           receiverId: userId,
           senderRole: "USER",
           receiverRole: "USER",
-          message: "PAYMENT_STATUS:PAYMENT_APPROVED",
+          message: "PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING",
         });
       } catch (errNotif) {
-        console.error("Failed to send payment approval notification:", errNotif);
+        console.error("Failed to send payment verification pending notification:", errNotif);
       }
 
-      // 4. Send a notification to admin about payment success and documents submission
+      // 2. Send notification to admin about documents submitted for verification
       try {
         await api.post("/notifications/send", {
           senderId: userId,
           receiverId: 1,
           senderRole: "USER",
           receiverRole: "ADMIN",
-          message: `Payment successful. Documents submitted to Admin by customer ${profile.fullName || "Customer"}.`,
+          message: `${profile.fullName || "Customer"} has submitted documents for payment verification.`,
         });
       } catch (errAdminNotif) {
         console.error("Failed to send admin notification:", errAdminNotif);
       }
 
-      setPaymentStatus(PAYMENT_STATUS.PAYMENT_APPROVED);
+      setPaymentStatus(PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING);
       setQrPaymentOpen(false);
       setActiveMenu("Status");
-      toast.success("Payment completed successfully!");
+      toast.success("Payment submitted for approval successfully!");
     } catch (err) {
-      console.error("Failed to complete payment:", err);
-      toast.error("Failed to complete payment. Please try again.");
+      console.error("Failed to submit payment:", err);
+      toast.error("Failed to submit payment. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -1245,19 +1240,27 @@ const CustomerDashboard = () => {
                 </button>
                 {showNotifications && (
                   <div className="absolute right-0 z-30 mt-3 w-[calc(100vw-2rem)] sm:w-80 rounded-3xl border border-slate-100 bg-white p-4 shadow-xl">
-                    <h3 className="mb-3 font-bold text-[#0B2A4A]">Notifications</h3>
-                    {notifications.length === 0 ? (
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="font-bold text-[#0B2A4A]">Notifications</h3>
+                      {notifications.filter((item) => !item.read).length > 0 && (
+                        <button
+                          onClick={clearAllNotifications}
+                          className="text-xs font-semibold text-red-500 hover:text-red-700 transition"
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                    {notifications.filter((item) => !item.read).length === 0 ? (
                       <p className="text-sm text-slate-500">No notifications.</p>
                     ) : (
-                      <div className="max-h-80 space-y-2 overflow-y-auto">
-                        {notifications.slice(0, 8).map((item) => (
+                      <div className={`space-y-2 max-h-80 overflow-y-auto transition-all duration-300 ${fadingNotifications ? "opacity-0 scale-95 pointer-events-none" : "opacity-100 scale-100"}`}>
+                        {notifications.filter((item) => !item.read).map((item) => (
                           <button
                             type="button"
                             key={item.id}
-                            onClick={() => !item.read && markNotificationRead(item.id)}
-                            className={`w-full rounded-2xl p-3 text-left text-sm ${
-                              item.read ? "bg-slate-50" : "bg-[#EAFBF8]"
-                            }`}
+                            onClick={() => markNotificationRead(item.id)}
+                            className="w-full text-left rounded-2xl p-3 text-sm bg-[#EAFBF8]"
                           >
                             <p className="font-semibold text-[#0B2A4A]">{item.message}</p>
                             <p className="mt-1 text-xs text-slate-500">{formatDate(item.createdAt)}</p>
@@ -1297,6 +1300,8 @@ const CustomerDashboard = () => {
                   onPayNow={openQrPayment}
                   setActiveMenu={setActiveMenu}
                   markNotificationRead={markNotificationRead}
+                  clearAllNotifications={clearAllNotifications}
+                  fadingNotifications={fadingNotifications}
                 />
               )}
 
@@ -1589,6 +1594,8 @@ const DashboardTab = ({
   onPayNow,
   setActiveMenu,
   markNotificationRead,
+  clearAllNotifications,
+  fadingNotifications,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
   const cards = [
@@ -1674,9 +1681,9 @@ const DashboardTab = ({
 
       {paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING && (
         <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 sm:p-6">
-          <h2 className="text-xl font-bold text-sky-800">Payment verification pending</h2>
+          <h2 className="text-xl font-bold text-sky-800">Payment Successful. Approval Pending</h2>
           <p className="text-sm text-sky-700 mt-1">
-            Admin will verify your payment. Documents will be submitted for approval after payment is approved.
+            Your payment was submitted successfully. Waiting for admin approval. Documents will be rendered to admin after approval.
           </p>
         </div>
       )}
@@ -1754,11 +1761,21 @@ const DashboardTab = ({
       )}
 
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Notifications</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Notifications</h2>
+          {notifications.filter((item) => !item.read).length > 0 && (
+            <button
+              onClick={clearAllNotifications}
+              className="text-xs font-bold text-[#27D3C3] hover:text-[#0B2A4A] transition-colors"
+            >
+              Clear
+            </button>
+          )}
+        </div>
         {notifications.length === 0 ? (
           <p className="text-sm text-slate-500">No notifications yet.</p>
         ) : (
-          <div className="space-y-3">
+          <div className={`space-y-3 transition-all duration-300 ${fadingNotifications ? "opacity-0 scale-95 pointer-events-none" : "opacity-100 scale-100"}`}>
             {notifications.map((item) => (
               <button
                 key={item.id}
@@ -2104,28 +2121,12 @@ const VerifySubmitStep = ({
       )}
     </div>
 
-    {paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING && (
-      <div className="bg-amber-50 border border-amber-200 rounded-3xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-amber-800">Ready2Drive payment pending</h2>
-          <p className="text-sm text-amber-700 mt-1">
-            Your application is saved. Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)} to move it to admin verification.
-          </p>
-        </div>
-        <button
-          onClick={onPayNow}
-          className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold"
-        >
-          Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
-        </button>
-      </div>
-    )}
 
     {paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING && (
       <div className="bg-sky-50 border border-sky-200 rounded-3xl p-4 sm:p-6">
-        <h2 className="text-xl font-bold text-sky-800">Payment verification pending</h2>
+        <h2 className="text-xl font-bold text-sky-800">Payment Successful. Approval Pending</h2>
         <p className="text-sm text-sky-700 mt-1">
-          Admin will verify your QR payment before documents are submitted for approval.
+          Your payment was submitted successfully. Waiting for admin approval. Documents will be rendered to admin after approval.
         </p>
       </div>
     )}
@@ -2136,7 +2137,7 @@ const VerifySubmitStep = ({
           {locked
             ? "Forwarded to bank"
             : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
-            ? "Waiting for payment approval"
+            ? "Payment Successful -> Payment Approval Pending"
             : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
             ? "Application saved"
             : applicationSubmitted
@@ -2170,7 +2171,7 @@ const VerifySubmitStep = ({
           : saving
           ? "Saving..."
           : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
-          ? "Verification Pending"
+          ? "Approval Pending"
           : paymentStatus === PAYMENT_STATUS.PAYMENT_PENDING
           ? `Pay ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}`
           : "Final Submit"}
@@ -2188,8 +2189,8 @@ const TRACKING_STEPS = [
   },
   {
     key: "payment_verification_pending",
-    label: "Payment Verification Pending",
-    sub: "Admin is verifying your payment.",
+    label: "Payment Successful -> Approval Pending",
+    sub: "Admin is verifying your payment. Documents will be rendered to admin after approval.",
     icon: <FaFileAlt />,
   },
   {

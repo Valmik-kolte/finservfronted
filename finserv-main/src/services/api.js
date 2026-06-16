@@ -1,10 +1,10 @@
 // src/services/api.js
 
 import axios from "axios";
-import { getAuthToken } from "../utils/authSession";
+import { getAuthToken, clearAuthSession } from "../utils/authSession";
 
 const api = axios.create({
-  baseURL: "https://v1.vahanfinserv.com/api"
+  baseURL: "http://localhost:8082/api"
 });
 
 // Attach JWT token automatically
@@ -23,5 +23,18 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+// Redirect to login on 401 response
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      clearAuthSession();
+      localStorage.setItem("session_expired_toast", "true");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

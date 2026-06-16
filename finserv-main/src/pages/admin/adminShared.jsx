@@ -95,6 +95,21 @@ export const formatDate = (value) => {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("en-IN");
 };
 
+export const formatDateTime = (value) => {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return (
+    date.toLocaleDateString("en-IN") +
+    " " +
+    date.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+  );
+};
+
 export const StatusBadge = ({ status }) => (
   <span
     className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold ${

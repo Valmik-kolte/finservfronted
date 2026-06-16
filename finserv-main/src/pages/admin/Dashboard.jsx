@@ -39,6 +39,7 @@ import {
 import {
   DataTable,
   formatDate,
+  formatDateTime,
   getAdminSession,
   ListOverlay,
   PreviewModal,
@@ -637,7 +638,8 @@ const Dashboard = () => {
       }),
     [allKnownDocs, paymentRequestByUserId, users]
   );
-  const approvedDocsCount = adminVisibleDocs.filter((doc) => doc.status === "APPROVED").length;
+  const effectiveApprovedDocs = adminVisibleDocs.filter((doc) => doc.status === "APPROVED");
+  const approvedDocsCount = effectiveApprovedDocs.length;
   const rejectedDocsCount = adminVisibleDocs.filter((doc) => doc.status === "REJECTED").length;
   const effectivePendingDocs = adminVisibleDocs.filter((doc) => doc.status === "PENDING");
   const effectiveVerifiedDocs = adminVisibleDocs.filter((doc) => doc.status === "VERIFIED");
@@ -820,6 +822,34 @@ const Dashboard = () => {
           setAllDocuments(adjustedDocs);
           setPendingDocs(adjustedDocs.filter((doc) => doc.status === "PENDING"));
           setVerifiedDocs(adjustedDocs.filter((doc) => doc.status === "VERIFIED"));
+          try {
+            const personalInfoResponses = await Promise.all(
+              loadedUsers.map((user) => {
+                const uid = user.userId || user.id;
+                return api.put(`/personal-info/update/${uid}`, {})
+                  .then((res) => res.data?.data || res.data)
+                  .catch(() => null);
+              })
+            );
+            const apiPersonalInfos = personalInfoResponses.filter(Boolean);
+            setPersonalInfos((prev) => {
+              const infoMap = {};
+              prev.forEach((info) => {
+                if (info && info.userId) infoMap[info.userId] = info;
+              });
+              apiPersonalInfos.forEach((info) => {
+                if (info && info.userId) {
+                  infoMap[info.userId] = {
+                    ...infoMap[info.userId],
+                    ...info,
+                  };
+                }
+              });
+              return Object.values(infoMap);
+            });
+          } catch (err) {
+            console.warn("Failed to sync all user personal info on load:", err);
+          }
         } else {
           setAllDocuments([]);
           setPendingDocs([]);
@@ -1177,7 +1207,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
+      const response = await fetch(`http://localhost:8082/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");
@@ -1401,6 +1431,7 @@ const Dashboard = () => {
       return (
         <PaymentsPanel
           paymentRequests={paymentRequests}
+          updatePaymentRequest={updatePaymentRequest}
         />
       );
     }
@@ -1450,7 +1481,7 @@ const Dashboard = () => {
         users={users}
         dealers={dealers}
         pendingDocs={effectivePendingDocs}
-        verifiedDocs={effectiveVerifiedDocs}
+        approvedDocs={effectiveApprovedDocs}
         personalInfos={personalInfos}
         paidPaymentRequests={paidPaymentRequests}
         setActiveMenu={setActiveMenu}
@@ -1638,13 +1669,55 @@ const PaymentStatusBadge = ({ status }) => (
   </span>
 );
 
-const PaymentsPanel = ({ paymentRequests }) => {
+const PaymentsPanel = ({ paymentRequests, updatePaymentRequest }) => {
+  const pendingRequests = paymentRequests.filter(
+    (req) => req.status === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
+  );
   const paidRequests = paymentRequests.filter(
     (req) => req.status === PAYMENT_STATUS.PAYMENT_APPROVED
   );
 
   return (
     <div className="space-y-6">
+      {/* Pending Approvals Table */}
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+          <div>
+            <h2 className="text-xl font-bold text-[#0B2A4A]">Pending Payment Approvals</h2>
+            <p className="text-sm text-slate-500 mt-1">
+              List of users who made payment and are waiting for approval.
+            </p>
+          </div>
+          <div className="bg-amber-50 text-amber-800 px-4 py-3 rounded-2xl text-sm font-bold">
+            {pendingRequests.length} Pending
+          </div>
+        </div>
+
+        {pendingRequests.length === 0 ? (
+          <div className="bg-[#F4F6F9] rounded-2xl p-4 sm:p-6 text-sm text-slate-500">
+            No pending payment verification requests.
+          </div>
+        ) : (
+          <DataTable
+            headers={["User Name", "Mobile Number", "Requested Amount", "Requested Date & Time", "Action"]}
+            rows={pendingRequests.map((req) => [
+              req.fullName || req.user?.fullName || `User ${req.userId}`,
+              req.mobileNumber || req.user?.mobileNumber || "—",
+              formatINR(req.payableAmount || req.paymentAmount || 116.82),
+              formatDateTime(req.updatedAt || req.createdAt),
+              <button
+                key={`approve-${req.userId}`}
+                onClick={() => updatePaymentRequest(req.userId, PAYMENT_STATUS.PAYMENT_APPROVED)}
+                className="px-4 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors duration-200"
+              >
+                Approve
+              </button>,
+            ])}
+          />
+        )}
+      </div>
+
+      {/* Payment History Table */}
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm overflow-x-auto">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
           <div>
@@ -1669,7 +1742,7 @@ const PaymentsPanel = ({ paymentRequests }) => {
               req.fullName || req.user?.fullName || `User ${req.userId}`,
               req.mobileNumber || req.user?.mobileNumber || "—",
               formatINR(req.paymentAmount || 116.82),
-              formatDate(req.createdAt),
+              formatDateTime(req.createdAt || req.updatedAt),
             ])}
           />
         )}
@@ -1682,7 +1755,7 @@ const DashboardOverview = ({
   users,
   dealers,
   pendingDocs,
-  verifiedDocs,
+  approvedDocs,
   personalInfos,
   paidPaymentRequests,
   setActiveMenu,
@@ -1720,12 +1793,12 @@ const DashboardOverview = ({
       })),
     },
     {
-      label: "Verified Documents",
-      value: verifiedDocs.length,
+      label: "Approved Documents",
+      value: approvedDocs.length,
       icon: <FaCheck />,
-      items: verifiedDocs.map((doc) => ({
+      items: approvedDocs.map((doc) => ({
         title: doc.fileName || doc.documentType || `Document #${doc.documentId}`,
-        subtitle: doc.documentType || "Verified",
+        subtitle: doc.documentType || "Approved",
       })),
     },
     {

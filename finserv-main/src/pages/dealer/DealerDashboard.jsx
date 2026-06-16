@@ -30,6 +30,7 @@ import {
   getDealerDashboardSummary,
 } from "../../services/dealerDashboardService";
 import Chatbot from "../../components/chatbot/Chatbot";
+import DealerReports from "./DealerReports";
 
 const DOCUMENT_TYPES = {
   AADHAAR: "Aadhaar",
@@ -532,7 +533,7 @@ const DealerDashboard = () => {
       const sessionData = readDealerSession();
       const code = sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
       if (code) {
-        const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+        const baseURL = api.defaults.baseURL || "http://localhost:8082/api";
         let adminToken = "";
         try {
           const loginRes = await axios.post(`${baseURL}/auth/login`, {
@@ -873,7 +874,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`http://localhost:8082/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");
@@ -1249,7 +1250,7 @@ const DealerDashboard = () => {
               </button>
               <div className="min-w-0">
               <h1 className="truncate text-2xl font-black text-[#0B2A4A]">{title}</h1>
-              <p className="text-sm font-medium text-gray-500">Dealer Panel</p>
+              <p className="text-sm font-medium text-gray-500">Welcome back, {profile.fullName || "Dealer"}</p>
               </div>
             </div>
 
@@ -1371,7 +1372,11 @@ const DealerDashboard = () => {
               )}
 
               {normalizedMenu === "Reports" && (
-                <EmptyState text="Reports are not part of the current dealer API surface." />
+                <DealerReports
+                  users={users}
+                  personalInfos={personalInfos}
+                  docs={adjustedDocs}
+                />
               )}
             </>
           )}
@@ -1623,43 +1628,45 @@ const getUserStatusStyle = (user) => {
 const UserTable = ({ users, openUserModal, openTrackingModal }) => (
   <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[820px] text-left">
-        <thead className="bg-[#0B2A4A] text-sm text-white">
+      <table className="w-full min-w-[620px] text-left">
+        <thead className="bg-[#0B2A4A] text-xs text-white">
           <tr>
-            <th className="px-5 py-4">Name</th>
-            <th className="px-5 py-4">Email</th>
-            <th className="px-5 py-4">Mobile</th>
-            <th className="px-5 py-4">Submission</th>
-            <th className="px-5 py-4">Registered Date</th>
-            {openUserModal && <th className="px-5 py-4">Action</th>}
+            <th className="px-3.5 py-3">Name</th>
+            <th className="px-3.5 py-3">Email</th>
+            <th className="px-3.5 py-3">Mobile</th>
+            <th className="px-3.5 py-3">Submission</th>
+            <th className="px-3.5 py-3">Registered Date</th>
+            {openUserModal && <th className="px-3.5 py-3 text-center">Action</th>}
           </tr>
         </thead>
         <tbody>
           {users.map((user) => (
-            <tr key={user.userId} className="border-b border-gray-50 text-sm">
-              <td className="px-5 py-4 font-bold text-[#0B2A4A]">{user.fullName || "-"}</td>
-              <td className="px-5 py-4 text-gray-600">{user.email || "-"}</td>
-              <td className="px-5 py-4 text-gray-600">{user.mobileNumber || "-"}</td>
-              <td className="px-5 py-4">
-                <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold ${getUserStatusStyle(user)}`}>
+            <tr key={user.userId} className="border-b border-gray-50 text-xs">
+              <td className="px-3.5 py-3 font-bold text-[#0B2A4A] whitespace-nowrap">{user.fullName || "-"}</td>
+              <td className="px-3.5 py-3 text-gray-600 truncate max-w-[140px]" title={user.email}>{user.email || "-"}</td>
+              <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap">{user.mobileNumber || "-"}</td>
+              <td className="px-3.5 py-3 whitespace-nowrap">
+                <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getUserStatusStyle(user)}`}>
                   {getUserStatusText(user)}
                 </span>
               </td>
-              <td className="px-5 py-4 text-gray-600">{formatDate(user.createdAt)}</td>
+              <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap">{formatDate(user.createdAt)}</td>
               {openUserModal && (
-                <td className="px-5 py-4 flex gap-2">
-                  <button
-                    onClick={() => openUserModal(user)}
-                    className="rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
-                  >
-                    View Info
-                  </button>
-                  <button
-                    onClick={() => openTrackingModal(user)}
-                    className="rounded-2xl bg-[#27D3C3] px-4 py-2 text-sm font-black text-[#0B2A4A]"
-                  >
-                    View Status
-                  </button>
+                <td className="px-3.5 py-3">
+                  <div className="flex gap-1.5 justify-center">
+                    <button
+                      onClick={() => openUserModal(user)}
+                      className="rounded-xl bg-[#0B2A4A] px-2.5 py-1.5 text-xs font-bold text-white hover:bg-[#123962] transition-colors"
+                    >
+                      Info
+                    </button>
+                    <button
+                      onClick={() => openTrackingModal(user)}
+                      className="rounded-xl bg-[#27D3C3] px-2.5 py-1.5 text-xs font-black text-[#0B2A4A] hover:bg-[#1fbaa9] transition-colors"
+                    >
+                      Status
+                    </button>
+                  </div>
                 </td>
               )}
             </tr>

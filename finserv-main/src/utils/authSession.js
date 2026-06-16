@@ -14,6 +14,11 @@ export const AUTH_SESSION_KEYS = [
 
 export const clearAuthSession = () => {
   AUTH_SESSION_KEYS.forEach((key) => localStorage.removeItem(key));
+  try {
+    sessionStorage.clear();
+  } catch (e) {
+    console.warn("Failed to clear sessionStorage:", e);
+  }
 };
 
 export const getAuthToken = () => {

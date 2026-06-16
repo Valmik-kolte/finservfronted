@@ -36,6 +36,18 @@ const formatValue = (key, value) => {
   if (key === "paymentDone") return value ? "Payment Approved" : "Payment Pending";
   if (typeof value === "boolean") return value ? "Yes" : "No";
 
+  if (key === "month") {
+    const now = new Date();
+    if (value === "current") {
+      return now.toLocaleString("en-IN", { month: "long", year: "numeric" });
+    }
+    if (value === "last") {
+      const lastMonth = new Date();
+      lastMonth.setMonth(now.getMonth() - 1);
+      return lastMonth.toLocaleString("en-IN", { month: "long", year: "numeric" });
+    }
+  }
+
   if (isDateKey(key)) {
     const date = new Date(value);
     if (!Number.isNaN(date.getTime())) {
@@ -61,10 +73,27 @@ const formatValue = (key, value) => {
   return String(value);
 };
 
-const getRenderableEntries = (record) =>
-  Object.entries(record || {})
-    .filter(([key, value]) => !isSensitiveKey(key) && !Array.isArray(value) && !isPlainObject(value))
-    .slice(0, 8);
+const getRenderableEntries = (record, actionKey) => {
+  const entries = [];
+  Object.entries(record || {}).forEach(([key, value]) => {
+    if (isSensitiveKey(key)) return;
+    if (key.toLowerCase() === "verified") return;
+    if (actionKey === "ADMIN_DOCUMENT_SUMMARY" && key.toLowerCase() === "month") return;
+    if (Array.isArray(value)) return;
+    if (isPlainObject(value)) {
+      Object.entries(value).forEach(([subKey, subValue]) => {
+        if (subKey.toLowerCase() === "verified") return;
+        if (actionKey === "ADMIN_DOCUMENT_SUMMARY" && subKey.toLowerCase() === "month") return;
+        if (!isSensitiveKey(subKey) && !Array.isArray(subValue) && !isPlainObject(subValue)) {
+          entries.push([subKey, subValue]);
+        }
+      });
+    } else {
+      entries.push([key, value]);
+    }
+  });
+  return entries.slice(0, 12);
+};
 
 const getDataRecords = (data) => {
   if (!data) return [];
@@ -104,10 +133,10 @@ const DataPreview = ({ data, actionKey, role, onNavigateSection }) => {
       <div className="mt-3 space-y-2">
         {visibleRecords.map((record, index) => (
           <div key={index} className="rounded-2xl border border-slate-100 bg-white p-3 text-xs">
-            {getRenderableEntries(record).length === 0 ? (
+            {getRenderableEntries(record, actionKey).length === 0 ? (
               <p className="text-slate-500">No displayable fields.</p>
             ) : (
-              getRenderableEntries(record).map(([key, value]) => (
+              getRenderableEntries(record, actionKey).map(([key, value]) => (
                 <div key={key} className="flex justify-between gap-3 py-1">
                   <span className="shrink-0 font-bold text-[#0B2A4A]">{titleize(key)}</span>
                   <span className="break-words text-right text-slate-600">{formatValue(key, value)}</span>
@@ -137,7 +166,7 @@ const DataPreview = ({ data, actionKey, role, onNavigateSection }) => {
   }
 
   if (isPlainObject(data)) {
-    const entries = getRenderableEntries(data);
+    const entries = getRenderableEntries(data, actionKey);
     if (entries.length === 0) {
       return <p className="mt-3 text-xs text-slate-500">No records found for this action.</p>;
     }

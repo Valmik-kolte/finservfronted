@@ -3,7 +3,7 @@ import { FaEye, FaChevronDown, FaChevronUp, FaSearch } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { DOCUMENT_LABELS, formatDate, StatusBadge } from "./adminShared";
 
-const FILTER_TABS = ["All", "Pending", "Verified", "Approved", "Rejected"];
+const FILTER_TABS = ["All", "Pending", "Approved", "Rejected"];
 
 const firstPresent = (...values) =>
   values.find((value) => value !== undefined && value !== null && String(value).trim() !== "") ?? "";

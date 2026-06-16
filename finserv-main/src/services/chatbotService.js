@@ -469,7 +469,7 @@ export const getAdminDealerSummary = () =>
   getWithFallback("/chatbot/admin/dealer-wise-summary", fallbackAdminDealerSummary);
 
 export const getAdminDocumentSummary = () =>
-  getWithFallback("/chatbot/admin/document-summary?month=last", fallbackAdminDocumentSummary);
+  getWithFallback("/chatbot/admin/document-summary", fallbackAdminDocumentSummary);
 
 export const getAdminPendingDocuments = () =>
   getWithFallback("/chatbot/admin/pending-documents", fallbackAdminPendingDocuments);
