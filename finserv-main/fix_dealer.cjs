@@ -1,5 +1,5 @@
 async function test() {
-  const baseURL = 'http://localhost:8082/api';
+  const baseURL = 'https://v1.vahanfinserv.com/api';
   try {
     const loginRes = await fetch(`${baseURL}/auth/login`, {
       method: 'POST',

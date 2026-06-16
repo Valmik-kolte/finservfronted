@@ -533,7 +533,7 @@ const DealerDashboard = () => {
       const sessionData = readDealerSession();
       const code = sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
       if (code) {
-        const baseURL = api.defaults.baseURL || "http://localhost:8082/api";
+        const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
         let adminToken = "";
         try {
           const loginRes = await axios.post(`${baseURL}/auth/login`, {
@@ -874,7 +874,7 @@ const DealerDashboard = () => {
     }
 
     try {
-      const res = await fetch(`http://localhost:8082/api/documents/preview/${doc.documentId}`, {
+      const res = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${doc.documentId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Preview request failed");
