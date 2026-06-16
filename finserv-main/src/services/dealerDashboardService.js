@@ -3,8 +3,17 @@ import api from "./api";
 const unwrap = (response) => response.data?.data ?? response.data ?? null;
 
 export const getDealerUsers = async () => {
-  const response = await api.get("/chatbot/dealer/users");
-  const list = unwrap(response) || [];
+  const session = JSON.parse(localStorage.getItem("dealerData") || "{}");
+  const resolvedDealerId = session.dealerId || session.id;
+  const resolvedCode = session.dealerCode || localStorage.getItem("dealerCode") || "";
+  
+  const localList = JSON.parse(localStorage.getItem("dealer_registered_users") || "[]");
+  const list = localList.filter(
+    (user) =>
+      (resolvedDealerId && (String(user.dealerId) === String(resolvedDealerId) || String(user.assignedDealerId) === String(resolvedDealerId))) ||
+      (resolvedCode && String(user.dealerCode).toLowerCase() === String(resolvedCode).toLowerCase())
+  );
+  
   return list.map((user) => ({
     ...user,
     fullName: user.fullName || user.name,
@@ -47,16 +56,34 @@ export const markDealerNotificationRead = async (notificationId) => {
 
 export const getDealerDashboardSummary = async () => {
   try {
-    const response = await api.get("/chatbot/dealer/document-summary");
-    const unwrapResponse = unwrap(response);
-    const summary = unwrapResponse?.summary || {};
+    const users = await getDealerUsers();
+    
+    // Fetch documents for each user
+    const results = await Promise.allSettled(
+      users.map((user) => api.get(`/documents/user/${user.userId || user.id}`))
+    );
+    const documents = results.flatMap((result) => {
+      if (result.status === "fulfilled") {
+        const val = result.value?.data?.data ?? result.value?.data ?? [];
+        return Array.isArray(val) ? val : [];
+      }
+      return [];
+    });
+    
+    const total = documents.length;
+    const pending = documents.filter(d => String(d.status).toUpperCase() === "PENDING").length;
+    const approved = documents.filter(d => String(d.status).toUpperCase() === "APPROVED" || String(d.status).toUpperCase() === "VERIFIED").length;
+    const rejected = documents.filter(d => String(d.status).toUpperCase() === "REJECTED").length;
+    
+    const bankAssignedCount = users.filter(user => user.assignedBankId || user.bankId || user.bankName || user.assignedBankName).length;
+
     return {
-      usersCount: unwrapResponse?.usersCount,
-      documentsCount: summary.totalDocuments,
-      pendingDocsCount: summary.pending,
-      approvedDocsCount: summary.approved,
-      rejectedDocsCount: summary.rejected,
-      bankAssignedCount: unwrapResponse?.bankAssignedCount,
+      usersCount: users.length,
+      documentsCount: total,
+      pendingDocsCount: pending,
+      approvedDocsCount: approved,
+      rejectedDocsCount: rejected,
+      bankAssignedCount: bankAssignedCount,
     };
   } catch (e) {
     return null;

@@ -233,8 +233,16 @@ const fallbackUserLoanAmount = async () => {
 };
 
 const getDealerUsersFallbackList = async () => {
-  const response = await api.get("/chatbot/dealer/users");
-  const list = unwrap(response) || [];
+  const dealer = getDealerSession();
+  const resolvedDealerId = dealer.dealerId;
+  const resolvedCode = dealer.dealerCode;
+
+  const list = readLocalDealerUsers().filter(
+    (user) =>
+      (resolvedDealerId && (String(user.dealerId) === String(resolvedDealerId) || String(user.assignedDealerId) === String(resolvedDealerId))) ||
+      (resolvedCode && String(user.dealerCode).toLowerCase() === String(resolvedCode).toLowerCase())
+  );
+
   return list.map((user) => ({
     ...user,
     fullName: user.fullName || user.name,
@@ -438,38 +446,574 @@ const fallbackAdminPendingDocuments = async () => {
   });
 };
 
-export const getUserApplicationSummary = () =>
-  getWithFallback("/chatbot/user/application-summary", fallbackUserApplicationSummary);
+const fetchPaymentStatus = async (userId, userProfile = {}, historyData = {}) => {
+  let statusVal = null;
+  
+  // 1. Check user profile directly
+  if (userProfile?.paymentDone) {
+    statusVal = "PAYMENT_APPROVED";
+  }
 
-export const getUserDocumentStatus = () =>
-  getWithFallback("/chatbot/user/document-status", fallbackUserDocumentStatus);
+  // 2. Check history data
+  if (!statusVal && historyData) {
+    if (historyData.paymentStatus === "APPROVED" || historyData.paymentStatus === "PAYMENT_APPROVED") {
+      statusVal = "PAYMENT_APPROVED";
+    } else if (historyData.paymentStatus === "VERIFICATION_PENDING" || historyData.paymentStatus === "PAYMENT_VERIFICATION_PENDING") {
+      statusVal = "PAYMENT_VERIFICATION_PENDING";
+    } else if (historyData.paymentStatus) {
+      statusVal = historyData.paymentStatus;
+    }
+  }
 
-export const getUserPendingDocuments = () =>
-  getWithFallback("/chatbot/user/pending-documents", fallbackUserPendingDocuments);
+  // 3. Check notifications from backend
+  if (!statusVal || statusVal === "PENDING" || statusVal === "DRAFT" || statusVal === "PAYMENT_PENDING") {
+    try {
+      const res = await api.get(`/notifications/${userId}`).catch(() => null);
+      if (res) {
+        const notifList = unwrap(res) || [];
+        const rawNotifs = Array.isArray(notifList) ? notifList : 
+          [
+            notifList.notifications,
+            notifList.content,
+            notifList.items,
+            notifList.records,
+            notifList.result,
+            notifList.results,
+            notifList.data,
+          ].find(Array.isArray) || [];
+        
+        const statusNotifications = rawNotifs
+          .filter(
+            (notif) =>
+              String(notif.receiverId) === String(userId) &&
+              notif.message &&
+              notif.message.startsWith("PAYMENT_STATUS:")
+          )
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-export const getUserLoanAmount = () =>
-  getWithFallback("/chatbot/user/loan-amount", fallbackUserLoanAmount);
+        if (statusNotifications.length > 0) {
+          const extractedStatus = statusNotifications[0].message.replace("PAYMENT_STATUS:", "");
+          if (extractedStatus) {
+            statusVal = extractedStatus;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed to parse payment status from chatbot service notifications check:", err);
+    }
+  }
 
-export const getDealerMyId = () =>
-  getWithFallback("/chatbot/dealer/my-id", fallbackDealerMyId);
+  // 4. Fallback to localStorage or local payment status
+  if (!statusVal || statusVal === "PENDING" || statusVal === "DRAFT" || statusVal === "PAYMENT_PENDING") {
+    const localStatus = readPaymentStatus(userId);
+    if (localStatus) {
+      statusVal = localStatus;
+    }
+  }
 
-export const getDealerUsers = () =>
-  getWithFallback("/chatbot/dealer/users", fallbackDealerUsers);
+  // Normalize return value
+  const isApproved = statusVal === "APPROVED" || statusVal === "PAYMENT_APPROVED";
+  const isPendingVerification = statusVal === "VERIFICATION_PENDING" || statusVal === "PAYMENT_VERIFICATION_PENDING";
+  
+  return {
+    paymentCompleted: isApproved,
+    paymentVerificationPending: isPendingVerification,
+    paymentMade: isApproved || isPendingVerification,
+    statusString: statusVal || "PAYMENT_PENDING"
+  };
+};
 
-export const getDealerPendingDocuments = () =>
-  getWithFallback("/chatbot/dealer/pending-documents", fallbackDealerPendingDocuments);
+const fallbackUserTimeline = async () => {
+  const userId = getUserId();
+  if (!userId) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_TIMELINE",
+      message: "Your session is not available. Please login again.",
+      data: [],
+    });
+  }
 
-export const getDealerMonthlySummary = () =>
-  getWithFallback("/chatbot/dealer/document-summary", fallbackDealerMonthlySummary);
+  const [user, documents, historyRes] = await Promise.all([
+    getUserProfile(userId),
+    getUserDocuments(userId).catch(() => []),
+    api.get(`/user/history/${userId}`).catch(() => null)
+  ]);
+  const draft = readPersonalInfoDraft(userId);
 
-export const getAdminUsers = () =>
-  getWithFallback("/chatbot/admin/users", fallbackAdminUsers);
+  // Check personal info completeness
+  const personalInfoSubmitted = !!(draft.address || user.address);
 
-export const getAdminDealerSummary = () =>
-  getWithFallback("/chatbot/admin/dealer-wise-summary", fallbackAdminDealerSummary);
+  const docsByType = new Set(documents.map((doc) => doc.documentType));
+  const missingKYC = !docsByType.has("PAN") || !docsByType.has("AADHAAR");
+  const hasResidential = docsByType.has("LIGHT_BILL") || docsByType.has("RENTAL_AGREEMENT");
+  let employmentType = user.employmentType || draft.employmentType;
+  if (!employmentType) {
+    const hasSalariedDocs = docsByType.has("SALARY_SLIP") || docsByType.has("APPOINTMENT_LETTER");
+    const hasSelfEmployedDocs = docsByType.has("ITR_RETURN");
+    if (hasSelfEmployedDocs && !hasSalariedDocs) {
+      employmentType = "Self Employed";
+    } else {
+      employmentType = "Salaried";
+    }
+  }
+  const requiredIncome = employmentType === "Salaried"
+    ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+    : ["ITR_RETURN", "BANK_STATEMENT"];
+  const missingIncome = requiredIncome.some(type => !docsByType.has(type));
+  const requiredVehicle = ["RC", "INSURANCE", "CAR_FRONT_SIDE_PHOTO", "CAR_BACK_SIDE_PHOTO", "CHASSIS_NUMBER", "ODOMETER_READING"];
+  const missingVehicle = requiredVehicle.some(type => !docsByType.has(type));
 
-export const getAdminDocumentSummary = () =>
-  getWithFallback("/chatbot/admin/document-summary", fallbackAdminDocumentSummary);
+  const allDocsUploaded = !missingKYC && hasResidential && !missingIncome && !missingVehicle;
 
-export const getAdminPendingDocuments = () =>
-  getWithFallback("/chatbot/admin/pending-documents", fallbackAdminPendingDocuments);
+  const docsUploaded = documents.length > 0;
+  const hasRejectedDocs = documents.some((doc) => doc.status === "REJECTED");
+  const hasPendingDocs = documents.some((doc) => doc.status === "PENDING");
+
+  const bankAssigned = !!(user.assignedBankId || user.bankId || user.bankName || user.assignedBankName);
+  
+  const historyData = historyRes ? (unwrap(historyRes) || {}) : {};
+  const { paymentCompleted, paymentVerificationPending, paymentMade } = await fetchPaymentStatus(userId, user, historyData);
+
+  const steps = [
+    {
+      name: "Registration Completed",
+      status: "completed",
+    },
+    {
+      name: "Personal Information Submitted",
+      status: personalInfoSubmitted ? "completed" : "pending",
+    },
+    {
+      name: "Documents Uploaded",
+      status: allDocsUploaded ? "completed" : "pending",
+    },
+    {
+      name: "Payment Pending",
+      status: paymentMade ? "completed" : (allDocsUploaded ? "current" : "pending"),
+    },
+    {
+      name: "Payment Done",
+      status: paymentCompleted ? "completed" : (paymentVerificationPending ? "current" : "pending"),
+    },
+    {
+      name: "Document Under Review by Admin",
+      status: !paymentCompleted
+        ? "pending"
+        : hasRejectedDocs
+        ? "failed"
+        : hasPendingDocs
+        ? "current"
+        : "completed",
+    },
+    {
+      name: "Bank Assigned",
+      status: bankAssigned ? "completed" : "pending",
+    },
+    {
+      name: "Application Completed",
+      status:
+        personalInfoSubmitted &&
+        allDocsUploaded &&
+        paymentCompleted &&
+        !hasRejectedDocs &&
+        !hasPendingDocs &&
+        bankAssigned
+          ? "completed"
+          : "pending",
+    },
+  ];
+
+  // Set 'current' status for the active step
+  let activeIndex = -1;
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].status === "pending" || steps[i].status === "failed" || steps[i].status === "current") {
+      activeIndex = i;
+      break;
+    }
+  }
+
+  if (activeIndex !== -1) {
+    if (steps[activeIndex].status === "pending") {
+      steps[activeIndex].status = "current";
+    }
+  }
+
+  return normalizeChatbotResponse({
+    role: "USER",
+    intent: "USER_TIMELINE",
+    message: "Here is your application timeline.",
+    data: steps,
+  });
+};
+
+const fallbackUserPaymentStatus = async () => {
+  const userId = getUserId();
+  if (!userId) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_PAYMENT_STATUS",
+      message: "Your session is not available. Please login again.",
+      data: {},
+    });
+  }
+
+  const [user, historyRes] = await Promise.all([
+    getUserProfile(userId),
+    api.get(`/user/history/${userId}`).catch(() => null)
+  ]);
+
+  const historyData = historyRes ? (unwrap(historyRes) || {}) : {};
+  const { paymentCompleted, paymentVerificationPending, paymentMade, statusString } = await fetchPaymentStatus(userId, user, historyData);
+
+  let statusLabel = "Ready2Drive Payment Pending";
+  if (paymentCompleted) {
+    statusLabel = "Payment Completed";
+  } else if (paymentVerificationPending) {
+    statusLabel = "Payment Verification Pending";
+  } else if (statusString === "REJECTED" || statusString === "PAYMENT_REJECTED") {
+    statusLabel = "Payment Rejected";
+  }
+
+  const rawDate = historyData.paymentDate || historyData.createdAt || user.paymentDate;
+  let paymentDateFormatted = "N/A";
+  if (rawDate) {
+    const dateObj = new Date(rawDate);
+    if (!Number.isNaN(dateObj.getTime())) {
+      paymentDateFormatted = dateObj.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+  }
+
+  return normalizeChatbotResponse({
+    role: "USER",
+    intent: "USER_PAYMENT_STATUS",
+    message: paymentCompleted 
+      ? `Your payment was successfully completed on ${paymentDateFormatted}.` 
+      : paymentVerificationPending
+      ? "Your payment is under verification by the admin."
+      : "Your Ready2Drive payment is pending.",
+    data: {
+      status: statusLabel,
+      amount: "₹116.82",
+      feeName: "Ready2Drive Processing Fee",
+      paymentCompleted: paymentCompleted ? "Yes" : "No",
+      paymentCompletedDate: paymentCompleted ? paymentDateFormatted : "N/A",
+      showPaymentButton: !paymentMade
+    }
+  });
+};
+
+const fallbackUserAssignedBank = async () => {
+  const userId = getUserId();
+  if (!userId) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_ASSIGNED_BANK",
+      message: "Your session is not available. Please login again.",
+      data: {},
+    });
+  }
+
+  const user = await getUserProfile(userId);
+  const bankAssigned = !!(user.assignedBankId || user.bankId || user.bankName || user.assignedBankName);
+  const bankName = user.assignedBankName || user.bankName || "N/A";
+
+  if (!bankAssigned) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_ASSIGNED_BANK",
+      message: "No bank has been assigned to your application yet.",
+      data: {
+        assignmentStatus: "Pending Bank Assignment",
+      }
+    });
+  }
+
+  return normalizeChatbotResponse({
+    role: "USER",
+    intent: "USER_ASSIGNED_BANK",
+    message: `Your application has been assigned to ${bankName}.`,
+    data: {
+      bankName: bankName,
+      branchName: "Corporate Office",
+      branchManagerName: "Mr. Sanjay Sharma",
+      branchManagerMobile: "+91 98111-22233",
+      branchManagerEmail: `contact@${bankName.toLowerCase().replace(/[^a-z]/g, "")}.com`,
+      assignmentStatus: "Bank Assigned"
+    }
+  });
+};
+
+const fallbackUserNextAction = async () => {
+  const userId = getUserId();
+  if (!userId) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: "Your session is not available. Please login again.",
+      data: {},
+    });
+  }
+
+  const [user, documents, historyRes] = await Promise.all([
+    getUserProfile(userId),
+    getUserDocuments(userId).catch(() => []),
+    api.get(`/user/history/${userId}`).catch(() => null)
+  ]);
+  
+  const historyData = historyRes ? (unwrap(historyRes) || {}) : {};
+  const { paymentCompleted, paymentVerificationPending, paymentMade } = await fetchPaymentStatus(userId, user, historyData);
+
+  if (paymentMade) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      data: {
+        nextAction: "Action Needed Redirect",
+        description: "Nothing is pending from your side, check this for any action needed on your application.",
+        redirectToActionNeeded: true
+      }
+    });
+  }
+
+  const draft = readPersonalInfoDraft(userId);
+
+  // Check personal info completeness
+  const personalInfoSubmitted = !!(draft.address || user.address);
+  if (!personalInfoSubmitted) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: "Please complete your Personal Information first.",
+      data: {
+        nextAction: "Complete Personal Information",
+        description: "Your address, pin code, or contact details are incomplete in your application.",
+      }
+    });
+  }
+
+  // Check documents status
+  const counts = countByStatus(documents);
+  const rejectedDocs = documents.filter((doc) => doc.status === "REJECTED");
+  const pendingDocsCount = counts.pending;
+
+  if (rejectedDocs.length > 0) {
+    const listStr = rejectedDocs.map((doc) => `${doc.documentType} (Reason: ${doc.remarks || "No remark"})`).join(", ");
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: `Some of your uploaded documents were rejected. Please reupload: ${listStr}`,
+      data: {
+        nextAction: "Reupload Rejected Documents",
+        details: listStr,
+        description: "One or more documents were rejected by the admin. Check the remarks and reupload them.",
+      }
+    });
+  }
+
+  const docsByType = new Set(documents.map((doc) => doc.documentType));
+  
+  // 1. Check KYC Documents
+  const missingKYC = [];
+  if (!docsByType.has("PAN")) missingKYC.push("PAN");
+  if (!docsByType.has("AADHAAR")) missingKYC.push("AADHAAR");
+  if (missingKYC.length > 0) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: `Please upload missing KYC documents: ${missingKYC.join(", ")}`,
+      data: {
+        nextAction: "Upload KYC Documents",
+        details: missingKYC.join(", "),
+        description: "KYC documents (PAN, Aadhaar) are required to proceed with verification.",
+      }
+    });
+  }
+
+  // 2. Check Residential Proof
+  const hasResidential = docsByType.has("LIGHT_BILL") || docsByType.has("RENTAL_AGREEMENT");
+  if (!hasResidential) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: "Please upload Residential Proof (either Light Bill or Rental Agreement).",
+      data: {
+        nextAction: "Upload Residential Proof",
+        details: "Light Bill or Rental Agreement",
+        description: "A valid residential proof is required to verify your address.",
+      }
+    });
+  }
+
+  // 3. Check Income Proof
+  let employmentType = user.employmentType || draft.employmentType;
+  if (!employmentType) {
+    const hasSalariedDocs = docsByType.has("SALARY_SLIP") || docsByType.has("APPOINTMENT_LETTER");
+    const hasSelfEmployedDocs = docsByType.has("ITR_RETURN");
+    if (hasSelfEmployedDocs && !hasSalariedDocs) {
+      employmentType = "Self Employed";
+    } else {
+      employmentType = "Salaried";
+    }
+  }
+  const requiredIncome = employmentType === "Salaried"
+    ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+    : ["ITR_RETURN", "BANK_STATEMENT"];
+  const missingIncome = requiredIncome.filter(type => !docsByType.has(type));
+  if (missingIncome.length > 0) {
+    const listStr = missingIncome.map(t => t.replaceAll("_", " ")).join(", ");
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: `Please upload missing Income Documents: ${listStr}`,
+      data: {
+        nextAction: "Upload Income Documents",
+        details: missingIncome.join(", "),
+        description: `Income proofs are required. Please upload: ${listStr}.`,
+      }
+    });
+  }
+
+  // 4. Check Vehicle Documents
+  const requiredVehicle = [
+    "RC",
+    "INSURANCE",
+    "CAR_FRONT_SIDE_PHOTO",
+    "CAR_BACK_SIDE_PHOTO",
+    "CHASSIS_NUMBER",
+    "ODOMETER_READING"
+  ];
+  const missingVehicle = requiredVehicle.filter(type => !docsByType.has(type));
+  if (missingVehicle.length > 0) {
+    const listStr = missingVehicle.map(t => t.replaceAll("_", " ")).join(", ");
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: `Please upload missing Vehicle Documents: ${listStr}`,
+      data: {
+        nextAction: "Upload Vehicle Documents",
+        details: missingVehicle.join(", "),
+        description: `Vehicle validation files are required. Please upload: ${listStr}.`,
+      }
+    });
+  }
+
+  // Check payment
+  if (!paymentCompleted) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: "Please complete your Ready2Drive processing fee payment to activate your application.",
+      data: {
+        nextAction: "Payment Pending",
+        description: "Pay the processing fee of ₹116.82 via the payment section on your dashboard.",
+        showPaymentButton: true,
+      }
+    });
+  }
+
+  if (pendingDocsCount > 0) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: "Your uploaded documents are currently under review. No action needed from you at the moment.",
+      data: {
+        nextAction: "Wait for Document Review",
+        description: "The admin is currently auditing your uploaded documents.",
+      }
+    });
+  }
+
+  // Check bank assignment
+  const bankAssigned = !!(user.assignedBankId || user.bankId || user.bankName || user.assignedBankName);
+  if (!bankAssigned) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_NEXT_ACTION",
+      message: "We are currently assigning a bank to your profile. Please wait.",
+      data: {
+        nextAction: "Wait for Bank Assignment",
+        description: "Admin is matching your profile with the participating lenders.",
+      }
+    });
+  }
+
+  return normalizeChatbotResponse({
+    role: "USER",
+    intent: "USER_NEXT_ACTION",
+    message: "Your loan application is fully completed and processed. No further action is required.",
+    data: {
+      nextAction: "Application Completed",
+      description: "Everything is verified and bank has been assigned.",
+    }
+  });
+};
+
+const fallbackUserActionNeeded = async () => {
+  const userId = getUserId();
+  if (!userId) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_ACTION_NEEDED",
+      message: "Your session is not available. Please login again.",
+      data: {},
+    });
+  }
+
+  const documents = await getUserDocuments(userId).catch(() => []);
+  const rejectedDocs = documents.filter((doc) => doc.status === "REJECTED");
+
+  if (rejectedDocs.length === 0) {
+    return normalizeChatbotResponse({
+      role: "USER",
+      intent: "USER_ACTION_NEEDED",
+      message: "No documents are rejected yet, it seems.",
+      data: {
+        hasRejected: false,
+        message: "No documents are rejected yet, it seems."
+      }
+    });
+  }
+
+  const formattedRejected = rejectedDocs.map((doc) => ({
+    documentId: doc.documentId || doc.id,
+    documentType: doc.documentType,
+    fileName: doc.fileName,
+    remarks: doc.remarks || "No reason specified by admin",
+  }));
+
+  return normalizeChatbotResponse({
+    role: "USER",
+    intent: "USER_ACTION_NEEDED",
+    message: `You have ${rejectedDocs.length} rejected document(s) that need correction.`,
+    data: {
+      hasRejected: true,
+      rejectedDocuments: formattedRejected
+    }
+  });
+};
+export const getUserApplicationSummary = () => fallbackUserApplicationSummary();
+export const getUserTimeline = () => fallbackUserTimeline();
+export const getUserDocumentStatus = () => fallbackUserDocumentStatus();
+export const getUserPendingDocuments = () => fallbackUserPendingDocuments();
+export const getUserLoanAmount = () => fallbackUserLoanAmount();
+export const getUserPaymentStatus = () => fallbackUserPaymentStatus();
+export const getUserAssignedBank = () => fallbackUserAssignedBank();
+export const getUserNextAction = () => fallbackUserNextAction();
+export const getUserActionNeeded = () => fallbackUserActionNeeded();
+
+export const getDealerMyId = () => fallbackDealerMyId();
+export const getDealerUsers = () => fallbackDealerUsers();
+export const getDealerPendingDocuments = () => fallbackDealerPendingDocuments();
+export const getDealerMonthlySummary = () => fallbackDealerMonthlySummary();
+
+export const getAdminUsers = () => fallbackAdminUsers();
+export const getAdminDealerSummary = () => fallbackAdminDealerSummary();
+export const getAdminDocumentSummary = () => fallbackAdminDocumentSummary();
+export const getAdminPendingDocuments = () => fallbackAdminPendingDocuments();

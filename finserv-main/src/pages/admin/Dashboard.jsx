@@ -668,7 +668,7 @@ const Dashboard = () => {
         ] =
           await Promise.allSettled([
             api.get("/user/all"),
-            api.get("/chatbot/admin/users"),
+            Promise.resolve([]),
             api.get("/user/history"),
             api.get("/dealer/all"),
             api.get("/documents/pending"),
@@ -681,7 +681,6 @@ const Dashboard = () => {
 
         const failedApis = getApiFailureSummary([
           { label: "/user/all", status: getFailureStatus(usersRes) },
-          { label: "/chatbot/admin/users", status: getFailureStatus(chatbotUsersRes) },
           { label: "/user/history", status: getFailureStatus(userHistoryRes) },
           { label: "/dealer/all", status: getFailureStatus(dealersRes) },
           { label: "/documents/pending", status: getFailureStatus(pendingRes) },
@@ -781,7 +780,7 @@ const Dashboard = () => {
           setUsers(loadedUsers);
           setAllUsers(loadedUsers);
         } else {
-          const is403 = [usersRes, chatbotUsersRes, userHistoryRes].some(
+          const is403 = [usersRes, userHistoryRes].some(
             (res) => res.status === "rejected" && res.reason?.response?.status === 403
           );
           if (is403) {
@@ -792,7 +791,7 @@ const Dashboard = () => {
           }
         }
         if (dealersRes.status === "fulfilled") setDealers(asList(dealersRes.value));
-        if (dealersRes.reason?.response?.status === 403 && [usersRes, chatbotUsersRes, userHistoryRes].every((res) => res.status === "rejected")) {
+        if (dealersRes.reason?.response?.status === 403 && [usersRes, userHistoryRes].every((res) => res.status === "rejected")) {
           setPermissionError("Admin API access is forbidden for this token. Please login again as ADMIN, or check backend role permissions for admin endpoints.");
           return;
         }

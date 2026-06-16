@@ -9,8 +9,13 @@ import {
   getDealerUsers,
   getUserApplicationSummary,
   getUserDocumentStatus,
-  getUserLoanAmount,
   getUserPendingDocuments,
+  getUserLoanAmount,
+  getUserTimeline,
+  getUserPaymentStatus,
+  getUserAssignedBank,
+  getUserNextAction,
+  getUserActionNeeded,
 } from "../../services/chatbotService";
 
 export const CHATBOT_WELCOME_MESSAGES = {
@@ -31,6 +36,11 @@ export const CHATBOT_MENUS = {
       service: getUserApplicationSummary,
     },
     {
+      key: "USER_TIMELINE",
+      label: "Application Timeline",
+      service: getUserTimeline,
+    },
+    {
       key: "USER_DOCUMENT_STATUS",
       label: "Document Status",
       service: getUserDocumentStatus,
@@ -44,6 +54,26 @@ export const CHATBOT_MENUS = {
       key: "USER_LOAN_AMOUNT",
       label: "Loan Amount",
       service: getUserLoanAmount,
+    },
+    {
+      key: "USER_PAYMENT_STATUS",
+      label: "Payment Status",
+      service: getUserPaymentStatus,
+    },
+    {
+      key: "USER_ASSIGNED_BANK",
+      label: "Assigned Bank",
+      service: getUserAssignedBank,
+    },
+    {
+      key: "USER_NEXT_ACTION",
+      label: "What Should I Do?",
+      service: getUserNextAction,
+    },
+    {
+      key: "USER_ACTION_NEEDED",
+      label: "Action Needed",
+      service: getUserActionNeeded,
     },
   ],
   DEALER: [

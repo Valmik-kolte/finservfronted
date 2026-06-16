@@ -94,6 +94,16 @@ const Chatbot = ({ roleOverride = "", onNavigateSection }) => {
 
   const closeChat = () => setIsOpen(false);
 
+  const clearChat = useCallback(() => {
+    if (!role) return;
+    setMessages([
+      createMessage({
+        sender: "bot",
+        text: getDefaultMessage(role, sessionUser),
+      }),
+    ]);
+  }, [role, sessionUser]);
+
   const handleAction = useCallback(
     async (item) => {
       const token = getAuthToken();
@@ -171,6 +181,7 @@ const Chatbot = ({ roleOverride = "", onNavigateSection }) => {
           onClose={closeChat}
           onAction={handleAction}
           onNavigateSection={onNavigateSection}
+          onClear={clearChat}
         />
       ) : (
         <ChatbotButton onClick={openChat} unreadCount={unreadCount} />

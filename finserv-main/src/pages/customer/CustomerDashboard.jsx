@@ -810,6 +810,14 @@ const CustomerDashboard = () => {
     fetchDashboardDataRef.current(true);
   }, []);
 
+  useEffect(() => {
+    const handleTriggerPayment = () => {
+      openQrPayment();
+    };
+    window.addEventListener("trigger-payment", handleTriggerPayment);
+    return () => window.removeEventListener("trigger-payment", handleTriggerPayment);
+  }, []);
+
 
   const handleLogout = () => {
     clearAuthSession();
@@ -907,11 +915,21 @@ const CustomerDashboard = () => {
       }
       await api.post("/documents/upload", formData);
       if (existingDocumentId && paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED) {
-        addLocalAdminNotification(
-          `${profile.fullName || "Customer"} ${wasRejected ? "reuploaded" : "replaced"} ${
-            DOCUMENT_LABELS[type] || type
-          }.`
-        );
+        const msg = `${profile.fullName || "Customer"} ${wasRejected ? "reuploaded" : "replaced"} ${
+          DOCUMENT_LABELS[type] || type
+        }.`;
+        addLocalAdminNotification(msg);
+        try {
+          await api.post("/notifications/send", {
+            senderId: userId,
+            receiverId: 1, // Admin id is 1
+            senderRole: "USER",
+            receiverRole: "ADMIN",
+            message: msg,
+          });
+        } catch (errNotif) {
+          console.error("Failed to send database notification to admin:", errNotif);
+        }
       }
       toast.success(
         `${DOCUMENT_LABELS[type] || type} ${existingDocumentId ? "replaced" : "uploaded"}.`
