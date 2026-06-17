@@ -7,6 +7,21 @@ export const getDealerUsers = async () => {
   const resolvedDealerId = session.dealerId || session.id;
   const resolvedCode = session.dealerCode || localStorage.getItem("dealerCode") || "";
   
+  let apiUsers = [];
+  if (resolvedCode) {
+    try {
+      const response = await api.get(`/user/dealer/${resolvedCode}`);
+      const data = response.data?.users || response.data?.data?.users || response.data || [];
+      if (Array.isArray(data)) {
+        apiUsers = data;
+      } else if (data && Array.isArray(data.users)) {
+        apiUsers = data.users;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch dealer users from database:", err);
+    }
+  }
+
   const localList = JSON.parse(localStorage.getItem("dealer_registered_users") || "[]");
   const list = localList.filter(
     (user) =>
@@ -14,10 +29,30 @@ export const getDealerUsers = async () => {
       (resolvedCode && String(user.dealerCode).toLowerCase() === String(resolvedCode).toLowerCase())
   );
   
-  return list.map((user) => ({
-    ...user,
-    fullName: user.fullName || user.name,
-  }));
+  const map = new Map();
+  [...apiUsers, ...list].forEach((user) => {
+    const id = user.userId || user.id;
+    if (!id) return;
+    const existing = map.get(String(id)) || {};
+    const merged = { ...existing, ...user, userId: id };
+    
+    // Preserve valid dealerCode
+    if (existing.dealerCode && (!user.dealerCode || String(user.dealerCode).trim() === "" || String(user.dealerCode).toUpperCase() === "N/A")) {
+      merged.dealerCode = existing.dealerCode;
+    }
+    
+    const fallbackDate = user.createdAt || existing.createdAt || user.paymentDate || existing.paymentDate || user.paymentUploadedAt || existing.paymentUploadedAt;
+    if (fallbackDate) {
+      merged.createdAt = fallbackDate;
+    }
+    
+    if (user.fullName || user.name) {
+      merged.fullName = user.fullName || user.name;
+    }
+    map.set(String(id), merged);
+  });
+
+  return Array.from(map.values());
 };
 
 export const getDealerUserDocuments = async (userId) => {

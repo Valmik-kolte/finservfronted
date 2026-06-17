@@ -334,11 +334,21 @@ const mergeUsersById = (...lists) => {
     if (!id) return;
     const existing = map.get(String(id)) || {};
     const merged = { ...existing, ...user, userId: id };
+    
+    // Preserve valid dealerCode
+    if (existing.dealerCode && (!user.dealerCode || String(user.dealerCode).trim() === "" || String(user.dealerCode).toUpperCase() === "N/A")) {
+      merged.dealerCode = existing.dealerCode;
+    }
+    
     if (user.name && !merged.fullName) {
       merged.fullName = user.name;
     }
     if (!merged.registrationType) {
       merged.registrationType = merged.dealerCode ? "DEALER" : "INDIVIDUAL";
+    }
+    const fallbackDate = user.createdAt || existing.createdAt || user.paymentDate || existing.paymentDate || user.paymentUploadedAt || existing.paymentUploadedAt;
+    if (fallbackDate) {
+      merged.createdAt = fallbackDate;
     }
     map.set(String(id), merged);
   });
@@ -668,7 +678,7 @@ const Dashboard = () => {
         ] =
           await Promise.allSettled([
             api.get("/user/all"),
-            Promise.resolve([]),
+            api.get("/chatbot/admin/users"),
             api.get("/user/history"),
             api.get("/dealer/all"),
             api.get("/documents/pending"),
@@ -681,6 +691,7 @@ const Dashboard = () => {
 
         const failedApis = getApiFailureSummary([
           { label: "/user/all", status: getFailureStatus(usersRes) },
+          { label: "/chatbot/admin/users", status: getFailureStatus(chatbotUsersRes) },
           { label: "/user/history", status: getFailureStatus(userHistoryRes) },
           { label: "/dealer/all", status: getFailureStatus(dealersRes) },
           { label: "/documents/pending", status: getFailureStatus(pendingRes) },
@@ -890,6 +901,13 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchAdminData(true);
+  }, [fetchAdminData, activeMenu]);
+
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchAdminData(false);
+    }, 10000);
+    return () => clearInterval(pollInterval);
   }, [fetchAdminData]);
 
 

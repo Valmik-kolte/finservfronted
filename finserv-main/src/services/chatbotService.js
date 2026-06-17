@@ -51,7 +51,19 @@ const mergeUsersById = (...lists) => {
   lists.flat().filter(Boolean).forEach((user) => {
     const id = user.userId || user.id;
     if (!id) return;
-    map.set(String(id), { ...(map.get(String(id)) || {}), ...user, userId: id });
+    const existing = map.get(String(id)) || {};
+    const merged = { ...existing, ...user, userId: id };
+    
+    // Preserve valid dealerCode
+    if (existing.dealerCode && (!user.dealerCode || String(user.dealerCode).trim() === "" || String(user.dealerCode).toUpperCase() === "N/A")) {
+      merged.dealerCode = existing.dealerCode;
+    }
+    
+    const fallbackDate = user.createdAt || existing.createdAt || user.paymentDate || existing.paymentDate || user.paymentUploadedAt || existing.paymentUploadedAt;
+    if (fallbackDate) {
+      merged.createdAt = fallbackDate;
+    }
+    map.set(String(id), merged);
   });
   return Array.from(map.values());
 };
@@ -237,16 +249,51 @@ const getDealerUsersFallbackList = async () => {
   const resolvedDealerId = dealer.dealerId;
   const resolvedCode = dealer.dealerCode;
 
+  let apiUsers = [];
+  if (resolvedCode) {
+    try {
+      const response = await api.get(`/user/dealer/${resolvedCode}`);
+      const data = response.data?.users || response.data?.data?.users || response.data || [];
+      if (Array.isArray(data)) {
+        apiUsers = data;
+      } else if (data && Array.isArray(data.users)) {
+        apiUsers = data.users;
+      }
+    } catch (err) {
+      console.warn("Failed to fetch dealer users from database for chatbot:", err);
+    }
+  }
+
   const list = readLocalDealerUsers().filter(
     (user) =>
       (resolvedDealerId && (String(user.dealerId) === String(resolvedDealerId) || String(user.assignedDealerId) === String(resolvedDealerId))) ||
       (resolvedCode && String(user.dealerCode).toLowerCase() === String(resolvedCode).toLowerCase())
   );
 
-  return list.map((user) => ({
-    ...user,
-    fullName: user.fullName || user.name,
-  }));
+  const map = new Map();
+  [...apiUsers, ...list].forEach((user) => {
+    const id = user.userId || user.id;
+    if (!id) return;
+    const existing = map.get(String(id)) || {};
+    const merged = { ...existing, ...user, userId: id };
+    
+    // Preserve valid dealerCode
+    if (existing.dealerCode && (!user.dealerCode || String(user.dealerCode).trim() === "" || String(user.dealerCode).toUpperCase() === "N/A")) {
+      merged.dealerCode = existing.dealerCode;
+    }
+    
+    const fallbackDate = user.createdAt || existing.createdAt || user.paymentDate || existing.paymentDate || user.paymentUploadedAt || existing.paymentUploadedAt;
+    if (fallbackDate) {
+      merged.createdAt = fallbackDate;
+    }
+    
+    if (user.fullName || user.name) {
+      merged.fullName = user.fullName || user.name;
+    }
+    map.set(String(id), merged);
+  });
+
+  return Array.from(map.values());
 };
 
 const getDocumentsForUsers = async (users) => {
@@ -534,15 +581,17 @@ const fallbackUserTimeline = async () => {
     });
   }
 
-  const [user, documents, historyRes] = await Promise.all([
+  const [user, documents, historyRes, personalRes] = await Promise.all([
     getUserProfile(userId),
     getUserDocuments(userId).catch(() => []),
-    api.get(`/user/history/${userId}`).catch(() => null)
+    api.get(`/user/history/${userId}`).catch(() => null),
+    api.put(`/personal-info/update/${userId}`, {}).catch(() => null)
   ]);
   const draft = readPersonalInfoDraft(userId);
+  const personalInfoDb = personalRes?.data?.data || personalRes?.data || null;
 
   // Check personal info completeness
-  const personalInfoSubmitted = !!(draft.address || user.address);
+  const personalInfoSubmitted = !!(draft.address || user.address || personalInfoDb?.address);
 
   const docsByType = new Set(documents.map((doc) => doc.documentType));
   const missingKYC = !docsByType.has("PAN") || !docsByType.has("AADHAAR");
@@ -761,10 +810,11 @@ const fallbackUserNextAction = async () => {
     });
   }
 
-  const [user, documents, historyRes] = await Promise.all([
+  const [user, documents, historyRes, personalRes] = await Promise.all([
     getUserProfile(userId),
     getUserDocuments(userId).catch(() => []),
-    api.get(`/user/history/${userId}`).catch(() => null)
+    api.get(`/user/history/${userId}`).catch(() => null),
+    api.put(`/personal-info/update/${userId}`, {}).catch(() => null)
   ]);
   
   const historyData = historyRes ? (unwrap(historyRes) || {}) : {};
@@ -783,9 +833,10 @@ const fallbackUserNextAction = async () => {
   }
 
   const draft = readPersonalInfoDraft(userId);
+  const personalInfoDb = personalRes?.data?.data || personalRes?.data || null;
 
   // Check personal info completeness
-  const personalInfoSubmitted = !!(draft.address || user.address);
+  const personalInfoSubmitted = !!(draft.address || user.address || personalInfoDb?.address);
   if (!personalInfoSubmitted) {
     return normalizeChatbotResponse({
       role: "USER",

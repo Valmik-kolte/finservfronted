@@ -223,7 +223,19 @@ const mergeUsersById = (...lists) => {
   lists.flat().filter(Boolean).forEach((user) => {
     const id = user.userId || user.id;
     if (!id) return;
-    map.set(String(id), { ...(map.get(String(id)) || {}), ...user, userId: id });
+    const existing = map.get(String(id)) || {};
+    const merged = { ...existing, ...user, userId: id };
+    
+    // Preserve valid dealerCode
+    if (existing.dealerCode && (!user.dealerCode || String(user.dealerCode).trim() === "" || String(user.dealerCode).toUpperCase() === "N/A")) {
+      merged.dealerCode = existing.dealerCode;
+    }
+    
+    const fallbackDate = user.createdAt || existing.createdAt || user.paymentDate || existing.paymentDate || user.paymentUploadedAt || existing.paymentUploadedAt;
+    if (fallbackDate) {
+      merged.createdAt = fallbackDate;
+    }
+    map.set(String(id), merged);
   });
   return Array.from(map.values());
 };
@@ -628,6 +640,22 @@ const DealerDashboard = () => {
           )
         );
         documentResponses.forEach((list) => dealerDocs.push(...list));
+        
+        const userDocDateMap = new Map();
+        documentResponses.forEach((list, index) => {
+          const user = normalizedUsers[index];
+          if (!user) return;
+          const validDates = list
+            .map((doc) => doc.uploadedAt || doc.createdAt || doc.updatedAt)
+            .filter(Boolean)
+            .map((dateStr) => new Date(dateStr))
+            .filter((d) => !isNaN(d.getTime()));
+          if (validDates.length > 0) {
+            const oldestDate = new Date(Math.min(...validDates));
+            userDocDateMap.set(String(user.userId), oldestDate.toISOString());
+          }
+        });
+
         const localList = getLocalDealerNotifications(resolvedDealerId, resolvedCode);
         const allNotifs = [...localList, ...notificationList].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
@@ -647,9 +675,16 @@ const DealerDashboard = () => {
         const enrichedUsers = normalizedUsers.map((u) => {
           const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
           const bankName = parsedBankAssignments[nameKey];
+          let updatedUser = { ...u };
+          if (!updatedUser.createdAt || String(updatedUser.createdAt).trim() === "" || String(updatedUser.createdAt).toUpperCase() === "N/A") {
+            const docDate = userDocDateMap.get(String(u.userId));
+            if (docDate) {
+              updatedUser.createdAt = docDate;
+            }
+          }
           if (bankName) {
             return {
-              ...u,
+              ...updatedUser,
               bankName,
               assignedBankName: bankName,
               bankId: 1,
@@ -657,7 +692,7 @@ const DealerDashboard = () => {
               bankStatus: "SENT_TO_BANK",
             };
           }
-          return u;
+          return updatedUser;
         });
 
         setDashboardSummary(summary);
@@ -803,10 +838,14 @@ const DealerDashboard = () => {
   }, [loadDashboard]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      loadDashboardRef.current(true);
-    }, 0);
-    return () => window.clearTimeout(timer);
+    loadDashboardRef.current(true);
+  }, [activeMenu]);
+
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      loadDashboardRef.current(false);
+    }, 10000);
+    return () => clearInterval(pollInterval);
   }, []);
 
 
