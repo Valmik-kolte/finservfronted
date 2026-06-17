@@ -541,8 +541,20 @@ const DealerDashboard = () => {
   }, [dealerCode, notificationDealerId]);
 
   const fetchDealerProfile = useCallback(async () => {
+    const sessionData = readDealerSession();
+    // Cache profile check: if already fully present in localStorage, reuse it to avoid duplicate api login calls
+    if (sessionData.dealerId && sessionData.dealerCode && sessionData.fullName && sessionData.email) {
+      return {
+        dealerId: sessionData.dealerId,
+        fullName: sessionData.fullName,
+        email: sessionData.email,
+        mobileNumber: sessionData.mobileNumber || "",
+        dealerCode: sessionData.dealerCode,
+        role: sessionData.role || "DEALER",
+      };
+    }
+
     try {
-      const sessionData = readDealerSession();
       const code = sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
       if (code) {
         const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
@@ -595,7 +607,6 @@ const DealerDashboard = () => {
     } catch (error) {
       console.warn("Failed to fetch dealer profile from API:", error);
     }
-    const sessionData = readDealerSession();
     return {
       dealerId: sessionData.dealerId || sessionData.id,
       fullName: sessionData.fullName || sessionData.name || "",
@@ -625,10 +636,7 @@ const DealerDashboard = () => {
 
       try {
         const dealerUsers = await getDealerUsers();
-        const [summary, notificationList] = await Promise.all([
-          getDealerDashboardSummary().catch(() => null),
-          getDealerNotifications({ dealerId: resolvedDealerId }).catch(() => []),
-        ]);
+        const notificationList = await getDealerNotifications({ dealerId: resolvedDealerId }).catch(() => []);
         const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
         const normalizedUsers = mergeUsersById(Array.isArray(dealerUsers) ? dealerUsers : [], localDealerUsers);
         const dealerDocs = [];
@@ -695,6 +703,16 @@ const DealerDashboard = () => {
           return updatedUser;
         });
 
+        // Compute summary locally from already fetched data to avoid duplicate API calls
+        const summary = {
+          usersCount: enrichedUsers.length,
+          documentsCount: dealerDocs.length,
+          pendingDocsCount: dealerDocs.filter(d => String(d.status).toUpperCase() === "PENDING").length,
+          approvedDocsCount: dealerDocs.filter(d => String(d.status).toUpperCase() === "APPROVED" || String(d.status).toUpperCase() === "VERIFIED").length,
+          rejectedDocsCount: dealerDocs.filter(d => String(d.status).toUpperCase() === "REJECTED").length,
+          bankAssignedCount: enrichedUsers.filter(u => u.assignedBankId || u.bankId || u.bankName || u.assignedBankName).length,
+        };
+
         setDashboardSummary(summary);
         setUsers(enrichedUsers);
         const ids = new Set(normalizedUsers.map((u) => u.userId));
@@ -738,7 +756,13 @@ const DealerDashboard = () => {
         setNotifications(allNotifs);
         return;
       } catch (error) {
-        if (![403, 404, 500].includes(error?.response?.status)) {
+        if (error?.response?.status === 403) {
+          toast.error("Your session is invalid or has expired. Redirecting to login...");
+          clearAuthSession();
+          navigate("/");
+          return;
+        }
+        if (![404, 500].includes(error?.response?.status)) {
           showError(error, "Dealer-specific dashboard API failed. Loading fallback data.");
         }
         setDashboardSummary(null);
@@ -840,14 +864,6 @@ const DealerDashboard = () => {
   useEffect(() => {
     loadDashboardRef.current(true);
   }, [activeMenu]);
-
-  useEffect(() => {
-    const pollInterval = setInterval(() => {
-      loadDashboardRef.current(false);
-    }, 10000);
-    return () => clearInterval(pollInterval);
-  }, []);
-
 
   useEffect(() => {
     return () => {
