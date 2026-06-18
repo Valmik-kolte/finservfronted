@@ -903,13 +903,6 @@ const Dashboard = () => {
     fetchAdminData(true);
   }, [fetchAdminData, activeMenu]);
 
-  useEffect(() => {
-    const pollInterval = setInterval(() => {
-      fetchAdminData(false);
-    }, 10000);
-    return () => clearInterval(pollInterval);
-  }, [fetchAdminData]);
-
 
   const handleLogout = () => {
     clearAuthSession();
@@ -1041,6 +1034,12 @@ const Dashboard = () => {
   const assignBank = async () => {
     if (!selectedUser || !assignBankId) {
       toast.error("Please select a bank.");
+      return;
+    }
+    const paymentStatus = paymentRequestByUserId.get(String(selectedUser.userId));
+    const isPaymentApproved = paymentStatus === "PAYMENT_APPROVED" || selectedUser.paymentDone === true;
+    if (!isPaymentApproved) {
+      toast.error("Payment is not approved yet. You cannot assign a bank to this user.");
       return;
     }
     const assignedBank = banks.find((bank) => String(bank.bankId) === String(assignBankId));
@@ -1224,7 +1223,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
+      const response = await fetch(`http://localhost:8082/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");
