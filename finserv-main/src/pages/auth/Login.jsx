@@ -223,7 +223,6 @@ const Login = () => {
         return;
       }
 
-      localStorage.setItem("token", token);
       const decoded = jwtDecode(token);
       const role = normalizeRole(firstValue(body?.role, decoded?.role));
       localStorage.setItem(`token_${role}`, token);
@@ -269,7 +268,7 @@ const Login = () => {
         loginTime: new Date().toISOString(),
       };
 
-      localStorage.setItem("role", role);
+
 
       if (role === "ADMIN") {
         localStorage.setItem("adminData", JSON.stringify(userObject));

@@ -21,7 +21,7 @@ import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
 import qrCode from "../../assets/upi_1780494820795.png";
 import Footer from "../landing/Footer";
-import { clearAuthSession } from "../../utils/authSession";
+import { clearAuthSession, getAuthToken } from "../../utils/authSession";
 import {
   READY2DRIVE_BASE_AMOUNT,
   READY2DRIVE_FEE_LABEL,
@@ -947,7 +947,7 @@ const CustomerDashboard = () => {
     if (!documentId) return;
 
     try {
-      const token = localStorage.getItem("token");
+      const token = getAuthToken();
       const response = await fetch(
         `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`,
         {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState } from "react";
+import { clearAuthSession } from "../utils/authSession";
 
 const AuthContext = createContext(null);
 
@@ -8,9 +9,7 @@ export const AuthProvider = ({ children }) => {
   const login = (userData) => setUser(userData);
   const logout = () => {
     setUser(null);
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
+    clearAuthSession();
   };
 
   return (
