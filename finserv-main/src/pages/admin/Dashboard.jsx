@@ -1380,6 +1380,13 @@ const Dashboard = () => {
 
   const renderActivePage = () => {
     if (activeMenu === "Users") {
+      const isSelectedUserPaymentApproved = (() => {
+        if (!selectedUser) return true;
+        if (isDealerAddedUser(selectedUser)) return true;
+        const paymentStatus = paymentRequestByUserId.get(String(selectedUser.userId));
+        return paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED;
+      })();
+
       return (
         <Users
           users={users}
@@ -1407,6 +1414,7 @@ const Dashboard = () => {
           closeUser={() => setSelectedUser(null)}
           openPreview={openPreview}
           deleteUser={deleteUser}
+          isPaymentApproved={isSelectedUserPaymentApproved}
         />
       );
     }

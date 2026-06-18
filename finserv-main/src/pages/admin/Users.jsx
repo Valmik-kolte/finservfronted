@@ -40,6 +40,7 @@ const Users = ({
   closeUser,
   openPreview,
   deleteUser,
+  isPaymentApproved = true,
 }) => (
   <>
     <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
@@ -157,12 +158,18 @@ const Users = ({
               {getAssignedBankName(selectedUser, banks) || "Not assigned"}
             </span>
           </p>
+          {!isPaymentApproved && (
+            <p className="text-xs text-amber-600 font-semibold mb-3">
+              * Payment is not approved yet. Bank assignment option is locked.
+            </p>
+          )}
           {!getAssignedBankId(selectedUser) && (
             <div className="flex flex-col gap-3 sm:flex-row">
               <select
                 value={assignBankId}
                 onChange={(event) => setAssignBankId(event.target.value)}
-                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3"
+                disabled={!isPaymentApproved}
+                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="">Select bank</option>
                 {banks.map((bank) => (
@@ -173,8 +180,8 @@ const Users = ({
               </select>
               <button
                 onClick={assignBank}
-                disabled={assigningBank}
-                className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60"
+                disabled={assigningBank || !isPaymentApproved}
+                className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {assigningBank ? "Assigning..." : "Assign"}
               </button>
