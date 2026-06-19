@@ -14,12 +14,12 @@ import {
   FaPaperPlane,
   FaRedo,
   FaRupeeSign,
+  FaSpinner,
   FaTimes,
   FaUniversity,
 } from "react-icons/fa";
 import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
-import qrCode from "../../assets/upi_1780494820795.png";
 import Footer from "../landing/Footer";
 import { clearAuthSession, getAuthToken } from "../../utils/authSession";
 import {
@@ -64,6 +64,7 @@ const STATUS_STYLES = {
 };
 
 const OPTIONAL_DOCUMENT_TYPES = new Set();
+const RAZORPAY_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 const VEHICLE_REQUIRED_TYPES = [
   "RC",
   "INSURANCE",
@@ -123,6 +124,58 @@ const getUserSession = () => {
 };
 
 const unwrap = (response) => response?.data?.data ?? response?.data ?? null;
+
+const getApiUrl = (path) => `${api.defaults.baseURL}${path}`;
+
+const getErrorMessage = (error) => {
+  const data = error?.response?.data;
+  if (typeof data === "string") return data;
+  if (data?.message) return data.message;
+  if (data?.error) return data.error;
+  if (data) return JSON.stringify(data);
+  return error?.message || "Unknown error";
+};
+
+const callPaymentSuccess = async (userId, payload) => {
+  const encodedOrderId = encodeURIComponent(payload.orderId || "");
+  const encodedPaymentId = encodeURIComponent(payload.paymentId || "");
+  const pathVariablePath = `/user/payment-success/${userId}/${encodedOrderId}/${encodedPaymentId}`;
+
+  try {
+    const response = await api.put(pathVariablePath, null);
+    return { response, requestUrl: getApiUrl(pathVariablePath), requestBody: null };
+  } catch (error) {
+    error.paymentSuccessRequest = {
+      requestUrl: getApiUrl(pathVariablePath),
+      requestBody: null,
+    };
+    throw error;
+  }
+};
+
+const loadRazorpayCheckout = () =>
+  new Promise((resolve, reject) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+
+    const existingScript = document.querySelector(`script[src="${RAZORPAY_CHECKOUT_SCRIPT}"]`);
+    if (existingScript) {
+      existingScript.addEventListener("load", () => resolve(true), { once: true });
+      existingScript.addEventListener("error", () => reject(new Error("Unable to load Razorpay Checkout.")), {
+        once: true,
+      });
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = RAZORPAY_CHECKOUT_SCRIPT;
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => reject(new Error("Unable to load Razorpay Checkout."));
+    document.body.appendChild(script);
+  });
 
 const fetchPersonalInfoFromBackend = async (userId) => {
   try {
@@ -571,8 +624,7 @@ const CustomerDashboard = () => {
   const [uploadingType, setUploadingType] = useState("");
   const [preview, setPreview] = useState(null);
   const [paymentPromptOpen, setPaymentPromptOpen] = useState(false);
-  const [qrPaymentOpen, setQrPaymentOpen] = useState(false);
-  const [qrImageError, setQrImageError] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
   const initialLoadRef = useRef(true);
   const [employmentType, setEmploymentType] = useState("Salaried");
@@ -684,7 +736,8 @@ const CustomerDashboard = () => {
 
         if (userRes.status === "fulfilled") {
           const user = unwrap(userRes.value) || {};
-          const isApproved = backendPaymentApproved || user.paymentDone;
+          const isPaid = Boolean(user.paymentDone);
+          const isApproved = backendPaymentApproved;
           const nextProfile = {
             ...emptyProfile,
             ...user,
@@ -748,10 +801,12 @@ const CustomerDashboard = () => {
           }
 
           let statusVal = PAYMENT_STATUS.DRAFT;
-          if (isApproved) {
-            statusVal = PAYMENT_STATUS.PAYMENT_APPROVED;
-          } else if (dbPaymentStatus) {
+          if (dbPaymentStatus) {
             statusVal = dbPaymentStatus;
+          } else if (isApproved) {
+            statusVal = PAYMENT_STATUS.PAYMENT_APPROVED;
+          } else if (isPaid) {
+            statusVal = PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING;
           } else {
             const docsMap = loadedDocuments.reduce((acc, doc) => {
               const type = getDocumentType(doc);
@@ -810,13 +865,134 @@ const CustomerDashboard = () => {
     fetchDashboardDataRef.current(true);
   }, []);
 
+  const startRazorpayPayment = useCallback(async () => {
+    if (!userId) {
+      toast.error("User session not found. Please login again.");
+      return;
+    }
+
+    const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY;
+    if (!razorpayKey) {
+      toast.error("Razorpay key is not configured.");
+      return;
+    }
+
+    setPaymentProcessing(true);
+    try {
+      await loadRazorpayCheckout();
+      const createOrderPath = `/user/create-order/${userId}`;
+
+      const orderResponse = await api.post(createOrderPath);
+      const order = unwrap(orderResponse) || {};
+
+      if (!order.orderId || !order.amount || !order.currency) {
+        throw new Error("Invalid payment order received.");
+      }
+
+      const checkoutOrder = {
+        orderId: String(order.orderId).trim(),
+        amount: Number(order.amount),
+        currency: String(order.currency).trim().toUpperCase(),
+      };
+
+      if (!checkoutOrder.orderId || !Number.isFinite(checkoutOrder.amount) || checkoutOrder.amount <= 0) {
+        throw new Error("Invalid payment order received.");
+      }
+
+      const checkoutOptions = {
+        key: razorpayKey,
+        amount: checkoutOrder.amount,
+        currency: checkoutOrder.currency,
+        order_id: checkoutOrder.orderId,
+        name: "Vahan Finserv",
+        description: "Application Fee",
+        prefill: {
+          name: profile.fullName || personalInfo.fullName || "",
+          email: profile.email || personalInfo.email || "",
+          contact: profile.mobileNumber || personalInfo.mobileNumber || "",
+        },
+        handler: async (response) => {
+          setPaymentProcessing(true);
+          const payload = {
+            orderId: response.razorpay_order_id,
+            paymentId: response.razorpay_payment_id,
+          };
+
+          try {
+            const { response: successResponse, requestUrl, requestBody } = await callPaymentSuccess(userId, payload);
+
+            try {
+              await api.post("/notifications/send", {
+                senderId: userId,
+                receiverId: userId,
+                senderRole: "USER",
+                receiverRole: "USER",
+                message: "PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING",
+              });
+            } catch (errNotif) {
+              console.error("Failed to send payment verification pending notification:", errNotif);
+            }
+
+            try {
+              await api.post("/notifications/send", {
+                senderId: userId,
+                receiverId: 1,
+                senderRole: "USER",
+                receiverRole: "ADMIN",
+                message: `${profile.fullName || "Customer"} has submitted documents for payment verification.`,
+              });
+            } catch (errAdminNotif) {
+              console.error("Failed to send admin payment verification notification:", errAdminNotif);
+            }
+
+            await fetchDashboardDataRef.current(false);
+            setPaymentStatus(PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING);
+            setPaymentPromptOpen(false);
+            setActiveMenu("Status");
+            toast.success("Payment successful. Your application is pending admin approval.");
+          } catch (error) {
+            toast.error(getErrorMessage(error) || "Payment succeeded, but confirmation failed.");
+          } finally {
+            setPaymentProcessing(false);
+          }
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentProcessing(false);
+          },
+        },
+      };
+
+      const checkout = new window.Razorpay(checkoutOptions);
+
+      checkout.on("payment.failed", (response) => {
+        setPaymentProcessing(false);
+        toast.error(response?.error?.description || "Payment failed. Please try again.");
+      });
+
+      checkout.open();
+      setPaymentProcessing(false);
+    } catch (error) {
+      setPaymentProcessing(false);
+      toast.error(error?.response?.data?.message || error?.message || "Unable to start payment.");
+    }
+  }, [
+    userId,
+    profile.fullName,
+    profile.email,
+    profile.mobileNumber,
+    personalInfo.fullName,
+    personalInfo.email,
+    personalInfo.mobileNumber,
+  ]);
+
   useEffect(() => {
     const handleTriggerPayment = () => {
-      openQrPayment();
+      startRazorpayPayment();
     };
     window.addEventListener("trigger-payment", handleTriggerPayment);
     return () => window.removeEventListener("trigger-payment", handleTriggerPayment);
-  }, []);
+  }, [startRazorpayPayment]);
 
 
   const handleLogout = () => {
@@ -949,7 +1125,7 @@ const CustomerDashboard = () => {
     try {
       const token = getAuthToken();
       const response = await fetch(
-        `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`,
+        `${api.defaults.baseURL}/documents/preview/${documentId}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
@@ -1152,53 +1328,6 @@ const CustomerDashboard = () => {
     }
   };
 
-  const openQrPayment = () => {
-    setQrImageError(false);
-    setPaymentPromptOpen(false);
-    setQrPaymentOpen(true);
-  };
-
-  const verifyPayment = async () => {
-    setSaving(true);
-    try {
-      // 1. Send notification of PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING to user
-      try {
-        await api.post("/notifications/send", {
-          senderId: userId,
-          receiverId: userId,
-          senderRole: "USER",
-          receiverRole: "USER",
-          message: "PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING",
-        });
-      } catch (errNotif) {
-        console.error("Failed to send payment verification pending notification:", errNotif);
-      }
-
-      // 2. Send notification to admin about documents submitted for verification
-      try {
-        await api.post("/notifications/send", {
-          senderId: userId,
-          receiverId: 1,
-          senderRole: "USER",
-          receiverRole: "ADMIN",
-          message: `${profile.fullName || "Customer"} has submitted documents for payment verification.`,
-        });
-      } catch (errAdminNotif) {
-        console.error("Failed to send admin notification:", errAdminNotif);
-      }
-
-      setPaymentStatus(PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING);
-      setQrPaymentOpen(false);
-      setActiveMenu("Status");
-      toast.success("Payment submitted for approval successfully!");
-    } catch (err) {
-      console.error("Failed to submit payment:", err);
-      toast.error("Failed to submit payment. Please try again.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const currentDocumentTypes =
     currentStep === 4 ? incomeTypes : STEPS.find((step) => step.id === currentStep)?.types || [];
   const unreadCount = notifications.filter((item) => !item.read).length;
@@ -1315,7 +1444,8 @@ const CustomerDashboard = () => {
                   rejectedDocuments={rejectedDocuments}
                   assignedBank={assignedBank}
                   paymentStatus={paymentStatus}
-                  onPayNow={openQrPayment}
+                  onPayNow={startRazorpayPayment}
+                  paymentProcessing={paymentProcessing}
                   setActiveMenu={setActiveMenu}
                   markNotificationRead={markNotificationRead}
                   clearAllNotifications={clearAllNotifications}
@@ -1346,7 +1476,8 @@ const CustomerDashboard = () => {
                   submitForApproval={submitForApproval}
                   openPreview={openPreview}
                   paymentStatus={paymentStatus}
-                  onPayNow={openQrPayment}
+                  onPayNow={startRazorpayPayment}
+                  paymentProcessing={paymentProcessing}
                 />
               )}
 
@@ -1360,7 +1491,8 @@ const CustomerDashboard = () => {
                   uploadForType={uploadForType}
                   uploadingType={uploadingType}
                   paymentStatus={paymentStatus}
-                  onPayNow={openQrPayment}
+                  onPayNow={startRazorpayPayment}
+                  paymentProcessing={paymentProcessing}
                 />
               )}
 
@@ -1427,16 +1559,8 @@ const CustomerDashboard = () => {
       {paymentPromptOpen && (
         <PaymentPromptModal
           onClose={() => setPaymentPromptOpen(false)}
-          onPayNow={openQrPayment}
-        />
-      )}
-
-      {qrPaymentOpen && (
-        <QrPaymentModal
-          qrImageError={qrImageError}
-          setQrImageError={setQrImageError}
-          onClose={() => setQrPaymentOpen(false)}
-          onVerifyPayment={verifyPayment}
+          onPayNow={startRazorpayPayment}
+          paymentProcessing={paymentProcessing}
         />
       )}
 
@@ -1466,7 +1590,7 @@ const countsFromDocuments = (documents = []) =>
     }
   );
 
-const PaymentPromptModal = ({ onClose, onPayNow }) => (
+const PaymentPromptModal = ({ onClose, onPayNow, paymentProcessing }) => (
   <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
     <div className="bg-white rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl">
       <div className="flex items-start justify-between gap-4">
@@ -1501,9 +1625,11 @@ const PaymentPromptModal = ({ onClose, onPayNow }) => (
       <div className="mt-6 flex flex-col sm:flex-row gap-3">
         <button
           onClick={onPayNow}
-          className="flex-1 bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
+          disabled={paymentProcessing}
+          className="flex-1 bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold disabled:opacity-60 flex items-center justify-center gap-2"
         >
-          Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
+          {paymentProcessing && <FaSpinner className="animate-spin" />}
+          {paymentProcessing ? "Processing..." : `Pay ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}`}
         </button>
         <button
           onClick={onClose}
@@ -1512,65 +1638,6 @@ const PaymentPromptModal = ({ onClose, onPayNow }) => (
           Later
         </button>
       </div>
-    </div>
-  </div>
-);
-
-const QrPaymentModal = ({ qrImageError, setQrImageError, onClose, onVerifyPayment }) => (
-  <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
-    <div className="bg-white rounded-2xl w-full max-w-md p-4 sm:p-6 shadow-2xl">
-      <div className="flex items-center justify-between gap-4 mb-5">
-        <div>
-          <h2 className="text-xl font-bold text-[#0B2A4A]">Ready2Drive Payment</h2>
-        </div>
-        <button
-          onClick={onClose}
-          className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center shrink-0"
-          aria-label="Close QR payment"
-        >
-          <FaTimes />
-        </button>
-      </div>
-
-      <div className="mb-4 rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-slate-500">Processing fee</span>
-          <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_BASE_AMOUNT)}</span>
-        </div>
-        <div className="mt-2 flex items-center justify-between text-sm">
-          <span className="text-slate-500">{READY2DRIVE_GST_LABEL}</span>
-          <span className="font-bold text-[#0B2A4A]">{formatINR(READY2DRIVE_GST_AMOUNT)}</span>
-        </div>
-        <div className="mt-3 border-t border-slate-200 pt-3 flex items-center justify-between">
-          <span className="font-bold text-[#0B2A4A]">Total payable</span>
-          <span className="text-lg font-black text-[#0B2A4A]">{formatINR(READY2DRIVE_TOTAL_AMOUNT)}</span>
-        </div>
-      </div>
-
-      <div className="bg-[#F4F6F9] rounded-2xl border border-slate-100 p-4 sm:p-5 min-h-[220px] sm:min-h-[260px] flex items-center justify-center">
-        {qrImageError ? (
-          <div className="text-center">
-            <p className="text-sm font-bold text-[#0B2A4A]">QR image placeholder</p>
-            <p className="text-xs text-slate-500 mt-2">
-              Add your QR image in src/assets.
-            </p>
-          </div>
-        ) : (
-          <img
-            src={qrCode}
-            alt="Ready2Drive payment QR code"
-            onError={() => setQrImageError(true)}
-            className="max-h-60 w-full object-contain"
-          />
-        )}
-      </div>
-
-      <button
-        onClick={onVerifyPayment}
-        className="mt-5 w-full bg-[#27D3C3] text-[#0B2A4A] px-5 py-3 rounded-2xl font-bold font-sans"
-      >
-        Done
-      </button>
     </div>
   </div>
 );
@@ -1610,12 +1677,18 @@ const DashboardTab = ({
   assignedBank,
   paymentStatus,
   onPayNow,
+  paymentProcessing,
   setActiveMenu,
   markNotificationRead,
   clearAllNotifications,
   fadingNotifications,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
+  const showAdminDocumentCounts =
+    paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING ||
+    paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED;
+  const adminPendingDocuments = showAdminDocumentCounts ? counts.pendingCount || 0 : 0;
+  const adminApprovedDocuments = showAdminDocumentCounts ? counts.approvedCount || 0 : 0;
   const cards = [
     {
       label: "Loan Amount",
@@ -1643,25 +1716,29 @@ const DashboardTab = ({
     },
     {
       label: "Admin Approval Pending",
-      value: counts.pendingCount || 0,
+      value: adminPendingDocuments,
       icon: <FaBell />,
-      items: documents
-        .filter((doc) => doc.status === "PENDING")
-        .map((doc) => ({
-          title: DOCUMENT_LABELS[doc.documentType] || doc.documentType || doc.fileName || "Document",
-          subtitle: doc.fileName,
-        })),
+      items: showAdminDocumentCounts
+        ? documents
+            .filter((doc) => doc.status === "PENDING")
+            .map((doc) => ({
+              title: DOCUMENT_LABELS[doc.documentType] || doc.documentType || doc.fileName || "Document",
+              subtitle: doc.fileName,
+            }))
+        : [],
     },
     {
       label: "Admin Approved",
-      value: counts.approvedCount || 0,
+      value: adminApprovedDocuments,
       icon: <FaCheckCircle />,
-      items: documents
-        .filter((doc) => doc.status === "APPROVED")
-        .map((doc) => ({
-          title: DOCUMENT_LABELS[doc.documentType] || doc.documentType || doc.fileName || "Document",
-          subtitle: doc.fileName,
-        })),
+      items: showAdminDocumentCounts
+        ? documents
+            .filter((doc) => doc.status === "APPROVED")
+            .map((doc) => ({
+              title: DOCUMENT_LABELS[doc.documentType] || doc.documentType || doc.fileName || "Document",
+              subtitle: doc.fileName,
+            }))
+        : [],
     },
     {
       label: "Assigned Bank",
@@ -1690,9 +1767,11 @@ const DashboardTab = ({
           </div>
           <button
             onClick={onPayNow}
-            className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
+            disabled={paymentProcessing}
+            className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
+            {paymentProcessing && <FaSpinner className="animate-spin" />}
+            {paymentProcessing ? "Processing..." : `Pay ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}`}
           </button>
         </div>
       )}
@@ -1836,6 +1915,7 @@ const DocumentsTab = ({
   openPreview,
   paymentStatus,
   onPayNow,
+  paymentProcessing,
 }) => {
   const requiredTypesForStep = () => {
     if (currentStep === 2) return ["PAN", "AADHAAR"];
@@ -1960,6 +2040,7 @@ const DocumentsTab = ({
         locked={!!assignedBank}
         paymentStatus={paymentStatus}
         onPayNow={onPayNow}
+        paymentProcessing={paymentProcessing}
       />
     ) : (
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
@@ -2029,6 +2110,7 @@ const VerifySubmitStep = ({
   locked,
   paymentStatus,
   onPayNow,
+  paymentProcessing,
 }) => (
   <div className="space-y-6">
     <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
@@ -2177,15 +2259,18 @@ const VerifySubmitStep = ({
         disabled={
           locked ||
           saving ||
+          paymentProcessing ||
           paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING ||
           paymentStatus === PAYMENT_STATUS.PAYMENT_APPROVED ||
           missingRequiredTypes.length > 0
         }
         className="bg-[#27D3C3] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold disabled:opacity-50 flex items-center justify-center gap-2"
       >
-        <FaPaperPlane />
+        {paymentProcessing ? <FaSpinner className="animate-spin" /> : <FaPaperPlane />}
         {locked
           ? "Locked"
+          : paymentProcessing
+          ? "Processing..."
           : saving
           ? "Saving..."
           : paymentStatus === PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING
@@ -2264,6 +2349,7 @@ const StatusTab = ({
   uploadingType,
   paymentStatus,
   onPayNow,
+  paymentProcessing,
 }) => {
   const activeStep = getActiveTrackingStep(documents, counts, assignedBank, paymentStatus);
 
@@ -2279,9 +2365,11 @@ const StatusTab = ({
           </div>
           <button
             onClick={onPayNow}
-            className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold"
+            disabled={paymentProcessing}
+            className="bg-[#0B2A4A] text-white px-5 py-3 rounded-2xl font-bold disabled:opacity-60 flex items-center justify-center gap-2"
           >
-            Pay {formatINR(READY2DRIVE_TOTAL_AMOUNT)}
+            {paymentProcessing && <FaSpinner className="animate-spin" />}
+            {paymentProcessing ? "Processing..." : `Pay ${formatINR(READY2DRIVE_TOTAL_AMOUNT)}`}
           </button>
         </div>
       )}

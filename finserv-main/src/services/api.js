@@ -4,7 +4,7 @@ import axios from "axios";
 import { getAuthToken, clearAuthSession } from "../utils/authSession";
 
 const api = axios.create({
-  baseURL: "http://localhost:8082/api"
+  baseURL: import.meta.env.VITE_API_BASE_URL || "https://v1.vahanfinserv.com/api"
 });
 
 // Attach JWT token automatically

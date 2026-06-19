@@ -28,7 +28,7 @@ export const getDocumentCounts = (userId) =>
   api.get(`/documents/count/${userId}`);
 
 export const getDocumentPreviewUrl = (documentId) =>
-  `https://v1.vahanfinserv.com/api/documents/preview/${documentId}`;
+  ` https://v1.vahanfinserv.com/api/documents/preview/${documentId}`;
 
 export const getDocumentDownloadUrl = (documentId) =>
-  `https://v1.vahanfinserv.com/api/documents/download/${documentId}`;
+  ` https://v1.vahanfinserv.com/api/documents/download/${documentId}`;

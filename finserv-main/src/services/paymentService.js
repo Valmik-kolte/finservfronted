@@ -27,22 +27,43 @@ export const getPaymentVerificationRequests = async () => {
     const dbUsers = unwrap(historyRes) || [];
     const notifications = notifRes.data || [];
 
-    // Identify userIds who have submitted a verification notification to the admin
+    const approvedUserIds = new Set(
+      notifications
+        .filter((notif) => notif.message === "PAYMENT_STATUS:PAYMENT_APPROVED")
+        .map((notif) => String(notif.receiverId || notif.senderId))
+    );
+
+    const rejectedUserIds = new Set(
+      notifications
+        .filter((notif) => notif.message === "PAYMENT_STATUS:PAYMENT_REJECTED")
+        .map((notif) => String(notif.receiverId || notif.senderId))
+    );
+
+    // Identify userIds who have paid and are waiting for admin payment approval.
     const pendingRequestUserIds = new Set(
       notifications
         .filter(
           (notif) =>
             notif.message &&
-            notif.message.includes("submitted documents for payment verification")
+            (notif.message === "PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING" ||
+              notif.message.includes("submitted documents for payment verification"))
         )
-        .map((notif) => String(notif.senderId))
+        .map((notif) => String(notif.senderId || notif.receiverId))
     );
 
     return dbUsers.map((dbUser) => {
       let status = "PAYMENT_PENDING";
-      if (dbUser.paymentStatus === "APPROVED" || dbUser.paymentDone) {
+      if (approvedUserIds.has(String(dbUser.userId)) || dbUser.paymentStatus === "PAYMENT_APPROVED") {
         status = "PAYMENT_APPROVED";
-      } else if (pendingRequestUserIds.has(String(dbUser.userId))) {
+      } else if (rejectedUserIds.has(String(dbUser.userId)) || dbUser.paymentStatus === "PAYMENT_REJECTED") {
+        status = "PAYMENT_REJECTED";
+      } else if (
+        pendingRequestUserIds.has(String(dbUser.userId)) ||
+        dbUser.paymentDone ||
+        dbUser.paymentStatus === "APPROVED" ||
+        dbUser.paymentStatus === "VERIFICATION_PENDING" ||
+        dbUser.paymentStatus === "PAYMENT_VERIFICATION_PENDING"
+      ) {
         status = "PAYMENT_VERIFICATION_PENDING";
       }
 
@@ -65,11 +86,18 @@ export const getPaymentVerificationRequests = async () => {
 };
 
 export const approvePayment = async (userId) => {
-  const response = await api.put(`/user/payment-success/${userId}?amount=116.82`);
   const adminId = getAdminId();
 
   try {
-    // Send notification to the user in the database
+    await api.post("/notifications/send", {
+      senderId: userId,
+      receiverId: adminId,
+      senderRole: "USER",
+      receiverRole: "ADMIN",
+      role: "ADMIN",
+      message: "PAYMENT_STATUS:PAYMENT_APPROVED",
+    });
+
     await api.post("/notifications/send", {
       senderId: adminId,
       receiverId: userId,
@@ -82,14 +110,22 @@ export const approvePayment = async (userId) => {
     console.error("Failed to send approval notification to database:", e);
   }
 
-  return unwrap(response);
+  return { success: true };
 };
 
 export const rejectPayment = async (userId) => {
   const adminId = getAdminId();
 
   try {
-    // Send notification to the user in the database
+    await api.post("/notifications/send", {
+      senderId: userId,
+      receiverId: adminId,
+      senderRole: "USER",
+      receiverRole: "ADMIN",
+      role: "ADMIN",
+      message: "PAYMENT_STATUS:PAYMENT_REJECTED",
+    });
+
     await api.post("/notifications/send", {
       senderId: adminId,
       receiverId: userId,

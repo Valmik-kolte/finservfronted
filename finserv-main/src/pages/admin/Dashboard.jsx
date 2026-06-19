@@ -635,6 +635,19 @@ const Dashboard = () => {
       ),
     [paymentRequests]
   );
+  const adminVisibleUsers = useMemo(
+    () =>
+      users.filter((user) => {
+        if (isDealerAddedUser(user)) return true;
+        const paymentStatus = paymentRequestByUserId.get(String(user.userId || user.id));
+        return Boolean(paymentStatus) && paymentStatus !== PAYMENT_STATUS.PAYMENT_PENDING;
+      }),
+    [paymentRequestByUserId, users]
+  );
+  const adminVisiblePersonalInfos = useMemo(() => {
+    const visibleUserIds = new Set(adminVisibleUsers.map((user) => String(user.userId || user.id)));
+    return personalInfos.filter((info) => visibleUserIds.has(String(info.userId)));
+  }, [adminVisibleUsers, personalInfos]);
   const adminVisibleDocs = useMemo(
     () =>
       allKnownDocs.filter((doc) => {
@@ -1037,7 +1050,7 @@ const Dashboard = () => {
       return;
     }
     const paymentStatus = paymentRequestByUserId.get(String(selectedUser.userId));
-    const isPaymentApproved = paymentStatus === "PAYMENT_APPROVED" || selectedUser.paymentDone === true;
+    const isPaymentApproved = paymentStatus === "PAYMENT_APPROVED";
     if (!isPaymentApproved) {
       toast.error("Payment is not approved yet. You cannot assign a bank to this user.");
       return;
@@ -1223,7 +1236,7 @@ const Dashboard = () => {
   const openPreview = async (documentId) => {
     try {
       const token = getAuthToken();
-      const response = await fetch(`https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
+      const response = await fetch(` https://v1.vahanfinserv.com/api/documents/preview/${documentId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!response.ok) throw new Error("Preview failed");
@@ -1389,7 +1402,7 @@ const Dashboard = () => {
 
       return (
         <Users
-          users={users}
+          users={adminVisibleUsers}
           banks={banks}
           userApiWarning={apiWarnings.find((warning) => warning.startsWith("/user/all"))}
           searchName={searchName}
@@ -1478,9 +1491,9 @@ const Dashboard = () => {
     if (activeMenu === "Reports") {
       return (
         <Reports
-          users={users}
+          users={adminVisibleUsers}
           dealers={dealers}
-          personalInfos={personalInfos}
+          personalInfos={adminVisiblePersonalInfos}
           pendingDocs={effectivePendingDocs}
           verifiedDocs={effectiveVerifiedDocs}
           approvedDocsCount={approvedDocsCount}
@@ -1502,7 +1515,7 @@ const Dashboard = () => {
 
     return (
       <DashboardOverview
-        users={users}
+        users={adminVisibleUsers}
         dealers={dealers}
         pendingDocs={effectivePendingDocs}
         approvedDocs={effectiveApprovedDocs}
