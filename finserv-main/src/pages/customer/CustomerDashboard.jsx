@@ -22,6 +22,7 @@ import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
 import Footer from "../landing/Footer";
 import { clearAuthSession, getAuthToken } from "../../utils/authSession";
+import { RAZORPAY_KEY_ID } from "../../config/appConfig";
 import {
   READY2DRIVE_BASE_AMOUNT,
   READY2DRIVE_FEE_LABEL,
@@ -871,7 +872,7 @@ const CustomerDashboard = () => {
       return;
     }
 
-    const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY;
+    const razorpayKey = RAZORPAY_KEY_ID;
     if (!razorpayKey) {
       toast.error("Razorpay key is not configured.");
       return;
