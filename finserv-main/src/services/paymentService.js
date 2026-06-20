@@ -1,45 +1,105 @@
 import api from "./api";
 
 const unwrap = (response) => response.data?.data ?? response.data;
+const asList = (response) => {
+  if (Array.isArray(response)) return response;
+
+  const data = response?.data !== undefined ? unwrap(response) : response;
+  if (Array.isArray(data)) return data;
+
+  const nestedList = [
+    data?.data,
+    data?.content,
+    data?.users,
+    data?.notifications,
+    data?.items,
+    data?.records,
+    data?.result,
+    data?.results,
+  ].find(Array.isArray);
+
+  return nestedList || [];
+};
 
 const getAdminId = () => {
   try {
     const admin = JSON.parse(localStorage.getItem("adminData") || "{}");
-    return admin.id || 1;
+    return admin.id || admin.adminId || 1;
   } catch {
     return 1;
   }
 };
 
-export const markPaymentSuccess = async (userId) => {
-  const response = await api.put(`/user/payment-success/${userId}?amount=116.82`);
+const getNotificationUserId = (notif) => {
+  if (notif.senderRole === "USER" && notif.senderId) return notif.senderId;
+  if (notif.receiverRole === "USER" && notif.receiverId) return notif.receiverId;
+  return notif.userId || notif.customerId || notif.senderId || notif.receiverId;
+};
+
+const normalizeStatus = (status) => String(status || "").trim().toUpperCase();
+
+const isPaymentVerificationPending = (user) => {
+  const status = normalizeStatus(user.paymentStatus || user.status);
+  const hasPaymentReference = Boolean(
+    user.paymentId ||
+    user.razorpayPaymentId ||
+    user.razorpay_payment_id ||
+    user.transactionId ||
+    user.paymentReferenceId
+  );
+
+  return (
+    user.paymentDone === true ||
+    user.paid === true ||
+    hasPaymentReference ||
+    status === "APPROVED" ||
+    status === "VERIFICATION_PENDING" ||
+    status === "PAYMENT_VERIFICATION_PENDING" ||
+    status === "PAYMENT_SUCCESS" ||
+    status === "SUCCESS" ||
+    status === "COMPLETED" ||
+    status === "PAID"
+  );
+};
+
+export const markPaymentSuccess = async (userId, payload = {}) => {
+  const encodedOrderId = encodeURIComponent(payload.orderId || "");
+  const encodedPaymentId = encodeURIComponent(payload.paymentId || "");
+  const response = await api.put(
+    `/user/payment-success/${userId}/${encodedOrderId}/${encodedPaymentId}`,
+    null
+  );
   return unwrap(response);
 };
 
 export const getPaymentVerificationRequests = async () => {
   try {
     const adminId = getAdminId();
-    const [historyRes, notifRes] = await Promise.all([
+    const [historyRes, notifRes] = await Promise.allSettled([
       api.get("/user/history"),
       api.get(`/notifications/${adminId}`)
     ]);
 
-    const dbUsers = unwrap(historyRes) || [];
-    const notifications = notifRes.data || [];
+    if (historyRes.status === "rejected") {
+      throw historyRes.reason;
+    }
+
+    const dbUsers = asList(historyRes.value);
+    const notifications = notifRes.status === "fulfilled" ? asList(notifRes.value) : [];
 
     const approvedUserIds = new Set(
       notifications
         .filter((notif) => notif.message === "PAYMENT_STATUS:PAYMENT_APPROVED")
-        .map((notif) => String(notif.receiverId || notif.senderId))
+        .map((notif) => String(getNotificationUserId(notif)))
     );
 
     const rejectedUserIds = new Set(
       notifications
         .filter((notif) => notif.message === "PAYMENT_STATUS:PAYMENT_REJECTED")
-        .map((notif) => String(notif.receiverId || notif.senderId))
+        .map((notif) => String(getNotificationUserId(notif)))
     );
 
-    // Identify userIds who have paid and are waiting for admin payment approval.
+    // Notifications are helpful, but payment requests must not depend on a hardcoded admin id.
     const pendingRequestUserIds = new Set(
       notifications
         .filter(
@@ -48,27 +108,24 @@ export const getPaymentVerificationRequests = async () => {
             (notif.message === "PAYMENT_STATUS:PAYMENT_VERIFICATION_PENDING" ||
               notif.message.includes("submitted documents for payment verification"))
         )
-        .map((notif) => String(notif.senderId || notif.receiverId))
+        .map((notif) => String(getNotificationUserId(notif)))
     );
 
     return dbUsers.map((dbUser) => {
       let status = "PAYMENT_PENDING";
-      if (approvedUserIds.has(String(dbUser.userId)) || dbUser.paymentStatus === "PAYMENT_APPROVED") {
+      const userId = dbUser.userId || dbUser.id;
+      const paymentStatus = normalizeStatus(dbUser.paymentStatus || dbUser.status);
+
+      if (approvedUserIds.has(String(userId)) || paymentStatus === "PAYMENT_APPROVED") {
         status = "PAYMENT_APPROVED";
-      } else if (rejectedUserIds.has(String(dbUser.userId)) || dbUser.paymentStatus === "PAYMENT_REJECTED") {
+      } else if (rejectedUserIds.has(String(userId)) || paymentStatus === "PAYMENT_REJECTED") {
         status = "PAYMENT_REJECTED";
-      } else if (
-        pendingRequestUserIds.has(String(dbUser.userId)) ||
-        dbUser.paymentDone ||
-        dbUser.paymentStatus === "APPROVED" ||
-        dbUser.paymentStatus === "VERIFICATION_PENDING" ||
-        dbUser.paymentStatus === "PAYMENT_VERIFICATION_PENDING"
-      ) {
+      } else if (pendingRequestUserIds.has(String(userId)) || isPaymentVerificationPending(dbUser)) {
         status = "PAYMENT_VERIFICATION_PENDING";
       }
 
       return {
-        userId: dbUser.userId,
+        userId,
         applicationId: dbUser.applicationId || "",
         fullName: dbUser.fullName,
         email: dbUser.email,
