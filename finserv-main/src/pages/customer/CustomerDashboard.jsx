@@ -2481,7 +2481,7 @@ const SettingsTab = ({
             onChange={(value) => setSettingsForm({ ...settingsForm, fullName: value })}
           />
           <Field label="Email" value={settingsForm.email} readOnly />
-          <Field label="Mobile" value={settingsForm.mobileNumber} readOnly />
+          <Field label="Mobile" value={settingsForm.mobileNumber} onChange={(value) => setSettingsForm({ ...settingsForm, mobileNumber: value })} />
           
         </div>
         <button
