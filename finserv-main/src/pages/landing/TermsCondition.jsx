@@ -33,6 +33,15 @@ const TermsCondition = () => {
     </section>
 
     <section className="space-y-4">
+      <h2 className="text-xl sm:text-2xl font-semibold text-[#0B2A4A]">Application Guidance Only</h2>
+      <p className="text-gray-600 leading-relaxed">
+        <strong>Important Notice:</strong> Vahan Finserv provides an application guidance platform only. We do not provide loans, 
+        credit facilities, or financial products. We guide you through the application process and connect you with our partner banks 
+        who evaluate and approve loan applications. All loan decisions, terms, and conditions are determined solely by the partner banks.
+      </p>
+    </section>
+
+    <section className="space-y-4">
       <h2 className="text-xl sm:text-2xl font-semibold text-[#0B2A4A]">Application Process</h2>
       <p className="text-gray-600 leading-relaxed">
         Vahan Finserv helps you compare loan offers from our partner banks. We are not a lender. Loan approval, final interest
