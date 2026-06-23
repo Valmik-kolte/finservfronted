@@ -259,7 +259,7 @@ const Landing = () => {
         <div className="inline-flex items-center gap-3 rounded-full bg-[#1ECFC3]/15 border border-[#1ECFC3]/40 px-5 py-3">
           <span className="h-3 w-3 rounded-full bg-[#1ECFC3] shadow-[0_0_15px_#1ECFC3]"></span>
           <span className="text-white font-semibold">
-            A product by Caryanam India
+            A product by Caryanamindia Pvt Ltd
           </span>
         </div>
       </div>
