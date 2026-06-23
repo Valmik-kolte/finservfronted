@@ -62,7 +62,7 @@ const Footer = ({ logoutOnNavigate = false }) => {
           </div>
 
           <div className="border-t border-gray-700 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
-            <p>&copy; 2026 Vahan Finserv. All rights reserved.</p>
+            <p>&copy; 2026 Vahan Finserv. All rights reserved by Caryanamindia Pvt Ltd</p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link to="/privacy-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Privacy Policy</Link>
               <Link to="/terms-and-conditions" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Terms & Conditions</Link>

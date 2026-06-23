@@ -222,33 +222,144 @@ const Landing = () => {
       </section>
 
       {/* About Us & Features Section */}
-      <section id="about-us" className="px-4 sm:px-6 py-14 sm:py-20 lg:px-10 bg-gradient-to-r from-[#112B5A] to-[#1a3f7a]">
-        <div className="mx-auto max-w-7xl">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
-              Why Choose Us?
-            </h2>
-            <p className="text-lg text-gray-200">Experience the easiest way to get a vehicle loan</p>
+      <section
+  id="about-us"
+  className="relative overflow-hidden px-4 sm:px-6 py-14 sm:py-20 lg:px-10 bg-gradient-to-r from-[#112B5A] to-[#1a3f7a]"
+>
+  {/* Background Glow */}
+  <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#1ECFC3]/20 blur-3xl"></div>
+  <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-300/10 blur-3xl"></div>
+
+  <div className="relative mx-auto max-w-7xl">
+    {/* About Content */}
+    <div className="grid gap-10 lg:grid-cols-2 lg:items-center mb-16">
+      <div>
+        <div className="inline-flex items-center rounded-full border border-[#1ECFC3]/40 bg-white/10 px-4 py-2 text-sm font-semibold text-[#1ECFC3] mb-5">
+          About Vahan Finserv
+        </div>
+
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-5 leading-tight">
+          Smart Vehicle Finance,
+          <span className="text-[#1ECFC3]"> Made Simple</span>
+        </h2>
+
+        <p className="text-base sm:text-lg text-gray-200 leading-8 mb-5">
+          Vahan Finserv is a digital vehicle finance platform built to make
+          used-car loan processing faster, simpler, and more transparent. We
+          help customers apply for loans, upload documents, track application
+          progress, and connect with trusted banking partners.
+        </p>
+
+        <p className="text-base sm:text-lg text-gray-200 leading-8 mb-7">
+          Our goal is to simplify the complete loan journey for customers,
+          dealers, and financial partners through a secure and easy-to-use
+          digital platform.
+        </p>
+
+        <div className="inline-flex items-center gap-3 rounded-full bg-[#1ECFC3]/15 border border-[#1ECFC3]/40 px-5 py-3">
+          <span className="h-3 w-3 rounded-full bg-[#1ECFC3] shadow-[0_0_15px_#1ECFC3]"></span>
+          <span className="text-white font-semibold">
+            A product by Caryanam India
+          </span>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-white/15 bg-white/10 backdrop-blur-sm p-6 sm:p-8 shadow-2xl">
+        <h3 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+          Built for a Better Loan Experience
+        </h3>
+
+        <p className="text-gray-200 leading-7 mb-6">
+          From application submission to bank assignment and document review,
+          Vahan Finserv keeps the process organized, trackable, and customer
+          friendly.
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+            <h4 className="text-[#1ECFC3] font-bold text-xl">Fast</h4>
+            <p className="text-gray-300 text-sm mt-1">
+              Quick application and review flow
+            </p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            {[
-              { icon: <FaUniversity className="text-2xl text-[#1ECFC3]" />, title: "10+ Banks", desc: "Compare offers from India's leading financial institutions" },
-              { icon: <FaBolt className="text-2xl text-[#1ECFC3]" />, title: "24-Hour Approval", desc: "Get instant loan approval without unnecessary delays" },
-              { icon: <FaFileAlt className="text-2xl text-[#1ECFC3]" />, title: "Minimal Docs", desc: "Paperless process with easy online document upload" },
-              { icon: <FaShieldAlt className="text-2xl text-[#1ECFC3]" />, title: "100% Secure", desc: "Bank-level security for all your personal information" },
-            ].map((item, idx) => (
-              <div key={idx} className="group rounded-2xl bg-white/10 backdrop-blur-sm p-5 sm:p-8 border border-[#1ECFC3]/20 hover:border-[#1ECFC3]/50 hover:shadow-xl transition-all duration-300">
-                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[#1ECFC3]/20 group-hover:bg-[#1ECFC3]/30 transition-all">
-                  {item.icon}
-                </div>
-                <h3 className="text-lg font-bold text-white mb-2">{item.title}</h3>
-                <p className="text-gray-300 text-sm">{item.desc}</p>
-              </div>
-            ))}
+          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+            <h4 className="text-[#1ECFC3] font-bold text-xl">Secure</h4>
+            <p className="text-gray-300 text-sm mt-1">
+              Safe document and customer data handling
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+            <h4 className="text-[#1ECFC3] font-bold text-xl">Trusted</h4>
+            <p className="text-gray-300 text-sm mt-1">
+              Connect with verified banking partners
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+            <h4 className="text-[#1ECFC3] font-bold text-xl">Simple</h4>
+            <p className="text-gray-300 text-sm mt-1">
+              Easy status tracking and updates
+            </p>
           </div>
         </div>
-      </section>
+      </div>
+    </div>
+
+    {/* Why Choose Us */}
+    <div className="text-center mb-12">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
+        Why Choose Us?
+      </h2>
+      <p className="text-lg text-gray-200">
+        Experience the easiest way to get a vehicle loan
+      </p>
+    </div>
+
+    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+      {[
+        {
+          icon: <FaUniversity className="text-2xl text-[#1ECFC3]" />,
+          title: "10+ Banks",
+          desc: "Compare offers from India's leading financial institutions",
+        },
+        {
+          icon: <FaBolt className="text-2xl text-[#1ECFC3]" />,
+          title: "24-Hour Approval",
+          desc: "Get faster loan processing without unnecessary delays",
+        },
+        {
+          icon: <FaFileAlt className="text-2xl text-[#1ECFC3]" />,
+          title: "Minimal Docs",
+          desc: "Paperless process with easy online document upload",
+        },
+        {
+          icon: <FaShieldAlt className="text-2xl text-[#1ECFC3]" />,
+          title: "100% Secure",
+          desc: "Bank-level security for all your personal information",
+        },
+      ].map((item, idx) => (
+        <div
+          key={idx}
+          className="group rounded-2xl bg-white/10 backdrop-blur-sm p-5 sm:p-8 border border-[#1ECFC3]/20 hover:border-[#1ECFC3]/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+        >
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[#1ECFC3]/20 group-hover:bg-[#1ECFC3]/30 transition-all">
+            {item.icon}
+          </div>
+
+          <h3 className="text-lg font-bold text-white mb-2">
+            {item.title}
+          </h3>
+
+          <p className="text-gray-300 text-sm leading-6">
+            {item.desc}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
 
      {/* Mobile App Section */}
 <section className="bg-[#1ECFC3]/5 px-4 sm:px-6 py-14 sm:py-20 lg:px-10">
