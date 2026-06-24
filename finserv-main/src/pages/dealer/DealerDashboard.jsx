@@ -479,7 +479,7 @@ const DealerDashboard = () => {
       users: users.length,
       docs: adjustedDocs.length,
       pending: adjustedDocs.filter((doc) => doc.status === "PENDING").length,
-      approved: adjustedDocs.filter((doc) => doc.status === "APPROVED").length,
+      approved: adjustedDocs.filter((doc) => doc.status === "APPROVED" || doc.status === "VERIFIED").length,
       rejected: adjustedDocs.filter((doc) => doc.status === "REJECTED").length,
       bankAssigned: users.filter(isUserAssignedToBank).length,
     }),
@@ -638,7 +638,7 @@ const DealerDashboard = () => {
         const dealerUsers = await getDealerUsers();
         const notificationList = await getDealerNotifications({ dealerId: resolvedDealerId }).catch(() => []);
         const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
-        const normalizedUsers = mergeUsersById(Array.isArray(dealerUsers) ? dealerUsers : [], localDealerUsers);
+        const normalizedUsers = mergeUsersById(localDealerUsers, Array.isArray(dealerUsers) ? dealerUsers : []);
         const dealerDocs = [];
         const documentResponses = await Promise.all(
           normalizedUsers.map((user) =>
@@ -680,10 +680,11 @@ const DealerDashboard = () => {
           }
         });
 
-        const enrichedUsers = normalizedUsers.map((u) => {
+        const enrichedUsers = normalizedUsers.map((u, idx) => {
+          const userDocs = documentResponses[idx] || [];
           const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
           const bankName = parsedBankAssignments[nameKey];
-          let updatedUser = { ...u };
+          let updatedUser = { ...u, documents: userDocs };
           if (!updatedUser.createdAt || String(updatedUser.createdAt).trim() === "" || String(updatedUser.createdAt).toUpperCase() === "N/A") {
             const docDate = userDocDateMap.get(String(u.userId));
             if (docDate) {
@@ -772,8 +773,8 @@ const DealerDashboard = () => {
 
       const localDealerUsers = getLocalDealerUsers(resolvedDealerId, resolvedCode);
       const allUsers = mergeUsersById(
-        userRes.status === "fulfilled" ? userRes.value.data?.data || [] : [],
-        localDealerUsers
+        localDealerUsers,
+        userRes.status === "fulfilled" ? userRes.value.data?.data || [] : []
       );
       const myUsers = allUsers.filter((u) => {
         if (resolvedCode && u.dealerCode) {
@@ -794,11 +795,22 @@ const DealerDashboard = () => {
       const myInfos = [...apiPersonalInfos.filter((info) => ids.has(info.userId)), ...localInfos];
       const myDocs = await fetchDocsForUsers([...ids]);
 
+      const docsByUserId = {};
+      myDocs.forEach((doc) => {
+        const uid = String(doc.userId);
+        if (!docsByUserId[uid]) docsByUserId[uid] = [];
+        docsByUserId[uid].push(doc);
+      });
+
       myUsers.sort((a, b) =>
         String(a.fullName || "").localeCompare(String(b.fullName || ""), undefined, { sensitivity: "base" })
       );
 
-      let finalUsers = myUsers;
+      let finalUsers = myUsers.map((u) => ({
+        ...u,
+        documents: docsByUserId[String(u.userId || u.id)] || [],
+      }));
+
       if (resolvedDealerId) {
         try {
           const notifRes = await api.get(`/notifications/${resolvedDealerId}`);
@@ -826,7 +838,7 @@ const DealerDashboard = () => {
             }
           });
 
-          finalUsers = myUsers.map((u) => {
+          finalUsers = finalUsers.map((u) => {
             const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
             const bankName = parsedBankAssignments[nameKey];
             if (bankName) {
@@ -1172,8 +1184,17 @@ const DealerDashboard = () => {
         }.`
       );
       await loadDashboard();
-      localStorage.removeItem("dealer_registered_users");
-      localStorage.removeItem("dealer_registered_personal_info");
+      try {
+        const localUsers = JSON.parse(localStorage.getItem("dealer_registered_users") || "[]");
+        const filteredUsers = localUsers.filter((u) => String(u.userId) !== String(newUserId));
+        localStorage.setItem("dealer_registered_users", JSON.stringify(filteredUsers));
+        
+        const localInfos = JSON.parse(localStorage.getItem("dealer_registered_personal_info") || "[]");
+        const filteredInfos = localInfos.filter((info) => String(info.userId) !== String(newUserId));
+        localStorage.setItem("dealer_registered_personal_info", JSON.stringify(filteredInfos));
+      } catch (err) {
+        console.error("Failed to clean up submitted user from local storage", err);
+      }
       setActiveMenu("Dashboard");
       toast.success("Application and documents submitted to admin.");
       return true;
@@ -1204,6 +1225,7 @@ const DealerDashboard = () => {
         `${profile.fullName || "Dealer"} has reuploaded ${docLabel(type)} for ${user?.fullName || "Customer"}.`,
         profile.dealerId
       );
+      const userIds = users.map((u) => u.userId || u.id);
       const freshDocs = await fetchDocsForUsers(userIds);
       setDocs(freshDocs);
       if (selectedUser?.userId === userId) {
@@ -1538,7 +1560,7 @@ const DashboardTab = ({
       icon: <FaCheckCircle />,
       label: "Admin Approved Docs",
       value: stats.approved,
-      items: documentItems(docs.filter((doc) => doc.status === "APPROVED")),
+      items: documentItems(docs.filter((doc) => doc.status === "APPROVED" || doc.status === "VERIFIED")),
     },
     {
       icon: <FaRedo />,
@@ -1668,15 +1690,33 @@ const SimpleListOverlay = ({ title, items, onClose }) => (
 
 const SectionTitle = ({ title }) => <h2 className="mb-4 text-lg font-black text-[#0B2A4A]">{title}</h2>;
 
+const isDealerAddedUser = (user) => {
+  if (!user) return false;
+  return (
+    user.registrationType === "DEALER" ||
+    (user.dealerCode !== undefined && user.dealerCode !== null && String(user.dealerCode).trim() !== "")
+  );
+};
+
 const getUserStatusText = (user) => {
   if (isUserAssignedToBank(user)) return "Sent to Bank";
+  if (isDealerAddedUser(user)) {
+    const userDocs = user.documents || [];
+    const totalDocs = userDocs.length;
+    const approvedCount = userDocs.filter((d) => d.status === "APPROVED" || d.status === "VERIFIED").length;
+    if (totalDocs > 0 && approvedCount === totalDocs) {
+      return "Approved";
+    }
+    return "Sent to Admin";
+  }
   if (user.paymentDone) return "Approved";
   return "Sent to Admin";
 };
 
 const getUserStatusStyle = (user) => {
-  if (isUserAssignedToBank(user)) return "border-green-200 bg-green-50 text-green-700";
-  if (user.paymentDone) return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  const status = getUserStatusText(user);
+  if (status === "Sent to Bank") return "border-green-200 bg-green-50 text-green-700";
+  if (status === "Approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   return "border-sky-200 bg-sky-50 text-sky-700";
 };
 
@@ -1689,23 +1729,36 @@ const UserTable = ({ users, openUserModal, openTrackingModal }) => (
             <th className="px-3.5 py-3">Name</th>
             <th className="px-3.5 py-3">Email</th>
             <th className="px-3.5 py-3">Mobile</th>
-            <th className="px-3.5 py-3">Submission</th>
+            <th className="px-3.5 py-3">Approved Docs</th>
+            <th className="px-3.5 py-3">Bank Assigned</th>
+            <th className="px-3.5 py-3">Status</th>
             <th className="px-3.5 py-3">Registered Date</th>
             {openUserModal && <th className="px-3.5 py-3 text-center">Action</th>}
           </tr>
         </thead>
         <tbody>
-          {users.map((user) => (
-            <tr key={user.userId} className="border-b border-gray-50 text-xs">
-              <td className="px-3.5 py-3 font-bold text-[#0B2A4A] whitespace-nowrap">{user.fullName || "-"}</td>
-              <td className="px-3.5 py-3 text-gray-600 truncate max-w-[140px]" title={user.email}>{user.email || "-"}</td>
-              <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap">{user.mobileNumber || "-"}</td>
-              <td className="px-3.5 py-3 whitespace-nowrap">
-                <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getUserStatusStyle(user)}`}>
-                  {getUserStatusText(user)}
-                </span>
-              </td>
-              <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap">{formatDate(user.createdAt)}</td>
+          {users.map((user) => {
+            const userDocs = user.documents || [];
+            const totalDocs = userDocs.length;
+            const approvedDocsCount = userDocs.filter((d) => d.status === "APPROVED" || d.status === "VERIFIED").length;
+            const bankName = user.assignedBankName || user.bankName || "";
+            return (
+              <tr key={user.userId} className="border-b border-gray-50 text-xs">
+                <td className="px-3.5 py-3 font-bold text-[#0B2A4A] whitespace-nowrap">{user.fullName || "-"}</td>
+                <td className="px-3.5 py-3 text-gray-600 truncate max-w-[140px]" title={user.email}>{user.email || "-"}</td>
+                <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap">{user.mobileNumber || "-"}</td>
+                <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap font-semibold">
+                  {approvedDocsCount} / {totalDocs} Docs
+                </td>
+                <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap font-semibold">
+                  {bankName || "Pending"}
+                </td>
+                <td className="px-3.5 py-3 whitespace-nowrap">
+                  <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-[10px] font-bold ${getUserStatusStyle(user)}`}>
+                    {getUserStatusText(user)}
+                  </span>
+                </td>
+                <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap">{formatDate(user.createdAt)}</td>
               {openUserModal && (
                 <td className="px-3.5 py-3">
                   <div className="flex gap-1.5 justify-center">
@@ -1725,7 +1778,8 @@ const UserTable = ({ users, openUserModal, openTrackingModal }) => (
                 </td>
               )}
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
       {users.length === 0 && <div className="p-6 text-center text-sm text-gray-500">No users found</div>}
@@ -1957,7 +2011,7 @@ const StatusTab = ({ users, docsByUser, openTrackingModal }) => {
         const counts = {
           total: userDocs.length,
           pending: userDocs.filter((doc) => doc.status === "PENDING").length,
-          approved: userDocs.filter((doc) => doc.status === "APPROVED").length,
+          approved: userDocs.filter((doc) => doc.status === "APPROVED" || doc.status === "VERIFIED").length,
           rejected: userDocs.filter((doc) => doc.status === "REJECTED").length,
         };
         const isOpen = expanded[user.userId] === true;
@@ -2413,7 +2467,7 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
 
     const totalDocs = docs?.length || 0;
     const pendingCount = docs?.filter((d) => d.status === "PENDING").length || 0;
-    const approvedCount = docs?.filter((d) => d.status === "APPROVED").length || 0;
+    const approvedCount = docs?.filter((d) => d.status === "APPROVED" || d.status === "VERIFIED").length || 0;
     const verifiedCount = docs?.filter((d) => d.status === "VERIFIED").length || 0;
     const rejectedCount = docs?.filter((d) => d.status === "REJECTED").length || 0;
 

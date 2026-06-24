@@ -1050,7 +1050,7 @@ const Dashboard = () => {
       return;
     }
     const paymentStatus = paymentRequestByUserId.get(String(selectedUser.userId));
-    const isPaymentApproved = paymentStatus === "PAYMENT_APPROVED";
+    const isPaymentApproved = isDealerAddedUser(selectedUser) || paymentStatus === "PAYMENT_APPROVED";
     if (!isPaymentApproved) {
       toast.error("Payment is not approved yet. You cannot assign a bank to this user.");
       return;

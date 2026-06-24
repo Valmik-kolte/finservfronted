@@ -233,6 +233,40 @@ const RegistrationBarChart = ({ users = [] }) => {
   );
 };
 
+const isUserAssignedToBank = (user) =>
+  !!(
+    user?.bankId ||
+    user?.assignedBankId ||
+    user?.assignedBankName ||
+    user?.bankName ||
+    user?.bankStatus === "BANK_ASSIGNED" ||
+    user?.bankStatus === "SENT_TO_BANK"
+  );
+
+const isDealerAddedUser = (user) => {
+  if (!user) return false;
+  return (
+    user.registrationType === "DEALER" ||
+    (user.dealerCode !== undefined && user.dealerCode !== null && String(user.dealerCode).trim() !== "")
+  );
+};
+
+const getUserStatusText = (user) => {
+  if (!user) return "Sent to Admin";
+  if (isUserAssignedToBank(user)) return "Sent to Bank";
+  if (isDealerAddedUser(user)) {
+    const userDocs = user.documents || [];
+    const totalDocs = userDocs.length;
+    const approvedCount = userDocs.filter((d) => d.status === "APPROVED" || d.status === "VERIFIED").length;
+    if (totalDocs > 0 && approvedCount === totalDocs) {
+      return "Approved";
+    }
+    return "Sent to Admin";
+  }
+  if (user.paymentDone) return "Approved";
+  return "Sent to Admin";
+};
+
 const DealerReports = ({ users = [], personalInfos = [], docs = [] }) => {
   const stats = useMemo(() => {
     return {
@@ -240,8 +274,9 @@ const DealerReports = ({ users = [], personalInfos = [], docs = [] }) => {
       personalInfos: personalInfos.length,
       docs: docs.length,
       pending: docs.filter((doc) => doc.status === "PENDING").length,
-      approved: docs.filter((doc) => doc.status === "APPROVED").length,
+      approved: docs.filter((doc) => doc.status === "APPROVED" || doc.status === "VERIFIED").length,
       rejected: docs.filter((doc) => doc.status === "REJECTED").length,
+      bankAssigned: users.filter(isUserAssignedToBank).length,
     };
   }, [users, personalInfos, docs]);
 
@@ -252,11 +287,12 @@ const DealerReports = ({ users = [], personalInfos = [], docs = [] }) => {
     { label: "Docs Pending Approval", value: stats.pending, icon: <FaClipboardList /> },
     { label: "Approved Docs", value: stats.approved, icon: <FaCheckCircle /> },
     { label: "Rejected Docs", value: stats.rejected, icon: <FaRedo /> },
+    { label: "Bank Assigned", value: stats.bankAssigned, icon: <FaCheckCircle /> },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-5">
         {statCardsData.map((card) => (
           <StatCard key={card.label} label={card.label} value={card.value} icon={card.icon} />
         ))}
@@ -290,16 +326,37 @@ const DealerReports = ({ users = [], personalInfos = [], docs = [] }) => {
           </div>
         ) : (
           <DataTable
-            headers={["Name", "Email", "Mobile", "City", "State", "Loan Amount", "Created Date"]}
-            rows={personalInfos.map((info) => [
-              info.fullName,
-              info.email,
-              info.mobileNumber,
-              info.city,
-              info.state,
-              info.loanAmount ? `Rs ${Number(info.loanAmount).toLocaleString("en-IN")}` : "N/A",
-              formatDate(info.createdAt),
-            ])}
+            headers={[
+              "Name",
+              "Email",
+              "Mobile",
+              "City",
+              "State",
+              "Loan Amount",
+              "Approved Docs",
+              "Bank Assigned",
+              "Status",
+              "Created Date",
+            ]}
+            rows={personalInfos.map((info) => {
+              const user = users.find((u) => String(u.userId || u.id) === String(info.userId));
+              const userDocs = user?.documents || [];
+              const totalDocs = userDocs.length;
+              const approvedDocsCount = userDocs.filter((d) => d.status === "APPROVED" || d.status === "VERIFIED").length;
+              const bankName = user?.assignedBankName || user?.bankName || "";
+              return [
+                info.fullName,
+                info.email,
+                info.mobileNumber,
+                info.city,
+                info.state,
+                info.loanAmount ? `Rs ${Number(info.loanAmount).toLocaleString("en-IN")}` : "N/A",
+                `${approvedDocsCount} / ${totalDocs} Docs`,
+                bankName || "Pending",
+                getUserStatusText(user),
+                formatDate(info.createdAt),
+              ];
+            })}
           />
         )}
       </div>

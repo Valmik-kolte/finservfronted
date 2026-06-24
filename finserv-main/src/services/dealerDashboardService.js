@@ -33,7 +33,7 @@ export const getDealerUsers = async () => {
   );
   
   const map = new Map();
-  [...apiUsers, ...list].forEach((user) => {
+  [...list, ...apiUsers].forEach((user) => {
     const id = user.userId || user.id;
     if (!id) return;
     const existing = map.get(String(id)) || {};
@@ -101,8 +101,34 @@ export const markDealerNotificationRead = async (notificationId) => {
 
 export const getDealerDashboardSummary = async () => {
   try {
+    const session = JSON.parse(localStorage.getItem("dealerData") || "{}");
+    const resolvedDealerId = session.dealerId || session.id;
+
     const users = await getDealerUsers();
     
+    // Fetch notifications to resolve bank assignments
+    let notificationList = [];
+    if (resolvedDealerId) {
+      try {
+        notificationList = await getDealerNotifications({ dealerId: resolvedDealerId });
+      } catch (err) {
+        console.warn("Failed to fetch notifications in summary:", err);
+      }
+    }
+
+    const parsedBankAssignments = {};
+    notificationList.forEach((notif) => {
+      if (!notif.message) return;
+      const match = notif.message.match(/(.*) has been assigned to (.*?)\./i);
+      if (match) {
+        const customerName = match[1].trim().toLowerCase();
+        const bankName = match[2].trim();
+        if (!parsedBankAssignments[customerName]) {
+          parsedBankAssignments[customerName] = bankName;
+        }
+      }
+    });
+
     // Fetch documents for each user
     const results = await Promise.allSettled(
       users.map((user) => api.get(`/documents/user/${user.userId || user.id}`))
@@ -115,15 +141,31 @@ export const getDealerDashboardSummary = async () => {
       return [];
     });
     
+    const enrichedUsers = users.map((u) => {
+      const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
+      const bankName = parsedBankAssignments[nameKey];
+      if (bankName) {
+        return {
+          ...u,
+          bankName,
+          assignedBankName: bankName,
+          bankId: 1,
+          assignedBankId: 1,
+          bankStatus: "SENT_TO_BANK",
+        };
+      }
+      return u;
+    });
+
     const total = documents.length;
     const pending = documents.filter(d => String(d.status).toUpperCase() === "PENDING").length;
     const approved = documents.filter(d => String(d.status).toUpperCase() === "APPROVED" || String(d.status).toUpperCase() === "VERIFIED").length;
     const rejected = documents.filter(d => String(d.status).toUpperCase() === "REJECTED").length;
     
-    const bankAssignedCount = users.filter(user => user.assignedBankId || user.bankId || user.bankName || user.assignedBankName).length;
+    const bankAssignedCount = enrichedUsers.filter(u => u.assignedBankId || u.bankId || u.bankName || u.assignedBankName).length;
 
     return {
-      usersCount: users.length,
+      usersCount: enrichedUsers.length,
       documentsCount: total,
       pendingDocsCount: pending,
       approvedDocsCount: approved,
