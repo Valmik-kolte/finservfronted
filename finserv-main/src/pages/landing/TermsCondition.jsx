@@ -71,6 +71,17 @@ const TermsCondition = () => {
     </section>
 
     <section className="space-y-4">
+      <h2 className="text-xl sm:text-2xl font-semibold text-[#0B2A4A]">Data Retention</h2>
+      <p className="text-gray-600 leading-relaxed">
+        We retain personal data only as long as necessary to fulfill the purposes described in our Privacy Policy or to
+        comply with legal obligations. Typically, application and account information is retained for up to 7 years after the
+        last activity for record-keeping, fraud prevention, and legal compliance. You may request deletion of your personal
+        data where permitted; however, we may need to retain certain information for legal or legitimate business purposes,
+        and anonymized records or backups may be retained for a reasonable period.
+      </p>
+    </section>
+
+    <section className="space-y-4">
       <h2 className="text-xl sm:text-2xl font-semibold text-[#0B2A4A]">Changes to Terms</h2>
       <p className="text-gray-600 leading-relaxed">
         We may update these terms periodically. Please review the latest terms before submitting a new application. Continued use of
