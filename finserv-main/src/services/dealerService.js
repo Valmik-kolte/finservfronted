@@ -31,3 +31,15 @@ export const dealerResetPassword = async (dto) => {
   const response = await api.post("/dealer/reset-password", dto, { skipAuth: true });
   return response.data;
 };
+
+export const registerDealerSendOtp = async (email) => {
+  const response = await api.post(`/dealer/register/send-otp?email=${encodeURIComponent(email)}`, null, {
+    skipAuth: true,
+  });
+  return response.data;
+};
+
+export const registerDealerVerifyOtp = async (dto) => {
+  const response = await api.post("/dealer/register/verify-otp", dto, { skipAuth: true });
+  return response.data;
+};

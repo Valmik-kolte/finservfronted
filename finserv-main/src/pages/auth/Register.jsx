@@ -13,8 +13,8 @@ import {
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { registerUser } from "../../services/customerService.js";
-import { registerDealer } from "../../services/dealerService.js";
+import { registerUser, registerUserSendOtp, registerUserVerifyOtp } from "../../services/customerService.js";
+import { registerDealer, registerDealerSendOtp, registerDealerVerifyOtp } from "../../services/dealerService.js";
 import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
@@ -45,17 +45,96 @@ const Register = ({ defaultRole }) => {
     password: "",
   });
 
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [sendingOtp, setSendingOtp] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+
+  const otpLabelTop = 406;
+  const otpWrapTop = 423;
+  
+  const passwordLabelTop = otpSent ? 472 : 406;
+  const passwordWrapTop = otpSent ? 489 : 423;
+  
+  const submitTop = otpSent ? 548 : 482;
+  const loginLinkTop = otpSent ? 610 : 544;
+  const cardHeight = otpSent ? 650 : 584;
+
   const features = [
     { label: "Car Loan", icon: <FaCar />, left: 70 },
     { label: "Quick Approval", icon: <FaShieldAlt />, left: 157 },
     { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 256 },
   ];
 
+  const handleRoleChange = (newRole) => {
+    setRole(newRole);
+    setOtpSent(false);
+    setOtpVerified(false);
+    setOtp("");
+  };
+
+  const handleSendOtp = async () => {
+    const trimmedEmail = form.email.trim();
+    if (!trimmedEmail) {
+      toast.error("Please enter your email.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
+    setSendingOtp(true);
+    try {
+      const response =
+        role === "DEALER"
+          ? await registerDealerSendOtp(trimmedEmail)
+          : await registerUserSendOtp(trimmedEmail);
+      
+      setOtpSent(true);
+      toast.success(response?.message || response || "OTP sent to your email.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || "Failed to send OTP.");
+    } finally {
+      setSendingOtp(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    const cleanOtp = otp.replace(/\D/g, "");
+    if (cleanOtp.length !== 6) {
+      toast.error("OTP must be 6 digits.");
+      return;
+    }
+
+    setVerifyingOtp(true);
+    try {
+      const dto = { email: form.email.trim(), otp: cleanOtp };
+      const response =
+        role === "DEALER"
+          ? await registerDealerVerifyOtp(dto)
+          : await registerUserVerifyOtp(dto);
+
+      setOtpVerified(true);
+      toast.success(response?.message || response || "OTP verified successfully.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || "Invalid OTP.");
+    } finally {
+      setVerifyingOtp(false);
+    }
+  };
+
   const handleChange = (event) => {
     const { name, value } = event.target;
     if (name === "mobile") {
       setForm((prev) => ({ ...prev, mobile: value.replace(/\D/g, "").slice(0, 10) }));
       return;
+    }
+    if (name === "email") {
+      setOtpSent(false);
+      setOtpVerified(false);
+      setOtp("");
     }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
@@ -64,6 +143,10 @@ const Register = ({ defaultRole }) => {
     event.preventDefault();
     if (!/^\d{10}$/.test(form.mobile)) {
       toast.error("Mobile number should be 10 digits");
+      return;
+    }
+    if (!otpVerified) {
+      toast.error("Please verify your email first.");
       return;
     }
     setLoading(true);
@@ -422,6 +505,109 @@ const Register = ({ defaultRole }) => {
           line-height: 1;
         }
 
+        .verify-email-btn {
+          position: absolute;
+          left: 37px;
+          top: 362px;
+          border: 0;
+          border-radius: 12px;
+          background: linear-gradient(90deg, #00e0d3 0%, #007bff 100%);
+          color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
+          height: 32px;
+          padding: 0 16px;
+          box-shadow: 0 4px 12px rgba(0, 224, 211, 0.2);
+          transition: transform 200ms ease, box-shadow 200ms ease;
+        }
+        .verify-email-btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 6px 16px rgba(0, 224, 211, 0.4);
+        }
+        .verify-email-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
+        .otp-input-wrapper {
+          position: absolute;
+          left: 37px;
+          width: 340px;
+          box-sizing: border-box;
+          height: 44px;
+          border: 1px solid #00e5e5;
+          border-radius: 14px;
+          background: rgba(0, 0, 0, 0.25);
+          display: flex;
+          align-items: center;
+          transition: border-color 200ms ease, box-shadow 200ms ease;
+        }
+
+        .otp-input-wrapper:focus-within {
+          border-color: #00D4B4;
+          box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.25);
+        }
+
+        .otp-icon {
+          position: absolute;
+          left: 14px;
+          color: rgba(255, 255, 255, 0.7);
+          font-size: 15px;
+        }
+
+        .otp-input {
+          width: 100%;
+          height: 100%;
+          padding-left: 48px;
+          padding-right: 118px;
+          background: transparent;
+          border: none;
+          outline: none;
+          color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+        }
+
+        .otp-input::placeholder {
+          color: rgba(255, 255, 255, 0.5);
+        }
+
+        .verify-otp-inside-btn {
+          position: absolute;
+          right: 6px;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 96px;
+          height: 32px;
+          border-radius: 12px;
+          border: none;
+          background: linear-gradient(90deg, #00D6DC 0%, #0095F5 100%);
+          color: #ffffff;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+          font-size: 12px;
+          font-weight: 700;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          white-space: nowrap;
+          box-shadow: 0 6px 16px rgba(0, 149, 245, 0.28);
+          transition: all 0.25s ease;
+        }
+
+        .verify-otp-inside-btn:hover:not(:disabled) {
+          box-shadow: 0 8px 20px rgba(0, 149, 245, 0.35);
+          transform: translateY(-50%) scale(1.02);
+        }
+
+        .verify-otp-inside-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
+        }
+
         .register-label.name { top: 168px; }
         .register-label.mobile { top: 234px; }
         .register-label.email { top: 300px; }
@@ -762,6 +948,24 @@ const Register = ({ defaultRole }) => {
             text-align: center !important;
           }
 
+          .verify-email-btn {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: fit-content !important;
+            margin: 0 0 16px 0 !important;
+          }
+
+          .otp-input-wrapper {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 16px 0 !important;
+            box-sizing: border-box !important;
+            height: 44px !important;
+          }
+
           .register-input {
             font-size: 15px;
           }
@@ -840,7 +1044,7 @@ const Register = ({ defaultRole }) => {
         </section>
 
         <section className="register-right" aria-label="Register form">
-          <form className="register-card" onSubmit={handleSubmit}>
+          <form className="register-card" onSubmit={handleSubmit} style={{ height: `${cardHeight}px` }}>
             <h2 className="register-title">Create Account</h2>
             <p className="register-card-subtitle">Register to continue</p>
             <div className="register-divider" />
@@ -849,14 +1053,14 @@ const Register = ({ defaultRole }) => {
               <button
                 type="button"
                 className={`role-option ${role === "INDIVIDUAL" ? "active" : ""}`}
-                onClick={() => setRole("INDIVIDUAL")}
+                onClick={() => handleRoleChange("INDIVIDUAL")}
               >
                 User
               </button>
               <button
                 type="button"
                 className={`role-option ${role === "DEALER" ? "active" : ""}`}
-                onClick={() => setRole("DEALER")}
+                onClick={() => handleRoleChange("DEALER")}
               >
                 Dealer
               </button>
@@ -915,10 +1119,63 @@ const Register = ({ defaultRole }) => {
               />
             </div>
 
-            <label className="register-label password" htmlFor="register-password">
+            <button
+              type="button"
+              onClick={handleSendOtp}
+              disabled={sendingOtp || otpVerified || !form.email}
+              className="verify-email-btn"
+            >
+              {sendingOtp ? "Sending..." : otpVerified ? "Email Verified" : "Verify Email"}
+            </button>
+
+            {otpSent && (
+              <>
+                <label
+                  className="register-label"
+                  htmlFor="register-otp"
+                  style={{ top: `${otpLabelTop}px` }}
+                >
+                  OTP
+                </label>
+                <div
+                  className="otp-input-wrapper"
+                  style={{ top: `${otpWrapTop}px` }}
+                >
+                  <FaShieldAlt className="otp-icon" />
+                  <input
+                    id="register-otp"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="Enter OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    disabled={otpVerified}
+                    className="otp-input"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleVerifyOtp}
+                    disabled={verifyingOtp || otpVerified || otp.length !== 6}
+                    className="verify-otp-inside-btn"
+                  >
+                    {verifyingOtp ? "Verifying..." : otpVerified ? "Verified" : "Verify OTP"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            <label
+              className="register-label password"
+              htmlFor="register-password"
+              style={{ top: `${passwordLabelTop}px` }}
+            >
               Password
             </label>
-            <div className="register-input-wrap password">
+            <div
+              className="register-input-wrap password"
+              style={{ top: `${passwordWrapTop}px` }}
+            >
               <FaLock className="register-input-icon" />
               <input
                 id="register-password"
@@ -940,11 +1197,16 @@ const Register = ({ defaultRole }) => {
               </button>
             </div>
 
-            <button type="submit" disabled={loading} className="register-submit">
+            <button
+              type="submit"
+              disabled={loading || !otpVerified}
+              className="register-submit"
+              style={{ top: `${submitTop}px` }}
+            >
               {loading ? "Creating Account..." : `Register ${rightArrow}`}
             </button>
 
-            <p className="register-login-link">
+            <p className="register-login-link" style={{ top: `${loginLinkTop}px` }}>
               Already have an account?
               <button type="button" onClick={() => navigate("/login")}>
                 Login

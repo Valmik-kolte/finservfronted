@@ -126,7 +126,7 @@ const Header = () => {
               to="/login"
               className="rounded-full border border-slate-600 py-2 text-center text-sm font-medium text-slate-200 transition hover:border-[#1ECFC3]"
             >
-              login
+              Login
             </Link>
             <Link
               to="/register"

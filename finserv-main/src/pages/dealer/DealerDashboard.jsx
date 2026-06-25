@@ -557,7 +557,7 @@ const DealerDashboard = () => {
     try {
       const code = sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
       if (code) {
-        const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+        const baseURL = api.defaults.baseURL || "http://localhost:8081/api";
         let adminToken = "";
         try {
           const loginRes = await axios.post(`${baseURL}/auth/login`, {

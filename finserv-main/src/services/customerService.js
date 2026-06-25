@@ -48,3 +48,15 @@ export const userResetPassword = async (dto) => {
   const response = await api.post("/user/reset-password", dto, { skipAuth: true });
   return response.data;
 };
+
+export const registerUserSendOtp = async (email) => {
+  const response = await api.post(`/user/register/send-otp?email=${encodeURIComponent(email)}`, null, {
+    skipAuth: true,
+  });
+  return response.data;
+};
+
+export const registerUserVerifyOtp = async (dto) => {
+  const response = await api.post("/user/register/verify-otp", dto, { skipAuth: true });
+  return response.data;
+};
