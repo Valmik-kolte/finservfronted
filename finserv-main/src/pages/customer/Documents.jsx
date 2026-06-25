@@ -125,6 +125,9 @@ const Documents = () => {
                 <option key={d.value} value={d.value}>{d.label}</option>
               ))}
             </select>
+            {docType === "SALARY_SLIP" && (
+              <p className="text-xs text-slate-500 font-semibold mt-1">Last 3 month salary slip</p>
+            )}
           </div>
           <div>
             <label className="text-xs text-gray-400 uppercase">Choose File (PDF, JPG, PNG — max 5MB)</label>

@@ -2599,6 +2599,9 @@ const DocumentUploadTile = ({ doc, openPreview, type, uploadingType, uploadForTy
               </span>
             )}
           </div>
+          {type === "SALARY_SLIP" && (
+            <p className="text-[11px] text-slate-500 font-semibold mt-0.5">Last 3 month salary slip</p>
+          )}
           {doc ? (
             <p className="text-xs text-slate-500 mt-1 break-all">{doc.fileName}</p>
           ) : (
