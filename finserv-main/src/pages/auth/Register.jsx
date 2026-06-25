@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   FaCar,
   FaClipboardCheck,
@@ -49,7 +49,22 @@ const Register = ({ defaultRole }) => {
   const [otpVerified, setOtpVerified] = useState(false);
   const [otp, setOtp] = useState("");
   const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setResendTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
+  const formatTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
 
   const otpLabelTop = 406;
   const otpWrapTop = 423;
@@ -72,6 +87,7 @@ const Register = ({ defaultRole }) => {
     setOtpSent(false);
     setOtpVerified(false);
     setOtp("");
+    setResendTimer(0);
   };
 
   const handleSendOtp = async () => {
@@ -93,6 +109,7 @@ const Register = ({ defaultRole }) => {
           : await registerUserSendOtp(trimmedEmail);
       
       setOtpSent(true);
+      setResendTimer(300);
       toast.success(response?.message || response || "OTP sent to your email.");
     } catch (error) {
       toast.error(error?.response?.data?.message || error?.message || "Failed to send OTP.");
@@ -102,26 +119,48 @@ const Register = ({ defaultRole }) => {
   };
 
   const handleVerifyOtp = async () => {
-    const cleanOtp = otp.replace(/\D/g, "");
-    if (cleanOtp.length !== 6) {
-      toast.error("OTP must be 6 digits.");
+    if (!otp || otp.trim().length === 0) {
+      toast.error("Please enter OTP");
       return;
     }
 
-    setVerifyingOtp(true);
     try {
-      const dto = { email: form.email.trim(), otp: cleanOtp };
+      setOtpVerifying(true);
+      const dto = { email: form.email.trim(), otp: otp.trim() };
       const response =
         role === "DEALER"
           ? await registerDealerVerifyOtp(dto)
           : await registerUserVerifyOtp(dto);
 
-      setOtpVerified(true);
-      toast.success(response?.message || response || "OTP verified successfully.");
+      const resData = response;
+      const message = typeof resData === "string" ? resData.toLowerCase() : (resData?.message?.toLowerCase() || "");
+      const success =
+        resData?.statusCode === 200 ||
+        resData?.status === true ||
+        resData?.success === true ||
+        message.includes("verified") ||
+        message.includes("success") ||
+        resData === "verified" ||
+        resData === "success" ||
+        (typeof resData === "string" && resData.toLowerCase().includes("success")) ||
+        (typeof resData === "string" && resData.toLowerCase().includes("verified"));
+
+      if (success) {
+        setOtpVerified(true);
+        toast.success("OTP verified successfully");
+      } else {
+        setOtpVerified(false);
+        toast.error("Invalid OTP");
+      }
     } catch (error) {
-      toast.error(error?.response?.data?.message || error?.message || "Invalid OTP.");
+      setOtpVerified(false);
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Invalid OTP";
+      toast.error(errorMessage);
     } finally {
-      setVerifyingOtp(false);
+      setOtpVerifying(false);
     }
   };
 
@@ -135,6 +174,7 @@ const Register = ({ defaultRole }) => {
       setOtpSent(false);
       setOtpVerified(false);
       setOtp("");
+      setResendTimer(0);
     }
     setForm((prev) => ({ ...prev, [name]: value }));
   };
@@ -531,6 +571,35 @@ const Register = ({ defaultRole }) => {
           cursor: not-allowed;
         }
 
+        .otp-label-container {
+          position: absolute;
+          left: 37px;
+          width: 340px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .otp-resend-btn {
+          background: transparent;
+          border: 0;
+          color: #00D4B4;
+          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+          font-size: 11px;
+          font-weight: 700;
+          cursor: pointer;
+          padding: 0;
+          transition: opacity 150ms ease;
+        }
+        .otp-resend-btn:hover:not(:disabled) {
+          text-decoration: underline;
+          opacity: 0.9;
+        }
+        .otp-resend-btn:disabled {
+          color: rgba(255, 255, 255, 0.4);
+          cursor: not-allowed;
+        }
+
         .otp-input-wrapper {
           position: absolute;
           left: 37px;
@@ -606,6 +675,17 @@ const Register = ({ defaultRole }) => {
         .verify-otp-inside-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
+        }
+
+        .otp-readonly {
+          opacity: 0.85;
+          cursor: not-allowed;
+        }
+
+        .verified-btn {
+          background: linear-gradient(90deg, #16A34A 0%, #22C55E 100%) !important;
+          cursor: not-allowed;
+          box-shadow: 0 6px 16px rgba(34, 197, 94, 0.28) !important;
         }
 
         .register-label.name { top: 168px; }
@@ -966,6 +1046,15 @@ const Register = ({ defaultRole }) => {
             height: 44px !important;
           }
 
+          .otp-label-container {
+            position: relative !important;
+            left: auto !important;
+            top: auto !important;
+            width: 100% !important;
+            margin: 0 0 6px 0 !important;
+            display: flex !important;
+          }
+
           .register-input {
             font-size: 15px;
           }
@@ -1115,28 +1204,54 @@ const Register = ({ defaultRole }) => {
                 value={form.email}
                 onChange={handleChange}
                 required
-                className="register-input"
+                readOnly={otpVerified}
+                className={`register-input ${otpVerified ? "opacity-75 cursor-not-allowed" : ""}`}
               />
             </div>
 
             <button
               type="button"
               onClick={handleSendOtp}
-              disabled={sendingOtp || otpVerified || !form.email}
+              disabled={sendingOtp || otpVerified || !form.email || resendTimer > 0}
               className="verify-email-btn"
             >
-              {sendingOtp ? "Sending..." : otpVerified ? "Email Verified" : "Verify Email"}
+              {sendingOtp ? (
+                "Sending..."
+              ) : otpVerified ? (
+                "Email Verified"
+              ) : resendTimer > 0 ? (
+                `Resend in ${formatTimer(resendTimer)}`
+              ) : otpSent ? (
+                "Resend OTP"
+              ) : (
+                "Verify Email"
+              )}
             </button>
 
             {otpSent && (
               <>
-                <label
-                  className="register-label"
-                  htmlFor="register-otp"
+                <div
+                  className="otp-label-container"
                   style={{ top: `${otpLabelTop}px` }}
                 >
-                  OTP
-                </label>
+                  <label
+                    className="register-label"
+                    htmlFor="register-otp"
+                    style={{ position: "static", margin: 0, padding: 0 }}
+                  >
+                    OTP
+                  </label>
+                  {!otpVerified && (
+                    <button
+                      type="button"
+                      onClick={handleSendOtp}
+                      disabled={sendingOtp || resendTimer > 0}
+                      className="otp-resend-btn"
+                    >
+                      {resendTimer > 0 ? `Resend in ${formatTimer(resendTimer)}` : "Resend OTP"}
+                    </button>
+                  )}
+                </div>
                 <div
                   className="otp-input-wrapper"
                   style={{ top: `${otpWrapTop}px` }}
@@ -1145,21 +1260,22 @@ const Register = ({ defaultRole }) => {
                   <input
                     id="register-otp"
                     type="text"
-                    inputMode="numeric"
-                    maxLength={6}
                     placeholder="Enter OTP"
                     value={otp}
-                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    disabled={otpVerified}
-                    className="otp-input"
+                    onChange={(e) => {
+                      if (otpVerified) return;
+                      setOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                    }}
+                    readOnly={otpVerified}
+                    className={`otp-input ${otpVerified ? "otp-readonly" : ""}`}
                   />
                   <button
                     type="button"
                     onClick={handleVerifyOtp}
-                    disabled={verifyingOtp || otpVerified || otp.length !== 6}
-                    className="verify-otp-inside-btn"
+                    disabled={otpVerifying || otpVerified}
+                    className={`verify-otp-inside-btn ${otpVerified ? "verified-btn" : ""}`}
                   >
-                    {verifyingOtp ? "Verifying..." : otpVerified ? "Verified" : "Verify OTP"}
+                    {otpVerifying ? "Verifying..." : otpVerified ? "Verified" : "Verify OTP"}
                   </button>
                 </div>
               </>

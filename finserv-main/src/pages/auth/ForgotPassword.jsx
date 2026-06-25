@@ -25,15 +25,35 @@ const ForgotPassword = () => {
 
     setLoading(true);
     try {
-      const message =
+      const res =
         role === "DEALER"
           ? await dealerSendOtp(trimmedEmail)
           : await userSendOtp(trimmedEmail);
 
+      const resMsg = typeof res === "string" ? res.toLowerCase() : (res?.message?.toLowerCase() || "");
+      const isFailed = 
+        res?.success === false || 
+        res?.status === false || 
+        res?.status === "error" ||
+        res?.statusCode === 400 ||
+        res?.statusCode === 404 ||
+        resMsg.includes("not exist") || 
+        resMsg.includes("not found") || 
+        resMsg.includes("no dealer") || 
+        resMsg.includes("no user") ||
+        resMsg.includes("does not exist") ||
+        resMsg.includes("invalid user");
+
+      if (isFailed) {
+        toast.error(res?.message || res || "User or Dealer does not exist.");
+        return;
+      }
+
+      const successMessage = typeof res === "string" ? res : (res?.message || "OTP sent to your email");
       sessionStorage.setItem("forgot_email", trimmedEmail);
       sessionStorage.setItem("forgot_role", role);
       sessionStorage.removeItem("forgot_otp_verified");
-      toast.success(message || "OTP sent to your email");
+      toast.success(successMessage);
       navigate("/verify-otp");
     } catch (error) {
       toast.error(getMessage(error, "Failed to send OTP."));

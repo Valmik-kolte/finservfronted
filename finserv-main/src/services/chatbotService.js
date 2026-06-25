@@ -173,6 +173,7 @@ const fallbackUserApplicationSummary = async () => {
     getUserDocuments(userId).catch(() => []),
   ]);
   const draft = readPersonalInfoDraft(userId);
+  const { bankAssigned } = await resolveUserAssignedBank(userId, user);
   const counts = countByStatus(documents);
   const rejected = counts.rejected > 0;
   const pending = counts.pending > 0 || counts.total === 0;
@@ -180,9 +181,11 @@ const fallbackUserApplicationSummary = async () => {
     ? "DOCUMENTS_REJECTED"
     : pending
       ? "DOCUMENTS_PENDING"
-      : user.paymentDone
-        ? "READY_FOR_BANK"
-        : "PAYMENT_PENDING";
+      : bankAssigned
+        ? "BANK_ASSIGNED"
+        : user.paymentDone
+          ? "READY_FOR_BANK"
+          : "PAYMENT_PENDING";
 
   return normalizeChatbotResponse({
     role: "USER",
@@ -570,6 +573,85 @@ const fetchPaymentStatus = async (userId, userProfile = {}, historyData = {}) =>
   };
 };
 
+const resolveUserAssignedBank = async (userId, userProfile) => {
+  // 1. Check user profile fields directly
+  let bankId = userProfile?.assignedBankId || userProfile?.bankId || null;
+  let bankName = userProfile?.assignedBankName || userProfile?.bankName || null;
+
+  // 2. Check notifications from database
+  if (!bankId || !bankName || bankName === "N/A") {
+    try {
+      const res = await api.get(`/notifications/${userId}`).catch(() => null);
+      if (res) {
+        const notifList = unwrap(res) || [];
+        const rawNotifs = Array.isArray(notifList) ? notifList : 
+          [
+            notifList.notifications,
+            notifList.content,
+            notifList.items,
+            notifList.records,
+            notifList.result,
+            notifList.results,
+            notifList.data,
+          ].find(Array.isArray) || [];
+
+        const bankNotifications = rawNotifs
+          .filter(
+            (notif) =>
+              String(notif.receiverId) === String(userId) &&
+              notif.message &&
+              notif.message.startsWith("BANK_ASSIGNED:")
+          )
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        if (bankNotifications.length > 0) {
+          const parts = bankNotifications[0].message.split(":");
+          const nBankId = parts[1];
+          const nBankName = parts.slice(2).join(":");
+          if (nBankId) bankId = nBankId;
+          if (nBankName && nBankName !== "N/A") bankName = nBankName;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to parse bank assignment from notifications in chatbot service:", err);
+    }
+  }
+
+  // 3. Check local storage
+  if (!bankId || !bankName || bankName === "N/A") {
+    try {
+      const localDetail = localStorage.getItem(`user_bank_assignment_detail_${userId}`);
+      if (localDetail) {
+        const parts = localDetail.split(":");
+        const lBankId = parts[1];
+        const lBankName = parts.slice(2).join(":");
+        if (lBankId) bankId = lBankId;
+        if (lBankName && lBankName !== "N/A") bankName = lBankName;
+      }
+    } catch {}
+  }
+
+  // 4. Fetch bank list from backend if bankId exists but bankName is missing
+  if (bankId && (!bankName || bankName === "N/A")) {
+    try {
+      const banksRes = await api.get("/admin/banks").catch(() => null);
+      if (banksRes) {
+        const bankList = Array.isArray(banksRes.data) ? banksRes.data : banksRes.data?.data || [];
+        const bank = bankList.find((b) => String(b.bankId) === String(bankId));
+        if (bank) {
+          bankName = bank.bankName || bank.name;
+        }
+      }
+    } catch {}
+  }
+
+  return {
+    bankAssigned: !!(bankId || (bankName && bankName !== "N/A")),
+    bankId: bankId || null,
+    bankName: bankName || "N/A"
+  };
+};
+
 const fallbackUserTimeline = async () => {
   const userId = getUserId();
   if (!userId) {
@@ -619,7 +701,7 @@ const fallbackUserTimeline = async () => {
   const hasRejectedDocs = documents.some((doc) => doc.status === "REJECTED");
   const hasPendingDocs = documents.some((doc) => doc.status === "PENDING");
 
-  const bankAssigned = !!(user.assignedBankId || user.bankId || user.bankName || user.assignedBankName);
+  const { bankAssigned, bankName: resolvedBankName } = await resolveUserAssignedBank(userId, user);
   
   const historyData = historyRes ? (unwrap(historyRes) || {}) : {};
   const { paymentCompleted, paymentVerificationPending, paymentMade } = await fetchPaymentStatus(userId, user, historyData);
@@ -656,7 +738,7 @@ const fallbackUserTimeline = async () => {
         : "completed",
     },
     {
-      name: "Bank Assigned",
+      name: bankAssigned ? `Bank Assigned (${resolvedBankName})` : "Bank Assigned",
       status: bankAssigned ? "completed" : "pending",
     },
     {
@@ -770,8 +852,7 @@ const fallbackUserAssignedBank = async () => {
   }
 
   const user = await getUserProfile(userId);
-  const bankAssigned = !!(user.assignedBankId || user.bankId || user.bankName || user.assignedBankName);
-  const bankName = user.assignedBankName || user.bankName || "N/A";
+  const { bankAssigned, bankName } = await resolveUserAssignedBank(userId, user);
 
   if (!bankAssigned) {
     return normalizeChatbotResponse({
@@ -819,15 +900,16 @@ const fallbackUserNextAction = async () => {
   
   const historyData = historyRes ? (unwrap(historyRes) || {}) : {};
   const { paymentCompleted, paymentVerificationPending, paymentMade } = await fetchPaymentStatus(userId, user, historyData);
+  const { bankAssigned, bankName: resolvedBankName } = await resolveUserAssignedBank(userId, user);
 
-  if (paymentMade) {
+  if (bankAssigned) {
     return normalizeChatbotResponse({
       role: "USER",
       intent: "USER_NEXT_ACTION",
+      message: "Your loan application is fully completed and processed. No further action is required.",
       data: {
-        nextAction: "Action Needed Redirect",
-        description: "Nothing is pending from your side, check this for any action needed on your application.",
-        redirectToActionNeeded: true
+        nextAction: "Application Completed",
+        description: `Everything is verified and your application has been forwarded to ${resolvedBankName}.`,
       }
     });
   }
@@ -981,20 +1063,6 @@ const fallbackUserNextAction = async () => {
     });
   }
 
-  // Check bank assignment
-  const bankAssigned = !!(user.assignedBankId || user.bankId || user.bankName || user.assignedBankName);
-  if (!bankAssigned) {
-    return normalizeChatbotResponse({
-      role: "USER",
-      intent: "USER_NEXT_ACTION",
-      message: "We are currently assigning a bank to your profile. Please wait.",
-      data: {
-        nextAction: "Wait for Bank Assignment",
-        description: "Admin is matching your profile with the participating lenders.",
-      }
-    });
-  }
-
   return normalizeChatbotResponse({
     role: "USER",
     intent: "USER_NEXT_ACTION",
@@ -1049,22 +1117,22 @@ const fallbackUserActionNeeded = async () => {
     }
   });
 };
-export const getUserApplicationSummary = () => fallbackUserApplicationSummary();
-export const getUserTimeline = () => fallbackUserTimeline();
-export const getUserDocumentStatus = () => fallbackUserDocumentStatus();
-export const getUserPendingDocuments = () => fallbackUserPendingDocuments();
-export const getUserLoanAmount = () => fallbackUserLoanAmount();
-export const getUserPaymentStatus = () => fallbackUserPaymentStatus();
-export const getUserAssignedBank = () => fallbackUserAssignedBank();
-export const getUserNextAction = () => fallbackUserNextAction();
-export const getUserActionNeeded = () => fallbackUserActionNeeded();
+export const getUserApplicationSummary = () => getWithFallback("/chatbot/user/summary", fallbackUserApplicationSummary);
+export const getUserTimeline = () => getWithFallback("/chatbot/user/timeline", fallbackUserTimeline);
+export const getUserDocumentStatus = () => getWithFallback("/chatbot/user/documents", fallbackUserDocumentStatus);
+export const getUserPendingDocuments = () => getWithFallback("/chatbot/user/pending-documents", fallbackUserPendingDocuments);
+export const getUserLoanAmount = () => getWithFallback("/chatbot/user/loan", fallbackUserLoanAmount);
+export const getUserPaymentStatus = () => getWithFallback("/chatbot/user/payment", fallbackUserPaymentStatus);
+export const getUserAssignedBank = () => getWithFallback("/chatbot/user/bank", fallbackUserAssignedBank);
+export const getUserNextAction = () => getWithFallback("/chatbot/user/next-action", fallbackUserNextAction);
+export const getUserActionNeeded = () => getWithFallback("/chatbot/user/action-needed", fallbackUserActionNeeded);
 
-export const getDealerMyId = () => fallbackDealerMyId();
-export const getDealerUsers = () => fallbackDealerUsers();
-export const getDealerPendingDocuments = () => fallbackDealerPendingDocuments();
-export const getDealerMonthlySummary = () => fallbackDealerMonthlySummary();
+export const getDealerMyId = () => getWithFallback("/chatbot/dealer/me", fallbackDealerMyId);
+export const getDealerUsers = () => getWithFallback("/chatbot/dealer/users", fallbackDealerUsers);
+export const getDealerPendingDocuments = () => getWithFallback("/chatbot/dealer/pending-documents", fallbackDealerPendingDocuments);
+export const getDealerMonthlySummary = () => getWithFallback("/chatbot/dealer/monthly-summary", fallbackDealerMonthlySummary);
 
-export const getAdminUsers = () => fallbackAdminUsers();
-export const getAdminDealerSummary = () => fallbackAdminDealerSummary();
-export const getAdminDocumentSummary = () => fallbackAdminDocumentSummary();
-export const getAdminPendingDocuments = () => fallbackAdminPendingDocuments();
+export const getAdminUsers = () => getWithFallback("/chatbot/admin/users", fallbackAdminUsers);
+export const getAdminDealerSummary = () => getWithFallback("/chatbot/admin/dealers", fallbackAdminDealerSummary);
+export const getAdminDocumentSummary = () => getWithFallback("/chatbot/admin/documents", fallbackAdminDocumentSummary);
+export const getAdminPendingDocuments = () => getWithFallback("/chatbot/admin/pending-documents", fallbackAdminPendingDocuments);
