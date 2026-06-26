@@ -21,6 +21,7 @@ import {
 import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
 import Footer from "../landing/Footer";
+import { deleteUserAccount } from "../../services/userService";
 import { clearAuthSession, getAuthToken } from "../../utils/authSession";
 import { RAZORPAY_KEY_ID } from "../../config/appConfig";
 import {
@@ -621,6 +622,7 @@ const CustomerDashboard = () => {
   const [activeMenu, setActiveMenu] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [fadingNotifications, setFadingNotifications] = useState(false);
   const [uploadingType, setUploadingType] = useState("");
   const [preview, setPreview] = useState(null);
@@ -1251,6 +1253,29 @@ const CustomerDashboard = () => {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (!userId) {
+      toast.error("User session not found.");
+      return;
+    }
+    const confirm = window.confirm("Are you sure you want to delete your account? This action cannot be undone.");
+    if (!confirm) return;
+
+    setDeleting(true);
+    try {
+      await deleteUserAccount(userId);
+      clearAuthSession();
+      toast.success("Account deleted successfully.");
+      navigate("/login");
+    } catch (error) {
+      console.error("Error deleting user account:", error);
+      const errMsg = error?.response?.data?.message || error?.message || "Failed to delete account.";
+      toast.error(errMsg);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const incomeTypes =
     employmentType === "Salaried"
       ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
@@ -1501,12 +1526,14 @@ const CustomerDashboard = () => {
                 <SettingsTab
                   passwordForm={passwordForm}
                   saving={saving}
+                  deleting={deleting}
                   settingsForm={settingsForm}
                   setPasswordForm={setPasswordForm}
                   setSettingsForm={setSettingsForm}
                   saveSettings={saveSettings}
                   changePassword={changePassword}
                   assignedBank={assignedBank}
+                  onDeleteAccount={handleDeleteAccount}
                 />
               )}
             </>
@@ -1821,7 +1848,7 @@ const DashboardTab = ({
             </p>
           </div>
           <button
-            onClick={() => setActiveMenu("Documents")}
+            onClick={() => setActiveMenu("Status")}
             className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold"
           >
             Re-upload
@@ -2460,12 +2487,14 @@ const StatusTab = ({
 const SettingsTab = ({
   passwordForm,
   saving,
+  deleting,
   settingsForm,
   setPasswordForm,
   setSettingsForm,
   saveSettings,
   changePassword,
   assignedBank,
+  onDeleteAccount,
 }) => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -2484,13 +2513,22 @@ const SettingsTab = ({
           <Field label="Mobile" value={settingsForm.mobileNumber} onChange={(value) => setSettingsForm({ ...settingsForm, mobileNumber: value })} />
           
         </div>
-        <button
-          onClick={saveSettings}
-          disabled={saving}
-          className="mt-6 bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
-        >
-          Save Changes
-        </button>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-6">
+          <button
+            onClick={saveSettings}
+            disabled={saving || deleting}
+            className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+          <button
+            onClick={onDeleteAccount}
+            disabled={saving || deleting}
+            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-bold transition-colors disabled:opacity-60"
+          >
+            {deleting ? "Deleting..." : "Delete My Account"}
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">

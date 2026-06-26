@@ -21,6 +21,7 @@ import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
 import axios from "axios";
 import Footer from "../landing/Footer";
+import { deleteDealerAccount, deleteDealerAddedUser } from "../../services/userService";
 import { clearAuthSession, getAuthToken } from "../../utils/authSession";
 import {
   getDealerNotifications,
