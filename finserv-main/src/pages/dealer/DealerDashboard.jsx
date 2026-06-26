@@ -448,6 +448,10 @@ const DealerDashboard = () => {
   const [savingWizard, setSavingWizard] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ password: "", confirm: "" });
+  const [deleting, setDeleting] = useState(false);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [modalType, setModalType] = useState(""); // "ACCOUNT" or "USER"
+  const [userToDelete, setUserToDelete] = useState(null);
 
   const userIds = useMemo(() => users.map((u) => u.userId), [users]);
 
@@ -544,12 +548,12 @@ const DealerDashboard = () => {
   const fetchDealerProfile = useCallback(async () => {
     const sessionData = readDealerSession();
     // Cache profile check: if already fully present in localStorage, reuse it to avoid duplicate api login calls
-    if (sessionData.dealerId && sessionData.dealerCode && sessionData.fullName && sessionData.email) {
+    if (sessionData.dealerId && sessionData.dealerCode && sessionData.fullName && sessionData.email && sessionData.mobileNumber) {
       return {
         dealerId: sessionData.dealerId,
         fullName: sessionData.fullName,
         email: sessionData.email,
-        mobileNumber: sessionData.mobileNumber || "",
+        mobileNumber: sessionData.mobileNumber || localStorage.getItem(`dealer_mobile_${sessionData.email?.toLowerCase()?.trim()}`) || "",
         dealerCode: sessionData.dealerCode,
         role: sessionData.role || "DEALER",
       };
@@ -581,6 +585,7 @@ const DealerDashboard = () => {
         const data = response?.data?.data || response?.data;
         if (data) {
           const stored = readDealerSession();
+          const resolvedMobile = data.mobileNumber || stored.mobileNumber || localStorage.getItem(`dealer_mobile_${(data.email || stored.email || sessionData.email)?.toLowerCase()?.trim()}`) || "";
           localStorage.setItem(
             "dealerData",
             JSON.stringify({
@@ -590,7 +595,7 @@ const DealerDashboard = () => {
               name: data.fullName || stored.name || sessionData.name || "",
               fullName: data.fullName || stored.fullName || sessionData.fullName || "",
               email: data.email || stored.email || sessionData.email || "",
-              mobileNumber: data.mobileNumber || stored.mobileNumber || "",
+              mobileNumber: resolvedMobile,
               dealerCode: data.dealerCode || stored.dealerCode || code,
               role: stored.role || sessionData.role || "DEALER",
             })
@@ -599,7 +604,7 @@ const DealerDashboard = () => {
             dealerId: data.dealerId || stored.dealerId || stored.id,
             fullName: data.fullName || sessionData.fullName || sessionData.name || "",
             email: data.email || sessionData.email || "",
-            mobileNumber: data.mobileNumber || "",
+            mobileNumber: resolvedMobile,
             dealerCode: data.dealerCode || code,
             role: sessionData.role || "DEALER",
           };
@@ -1271,19 +1276,80 @@ const DealerDashboard = () => {
   };
 
   const changePassword = async () => {
-    if (!passwordForm.password || passwordForm.password !== passwordForm.confirm) {
+    if (!passwordForm.password) {
+      toast.error("Please enter a new password.");
+      return;
+    }
+    if (passwordForm.password !== passwordForm.confirm) {
       toast.error("Passwords do not match");
       return;
     }
     try {
-      await api.post("/dealer/reset-password", {
-        email: profile.email,
-        newPassword: passwordForm.password,
-      });
+      await changeDealerPassword(profile.email, passwordForm.password);
       setPasswordForm({ password: "", confirm: "" });
-      toast.success("Password changed");
+      toast.success("Password changed successfully");
     } catch (error) {
       showError(error, "Failed to change password");
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    const resolvedDealerId = profile.dealerId || dealerId;
+    if (!resolvedDealerId) {
+      toast.error("Dealer session not found.");
+      return;
+    }
+    setModalType("ACCOUNT");
+    setConfirmModalOpen(true);
+  };
+
+  const handleDeleteUser = (user) => {
+    const userId = user.userId || user.id;
+    if (!userId) return;
+    setUserToDelete(user);
+    setModalType("USER");
+    setConfirmModalOpen(true);
+  };
+
+  const executeDeleteAccount = async () => {
+    const resolvedDealerId = profile.dealerId || dealerId;
+    setDeleting(true);
+    try {
+      await deleteDealerAccount(resolvedDealerId);
+      clearAuthSession();
+      toast.success("Dealer account deleted successfully.");
+      navigate("/login");
+    } catch (error) {
+      showError(error, "Failed to delete account");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const executeDeleteUser = async () => {
+    if (!userToDelete) return;
+    const userId = userToDelete.userId || userToDelete.id;
+    const resolvedCode = profile.dealerCode || storedDealerCode || localStorage.getItem("dealerCode");
+    if (!resolvedCode) {
+      toast.error("Dealer code not found.");
+      return;
+    }
+
+    try {
+      await deleteDealerAddedUser(resolvedCode, userId);
+      toast.success("User deleted successfully.");
+      setUsers((prev) => prev.filter((u) => String(u.userId) !== String(userId)));
+    } catch (error) {
+      showError(error, "Failed to delete user");
+    }
+  };
+
+  const handleConfirmModal = async () => {
+    setConfirmModalOpen(false);
+    if (modalType === "ACCOUNT") {
+      await executeDeleteAccount();
+    } else if (modalType === "USER") {
+      await executeDeleteUser();
     }
   };
 
@@ -1418,6 +1484,7 @@ const DealerDashboard = () => {
                   openTrackingModal={openTrackingModal}
                   clearAllNotifications={clearAllNotifications}
                   fadingNotifications={fadingNotifications}
+                  onDeleteUser={handleDeleteUser}
                 />
               )}
 
@@ -1426,6 +1493,7 @@ const DealerDashboard = () => {
                   users={users}
                   openUserModal={openUserModal}
                   openTrackingModal={openTrackingModal}
+                  onDeleteUser={handleDeleteUser}
                 />
               )}
 
@@ -1446,6 +1514,8 @@ const DealerDashboard = () => {
                   passwordForm={passwordForm}
                   setPasswordForm={setPasswordForm}
                   changePassword={changePassword}
+                  onDeleteAccount={handleDeleteAccount}
+                  deleting={deleting}
                 />
               )}
 
@@ -1511,6 +1581,28 @@ const DealerDashboard = () => {
 
       {/* Chatbot mount only; dashboard logic remains unchanged. */}
       <Chatbot roleOverride="DEALER" onNavigateSection={setActiveMenu} />
+
+      <ConfirmationModal
+        isOpen={confirmModalOpen}
+        title={modalType === "ACCOUNT" ? "Delete Account" : "Delete Customer"}
+        message={
+          modalType === "ACCOUNT"
+            ? "Are you sure you want to delete your dealer account? This action cannot be undone and will permanently remove all your data."
+            : `Are you sure you want to delete user "${userToDelete?.fullName || 'this user'}"? This action cannot be undone.`
+        }
+        confirmText={
+          modalType === "ACCOUNT"
+            ? (deleting ? "Deleting..." : "Delete My Account")
+            : "Delete User"
+        }
+        cancelText="Cancel"
+        onConfirm={handleConfirmModal}
+        onCancel={() => {
+          setConfirmModalOpen(false);
+          setUserToDelete(null);
+        }}
+        isDanger={true}
+      />
     </div>
   );
 };
@@ -1527,6 +1619,7 @@ const DashboardTab = ({
   openTrackingModal,
   clearAllNotifications,
   fadingNotifications,
+  onDeleteUser,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
   const recentUsers = [...users]
@@ -1618,6 +1711,7 @@ const DashboardTab = ({
             users={recentUsers}
             openUserModal={openUserModal}
             openTrackingModal={openTrackingModal}
+            onDeleteUser={onDeleteUser}
           />
         </section>
 
@@ -1721,7 +1815,7 @@ const getUserStatusStyle = (user) => {
   return "border-sky-200 bg-sky-50 text-sky-700";
 };
 
-const UserTable = ({ users, openUserModal, openTrackingModal }) => (
+const UserTable = ({ users, openUserModal, openTrackingModal, onDeleteUser }) => (
   <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
     <div className="overflow-x-auto">
       <table className="w-full min-w-[620px] text-left">
@@ -1775,6 +1869,14 @@ const UserTable = ({ users, openUserModal, openTrackingModal }) => (
                     >
                       Status
                     </button>
+                    {onDeleteUser && (
+                      <button
+                        onClick={() => onDeleteUser(user)}
+                        className="rounded-xl bg-red-600 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-red-700 transition-colors"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </div>
                 </td>
               )}
@@ -1788,13 +1890,14 @@ const UserTable = ({ users, openUserModal, openTrackingModal }) => (
   </div>
 );
 
-const UsersTab = ({ users, openUserModal, openTrackingModal }) => (
+const UsersTab = ({ users, openUserModal, openTrackingModal, onDeleteUser }) => (
   <div className="space-y-5">
     <SectionTitle title="My Users" />
     <UserTable
       users={users}
       openUserModal={openUserModal}
       openTrackingModal={openTrackingModal}
+      onDeleteUser={onDeleteUser}
     />
   </div>
 );
@@ -1807,80 +1910,58 @@ const SettingsTab = ({
   passwordForm,
   setPasswordForm,
   changePassword,
+  onDeleteAccount,
+  deleting,
 }) => {
-  const [editing, setEditing] = useState({});
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const updateProfile = (key, value) => setProfile((prev) => ({ ...prev, [key]: value }));
-
-  const editableFields = [
-    ["fullName", "Dealer Name", "text"],
-    ["email", "Email", "email"],
-    ["mobileNumber", "Mobile Number", "tel"],
-  ];
 
   return (
-    <div className="max-w-5xl space-y-6">
-      <section className="rounded-3xl bg-white p-4 sm:p-6 shadow-sm">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black text-[#0B2A4A]">Dealer Profile</h2>
-            <p className="mt-1 text-sm text-gray-500">Manage dealer contact details.</p>
-          </div>
+    <div className="max-w-4xl space-y-6">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
+        <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Profile Settings</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <FormField
+            label="Full Name"
+            value={profile.fullName}
+            onChange={(value) => setProfile((prev) => ({ ...prev, fullName: value }))}
+          />
+          <FormField label="Email" value={profile.email} readOnly />
+          <FormField
+            label="Mobile"
+            value={profile.mobileNumber}
+            type="tel"
+            onChange={(value) => setProfile((prev) => ({ ...prev, mobileNumber: value }))}
+          />
+          <FormField label="Dealer Code" value={profile.dealerCode} readOnly />
+          <FormField label="Role" value={profile.role} readOnly />
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-6">
           <button
             onClick={saveProfile}
             disabled={profileSaving}
-            className="rounded-2xl bg-[#0B2A4A] px-5 py-3 font-bold text-white disabled:opacity-60"
+            className="bg-[#0B2A4A] text-white px-6 py-3 rounded-2xl font-bold disabled:opacity-60"
           >
             {profileSaving ? "Saving..." : "Save Changes"}
           </button>
+          <button
+            onClick={onDeleteAccount}
+            disabled={profileSaving || deleting}
+            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-bold transition-colors disabled:opacity-60"
+          >
+            {deleting ? "Deleting..." : "Delete My Account"}
+          </button>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {editableFields.map(([key, label, type]) => (
-            <div key={key} className="rounded-2xl bg-[#F4F6F9] p-4">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <p className="text-xs font-black uppercase text-gray-400">{label}</p>
-                <button
-                  onClick={() => setEditing((prev) => ({ ...prev, [key]: !prev[key] }))}
-                  className="flex h-8 w-8 items-center justify-center rounded-xl bg-white text-[#0B2A4A]"
-                  aria-label={`Edit ${label}`}
-                  title={`Edit ${label}`}
-                >
-                  <FaEdit />
-                </button>
-              </div>
-              {editing[key] ? (
-                <input
-                  type={type}
-                  value={profile[key] || ""}
-                  onChange={(event) => updateProfile(key, event.target.value)}
-                  className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 font-semibold text-[#0B2A4A] outline-none focus:border-[#27D3C3]"
-                />
-              ) : (
-                <p className="break-words text-base font-bold text-[#0B2A4A]">
-                  {profile[key] || "Not available"}
-                </p>
-              )}
-            </div>
-          ))}
-          <InfoTile label="Dealer Code" value={profile.dealerCode || "Not available"} />
-          <InfoTile label="Role" value={profile.role || "DEALER"} />
-        </div>
-      </section>
-
-      <section className="rounded-3xl bg-white p-4 sm:p-6 shadow-sm">
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAFBF8] text-[#0B2A4A]">
+      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-2xl bg-[#EAFBF8] text-[#0B2A4A] flex items-center justify-center">
             <FaLock />
           </div>
-          <div>
-            <h2 className="text-xl font-black text-[#0B2A4A]">Update Password</h2>
-            <p className="mt-1 text-sm text-gray-500">Set a new dealer account password.</p>
-          </div>
+          <h2 className="text-xl font-bold text-[#0B2A4A]">Change Password</h2>
         </div>
-
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <PasswordField
             label="New Password"
             value={passwordForm.password}
@@ -1898,11 +1979,11 @@ const SettingsTab = ({
         </div>
         <button
           onClick={changePassword}
-          className="mt-2 rounded-2xl bg-[#27D3C3] px-5 py-3 font-black text-[#0B2A4A]"
+          className="mt-4 bg-[#27D3C3] text-[#0B2A4A] px-6 py-3 rounded-2xl font-bold"
         >
           Update Password
         </button>
-      </section>
+      </div>
     </div>
   );
 };
@@ -2613,6 +2694,34 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
         </div>
       </div>
     </Modal>
+  );
+};
+
+const ConfirmationModal = ({ isOpen, title, message, confirmText = "Delete", cancelText = "Cancel", onConfirm, onCancel, isDanger = true }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl animate-fade-in border border-slate-100">
+        <h3 className="text-xl font-bold text-[#0B2A4A] mb-3">{title}</h3>
+        <p className="text-slate-600 text-sm mb-6 leading-relaxed">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-[#0B2A4A] text-sm font-bold transition-colors"
+          >
+            {cancelText}
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-5 py-2.5 rounded-2xl text-white text-sm font-bold transition-colors ${
+              isDanger ? "bg-red-600 hover:bg-red-700" : "bg-[#0B2A4A] hover:bg-[#123962]"
+            }`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 

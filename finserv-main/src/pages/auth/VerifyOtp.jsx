@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import { FaKey } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { dealerVerifyOtp } from "../../services/dealerService";
-import { userVerifyOtp } from "../../services/customerService";
+import { dealerVerifyOtp, dealerSendOtp } from "../../services/dealerService";
+import { userVerifyOtp, userSendOtp } from "../../services/customerService";
 import AuthPageFrame from "./AuthPageFrame";
 
 const getMessage = (error, fallback) =>
@@ -13,6 +13,7 @@ const VerifyOtp = () => {
   const navigate = useNavigate();
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState(0);
   const email = sessionStorage.getItem("forgot_email") || "";
   const role = sessionStorage.getItem("forgot_role") || "USER";
 
@@ -22,6 +23,38 @@ const VerifyOtp = () => {
       navigate("/forgot-password");
     }
   }, [email, navigate]);
+
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setResendTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendTimer]);
+
+  const formatTimer = (secs) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  };
+
+  const handleResendOtp = async () => {
+    if (resendTimer > 0) return;
+    setLoading(true);
+    try {
+      if (role === "DEALER") {
+        await dealerSendOtp(email);
+      } else {
+        await userSendOtp(email);
+      }
+      toast.success("OTP resent successfully.");
+      setResendTimer(300); // 5 minutes timer
+    } catch (error) {
+      toast.error(getMessage(error, "Failed to send OTP."));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -74,6 +107,26 @@ const VerifyOtp = () => {
             className="auth-simple-input"
             required
           />
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={handleResendOtp}
+            disabled={resendTimer > 0 || loading}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: resendTimer > 0 ? "rgba(255, 255, 255, 0.4)" : "#00D4B4",
+              fontFamily: '"Inter", sans-serif',
+              fontSize: "12px",
+              fontWeight: "600",
+              cursor: resendTimer > 0 ? "default" : "pointer",
+              outline: "none",
+            }}
+          >
+            {resendTimer > 0 ? `Resend in ${formatTimer(resendTimer)}` : "Resend OTP"}
+          </button>
         </div>
 
         <button type="submit" className="auth-simple-submit" disabled={loading}>

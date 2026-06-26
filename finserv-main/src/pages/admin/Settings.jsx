@@ -35,32 +35,6 @@ const Settings = ({ admin, passwordForm, setPasswordForm, changePassword }) => {
           ))}
         </div>
       </div>
-
-      <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
-        <h2 className="text-xl font-bold text-[#0B2A4A] mb-5">Change Password</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <PasswordField
-            label="New Password"
-            showPassword={showNewPassword}
-            setShowPassword={setShowNewPassword}
-            value={passwordForm.newPassword}
-            onChange={(value) => setPasswordForm({ ...passwordForm, newPassword: value })}
-          />
-          <PasswordField
-            label="Confirm Password"
-            showPassword={showConfirmPassword}
-            setShowPassword={setShowConfirmPassword}
-            value={passwordForm.confirmPassword}
-            onChange={(value) => setPasswordForm({ ...passwordForm, confirmPassword: value })}
-          />
-        </div>
-        <button
-          onClick={changePassword}
-          className="mt-5 bg-[#27D3C3] text-[#0B2A4A] rounded-2xl px-6 py-3 font-bold"
-        >
-          Save Password
-        </button>
-      </div>
     </div>
   );
 };

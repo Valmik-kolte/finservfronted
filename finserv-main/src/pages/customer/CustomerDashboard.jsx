@@ -21,7 +21,7 @@ import {
 import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
 import Footer from "../landing/Footer";
-import { deleteUserAccount } from "../../services/userService";
+import { deleteUserAccount, changeUserPassword } from "../../services/userService";
 import { clearAuthSession, getAuthToken } from "../../utils/authSession";
 import { RAZORPAY_KEY_ID } from "../../config/appConfig";
 import {
@@ -623,6 +623,7 @@ const CustomerDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [fadingNotifications, setFadingNotifications] = useState(false);
   const [uploadingType, setUploadingType] = useState("");
   const [preview, setPreview] = useState(null);
@@ -1240,12 +1241,9 @@ const CustomerDashboard = () => {
 
     setSaving(true);
     try {
-      await api.post("/user/reset-password", {
-        email: settingsForm.email,
-        newPassword: passwordForm.newPassword,
-      });
+      await changeUserPassword(settingsForm.email, passwordForm.newPassword);
       setPasswordForm({ newPassword: "", confirmPassword: "" });
-      toast.success("Password changed.");
+      toast.success("Password changed successfully.");
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to change password.");
     } finally {
@@ -1253,14 +1251,16 @@ const CustomerDashboard = () => {
     }
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = () => {
     if (!userId) {
       toast.error("User session not found.");
       return;
     }
-    const confirm = window.confirm("Are you sure you want to delete your account? This action cannot be undone.");
-    if (!confirm) return;
+    setConfirmModalOpen(true);
+  };
 
+  const onConfirmDeleteAccount = async () => {
+    setConfirmModalOpen(false);
     setDeleting(true);
     try {
       await deleteUserAccount(userId);
@@ -1594,6 +1594,17 @@ const CustomerDashboard = () => {
 
       {/* Chatbot mount only; dashboard logic remains unchanged. */}
       <Chatbot roleOverride="USER" onNavigateSection={setActiveMenu} />
+
+      <ConfirmationModal
+        isOpen={confirmModalOpen}
+        title="Delete Account"
+        message="Are you sure you want to delete your account? This action cannot be undone and will permanently remove all your data."
+        confirmText={deleting ? "Deleting..." : "Delete My Account"}
+        cancelText="Cancel"
+        onConfirm={onConfirmDeleteAccount}
+        onCancel={() => setConfirmModalOpen(false)}
+        isDanger={true}
+      />
     </div>
   );
 };
@@ -2752,5 +2763,33 @@ const StatusBadge = ({ status }) => (
     {status || "PENDING"}
   </span>
 );
+
+const ConfirmationModal = ({ isOpen, title, message, confirmText = "Delete", cancelText = "Cancel", onConfirm, onCancel, isDanger = true }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl animate-fade-in border border-slate-100">
+        <h3 className="text-xl font-bold text-[#0B2A4A] mb-3">{title}</h3>
+        <p className="text-slate-600 text-sm mb-6 leading-relaxed">{message}</p>
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-5 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-[#0B2A4A] text-sm font-bold transition-colors"
+          >
+            {cancelText}
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`px-5 py-2.5 rounded-2xl text-white text-sm font-bold transition-colors ${
+              isDanger ? "bg-red-600 hover:bg-red-700" : "bg-[#0B2A4A] hover:bg-[#123962]"
+            }`}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default CustomerDashboard;
