@@ -682,11 +682,11 @@ const fallbackUserTimeline = async () => {
   const personalInfoSubmitted = !!(draft.address || user.address || personalInfoDb?.address);
 
   const docsByType = new Set(documents.map((doc) => doc.documentType));
-  const missingKYC = !docsByType.has("PAN") || !docsByType.has("AADHAAR");
+  const missingKYC = !docsByType.has("PAN") || !docsByType.has("AADHAAR_1") || !docsByType.has("AADHAAR_2");
   const hasResidential = docsByType.has("LIGHT_BILL") || docsByType.has("RENTAL_AGREEMENT");
   let employmentType = user.employmentType || draft.employmentType;
   if (!employmentType) {
-    const hasSalariedDocs = docsByType.has("SALARY_SLIP") || docsByType.has("APPOINTMENT_LETTER");
+    const hasSalariedDocs = docsByType.has("SALARY_SLIP_1") || docsByType.has("SALARY_SLIP_2") || docsByType.has("SALARY_SLIP_3") || docsByType.has("APPOINTMENT_LETTER");
     const hasSelfEmployedDocs = docsByType.has("ITR_RETURN");
     if (hasSelfEmployedDocs && !hasSalariedDocs) {
       employmentType = "Self Employed";
@@ -695,10 +695,10 @@ const fallbackUserTimeline = async () => {
     }
   }
   const requiredIncome = employmentType === "Salaried"
-    ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+    ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
     : ["ITR_RETURN", "BANK_STATEMENT"];
   const missingIncome = requiredIncome.some(type => !docsByType.has(type));
-  const requiredVehicle = ["RC", "INSURANCE", "CAR_FRONT_SIDE_PHOTO", "CAR_BACK_SIDE_PHOTO", "CHASSIS_NUMBER", "ODOMETER_READING"];
+  const requiredVehicle = ["RC_1", "RC_2", "INSURANCE", "CAR_FRONT_SIDE_PHOTO", "CAR_BACK_SIDE_PHOTO", "CHASSIS_NUMBER", "ODOMETER_READING"];
   const missingVehicle = requiredVehicle.some(type => !docsByType.has(type));
 
   const allDocsUploaded = !missingKYC && hasResidential && !missingIncome && !missingVehicle;
@@ -961,16 +961,17 @@ const fallbackUserNextAction = async () => {
   // 1. Check KYC Documents
   const missingKYC = [];
   if (!docsByType.has("PAN")) missingKYC.push("PAN");
-  if (!docsByType.has("AADHAAR")) missingKYC.push("AADHAAR");
+  if (!docsByType.has("AADHAAR_1")) missingKYC.push("AADHAAR_1");
+  if (!docsByType.has("AADHAAR_2")) missingKYC.push("AADHAAR_2");
   if (missingKYC.length > 0) {
     return normalizeChatbotResponse({
       role: "USER",
       intent: "USER_NEXT_ACTION",
-      message: `Please upload missing KYC documents: ${missingKYC.join(", ")}`,
+      message: `Please upload missing KYC documents: ${missingKYC.map(x => x.replace("_1", " Front").replace("_2", " Back")).join(", ")}`,
       data: {
         nextAction: "Upload KYC Documents",
         details: missingKYC.join(", "),
-        description: "KYC documents (PAN, Aadhaar) are required to proceed with verification.",
+        description: "KYC documents (PAN, Aadhaar Front, Aadhaar Back) are required to proceed with verification.",
       }
     });
   }
@@ -993,7 +994,7 @@ const fallbackUserNextAction = async () => {
   // 3. Check Income Proof
   let employmentType = user.employmentType || draft.employmentType;
   if (!employmentType) {
-    const hasSalariedDocs = docsByType.has("SALARY_SLIP") || docsByType.has("APPOINTMENT_LETTER");
+    const hasSalariedDocs = docsByType.has("SALARY_SLIP_1") || docsByType.has("SALARY_SLIP_2") || docsByType.has("SALARY_SLIP_3") || docsByType.has("APPOINTMENT_LETTER");
     const hasSelfEmployedDocs = docsByType.has("ITR_RETURN");
     if (hasSelfEmployedDocs && !hasSalariedDocs) {
       employmentType = "Self Employed";
@@ -1002,7 +1003,7 @@ const fallbackUserNextAction = async () => {
     }
   }
   const requiredIncome = employmentType === "Salaried"
-    ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+    ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
     : ["ITR_RETURN", "BANK_STATEMENT"];
   const missingIncome = requiredIncome.filter(type => !docsByType.has(type));
   if (missingIncome.length > 0) {
@@ -1021,7 +1022,8 @@ const fallbackUserNextAction = async () => {
 
   // 4. Check Vehicle Documents
   const requiredVehicle = [
-    "RC",
+    "RC_1",
+    "RC_2",
     "INSURANCE",
     "CAR_FRONT_SIDE_PHOTO",
     "CAR_BACK_SIDE_PHOTO",

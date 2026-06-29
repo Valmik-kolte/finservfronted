@@ -4,18 +4,22 @@ import { getUserProfile } from "../../services/customerService";
 import { toast } from "react-toastify";
 
 const DOC_TYPES = [
-  { value: "AADHAAR", label: "Aadhaar" },
+  { value: "AADHAAR_1", label: "Aadhaar Front Side" },
+  { value: "AADHAAR_2", label: "Aadhaar Back Side" },
   { value: "PAN", label: "PAN" },
   { value: "PASSPORT", label: "Passport" },
   { value: "VOTER_ID", label: "Voter ID" },
   { value: "DRIVING_LICENSE", label: "Driving License" },
   { value: "LIGHT_BILL", label: "Light Bill" },
   { value: "RENTAL_AGREEMENT", label: "Rental Agreement" },
-  { value: "SALARY_SLIP", label: "Salary Slip" },
+  { value: "SALARY_SLIP_1", label: "Salary Slip Month 1" },
+  { value: "SALARY_SLIP_2", label: "Salary Slip Month 2" },
+  { value: "SALARY_SLIP_3", label: "Salary Slip Month 3" },
   { value: "BANK_STATEMENT", label: "Bank Statement" },
   { value: "ITR_RETURN", label: "ITR Return" },
   { value: "APPOINTMENT_LETTER", label: "Appointment Letter" },
-  { value: "RC", label: "RC" },
+  { value: "RC_1", label: "RC Front Side" },
+  { value: "RC_2", label: "RC Back Side" },
   { value: "INSURANCE", label: "Insurance" },
   { value: "VEHICLE_INVOICE", label: "Vehicle Invoice" },
   { value: "VEHICLE_PHOTO", label: "Vehicle Photo" },
@@ -57,10 +61,13 @@ const Documents = () => {
     if (!file || !docType) return toast.error("Please select document type and file.");
     if (!userId) return toast.error("User session not found.");
 
+    const cleanName = file.name.replace(/,/g, "");
+    const cleanFile = new File([file], cleanName, { type: file.type });
+
     const formData = new FormData();
     formData.append("userId", userId);
     formData.append("type", docType);
-    formData.append("file", file);
+    formData.append("file", cleanFile);
 
     setLoading(true);
     try {
@@ -125,15 +132,15 @@ const Documents = () => {
                 <option key={d.value} value={d.value}>{d.label}</option>
               ))}
             </select>
-            {docType === "SALARY_SLIP" && (
+            {(docType === "SALARY_SLIP" || docType.startsWith("SALARY_SLIP")) && (
               <p className="text-xs text-slate-500 font-semibold mt-1">Last 3 month salary slip</p>
             )}
           </div>
           <div>
-            <label className="text-xs text-gray-400 uppercase">Choose File (PDF, JPG, PNG — max 5MB)</label>
+            <label className="text-xs text-gray-400 uppercase">Choose File (PDF, JPG, PNG, WEBP)</label>
             <input
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
               onChange={(e) => setFile(e.target.files[0])}
               className="w-full mt-1 text-sm text-gray-600"
               required

@@ -36,18 +36,22 @@ import {
 import Chatbot from "../../components/chatbot/Chatbot";
 
 const DOCUMENT_LABELS = {
-  AADHAAR: "Aadhaar",
+  AADHAAR_1: "Aadhaar Front Side",
+  AADHAAR_2: "Aadhaar Back Side",
   PAN: "PAN",
   PASSPORT: "Passport",
   VOTER_ID: "Voter ID",
   DRIVING_LICENSE: "Driving License",
   LIGHT_BILL: "Light Bill",
   RENTAL_AGREEMENT: "Rental Agreement",
-  SALARY_SLIP: "Salary Slip",
+  SALARY_SLIP_1: "Salary Slip Month 1",
+  SALARY_SLIP_2: "Salary Slip Month 2",
+  SALARY_SLIP_3: "Salary Slip Month 3",
   BANK_STATEMENT: "Bank Statement",
   ITR_RETURN: "ITR Return",
   APPOINTMENT_LETTER: "Appointment Letter",
-  RC: "RC",
+  RC_1: "RC Front Side",
+  RC_2: "RC Back Side",
   INSURANCE: "Insurance",
   VEHICLE_INVOICE: "Vehicle Invoice",
   VEHICLE_PHOTO: "Vehicle Photo",
@@ -68,7 +72,8 @@ const STATUS_STYLES = {
 const OPTIONAL_DOCUMENT_TYPES = new Set();
 const RAZORPAY_CHECKOUT_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 const VEHICLE_REQUIRED_TYPES = [
-  "RC",
+  "RC_1",
+  "RC_2",
   "INSURANCE",
   "CAR_FRONT_SIDE_PHOTO",
   "CAR_BACK_SIDE_PHOTO",
@@ -76,7 +81,7 @@ const VEHICLE_REQUIRED_TYPES = [
   "ODOMETER_READING",
 ];
 
-const SALARIED_INCOME_TYPES = new Set(["SALARY_SLIP", "APPOINTMENT_LETTER"]);
+const SALARIED_INCOME_TYPES = new Set(["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER"]);
 const SELF_EMPLOYED_INCOME_TYPES = new Set(["ITR_RETURN"]);
 
 const getIncomeGroupForType = (type) => {
@@ -99,14 +104,15 @@ const getLockedIncomeTypeFromDocs = (docsByType) => {
 
 const STEPS = [
   { id: 1, title: "Personal Information" },
-  { id: 2, title: "KYC Documents", types: ["PAN", "AADHAAR"] },
+  { id: 2, title: "KYC Documents", types: ["PAN", "AADHAAR_1", "AADHAAR_2"] },
   { id: 3, title: "Residential", types: ["LIGHT_BILL", "RENTAL_AGREEMENT"] },
   { id: 4, title: "Income", types: [] },
   {
     id: 5,
     title: "Vehicle Documents",
     types: [
-      "RC",
+      "RC_1",
+      "RC_2",
       "INSURANCE",
       "CAR_FRONT_SIDE_PHOTO",
       "CAR_BACK_SIDE_PHOTO",
@@ -300,7 +306,7 @@ const calculateFurthestStep = (personalInfo, documents, docsByType, employmentTy
     return !!doc && doc.status !== "REJECTED";
   };
 
-  const missingStep2 = ["PAN", "AADHAAR"].some((type) => !hasUsableDocument(docsByType, type));
+  const missingStep2 = ["PAN", "AADHAAR_1", "AADHAAR_2"].some((type) => !hasUsableDocument(docsByType, type));
   if (missingStep2) return 2;
 
   const hasResidentialProof =
@@ -309,12 +315,13 @@ const calculateFurthestStep = (personalInfo, documents, docsByType, employmentTy
   if (!hasResidentialProof) return 3;
 
   const missingStep4 = employmentType === "Salaried"
-    ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type))
+    ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type))
     : ["ITR_RETURN", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type));
   if (missingStep4) return 4;
 
   const missingStep5 = [
-    "RC",
+    "RC_1",
+    "RC_2",
     "INSURANCE",
     "CAR_FRONT_SIDE_PHOTO",
     "CAR_BACK_SIDE_PHOTO",
@@ -1068,16 +1075,19 @@ const CustomerDashboard = () => {
       );
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File must be 5MB or smaller.");
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("File must be 2MB or smaller.");
       return;
     }
+
+    const cleanName = file.name.replace(/,/g, "");
+    const cleanFile = new File([file], cleanName, { type: file.type });
 
     const existing = docsByType[type];
     const formData = new FormData();
     formData.append("userId", userId);
     formData.append("type", type);
-    formData.append("file", file);
+    formData.append("file", cleanFile);
 
     setUploadingType(type);
     try {
@@ -1278,12 +1288,12 @@ const CustomerDashboard = () => {
 
   const incomeTypes =
     employmentType === "Salaried"
-      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
       : ["ITR_RETURN", "BANK_STATEMENT"];
 
   const missingRequiredTypes = useMemo(
     () => {
-      const missing = ["PAN", "AADHAAR", ...incomeTypes, ...VEHICLE_REQUIRED_TYPES].filter(
+      const missing = ["PAN", "AADHAAR_1", "AADHAAR_2", ...incomeTypes, ...VEHICLE_REQUIRED_TYPES].filter(
         (type) => !hasUsableDocument(docsByType, type)
       );
 
@@ -1957,10 +1967,10 @@ const DocumentsTab = ({
   paymentProcessing,
 }) => {
   const requiredTypesForStep = () => {
-    if (currentStep === 2) return ["PAN", "AADHAAR"];
+    if (currentStep === 2) return ["PAN", "AADHAAR_1", "AADHAAR_2"];
     if (currentStep === 3) return ["RESIDENTIAL_PROOF"];
     if (currentStep === 4) return employmentType === "Salaried"
-      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
       : ["ITR_RETURN", "BANK_STATEMENT"];
     if (currentStep === 5) return VEHICLE_REQUIRED_TYPES;
     return [];
@@ -2648,14 +2658,14 @@ const DocumentUploadTile = ({ doc, openPreview, type, uploadingType, uploadForTy
               </span>
             )}
           </div>
-          {type === "SALARY_SLIP" && (
+          {type.startsWith("SALARY_SLIP") && (
             <p className="text-[11px] text-slate-500 font-semibold mt-0.5">Last 3 month salary slip</p>
           )}
           {doc ? (
             <p className="text-xs text-slate-500 mt-1 break-all">{doc.fileName}</p>
           ) : (
             <p className="text-xs text-slate-500 mt-1">
-              {optional ? "Optional upload. " : ""}PDF, JPG or PNG up to 5MB
+              {optional ? "Optional upload. " : ""}PDF, JPG, PNG or WEBP
             </p>
           )}
         </div>
@@ -2687,7 +2697,7 @@ const DocumentUploadTile = ({ doc, openPreview, type, uploadingType, uploadForTy
             <input
               id={inputId}
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -2739,7 +2749,7 @@ const DocumentCard = ({ doc, openPreview, uploadForType, uploadingType, locked }
             <input
               id={inputId}
               type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
+              accept=".pdf,.jpg,.jpeg,.png,.webp"
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];

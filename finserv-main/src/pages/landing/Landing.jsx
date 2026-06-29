@@ -103,7 +103,7 @@ const Landing = () => {
                     Apply Now <FaArrowRight size={16} />
                   </Link>
 
-                  <a href="https://play.google.com/store/apps/details?id=com.vahanfinserv" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center rounded-full border border-[#1ECFC3]/30 bg-[#082544] px-8 py-3 font-bold text-white backdrop-blur-sm transition duration-300 hover:border-[#1ECFC3] hover:bg-[#082544]/3 active:scale-95 text-sm sm:text-base">
+                  <a href="https://drive.google.com/file/d/1tqfntwqVE3kFMXy2jo999bll2t-4_tGj/view?usp=sharing" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center rounded-full border border-[#1ECFC3]/30 bg-[#082544] px-8 py-3 font-bold text-white backdrop-blur-sm transition duration-300 hover:border-[#1ECFC3] hover:bg-[#082544]/3 active:scale-95 text-sm sm:text-base">
                     Download APK <FaDownload size={16} className="ml-2" />
                   </a>
                 </div>
@@ -421,7 +421,7 @@ const Landing = () => {
         <div className="flex flex-wrap gap-4 pt-6">
 
           <a
-            href="https://play.google.com/store/apps/details?id=com.vahanfinserv"
+            href="https://drive.google.com/file/d/1tqfntwqVE3kFMXy2jo999bll2t-4_tGj/view?usp=sharing"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 bg-[#082544] text-white font-semibold rounded-full border border-gray-200  transition"
