@@ -61,11 +61,6 @@ export const CHATBOT_MENUS = {
       service: getUserPaymentStatus,
     },
     {
-      key: "USER_ASSIGNED_BANK",
-      label: "Assigned Bank",
-      service: getUserAssignedBank,
-    },
-    {
       key: "USER_NEXT_ACTION",
       label: "What Should I Do?",
       service: getUserNextAction,

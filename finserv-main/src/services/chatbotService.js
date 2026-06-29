@@ -168,10 +168,12 @@ const fallbackUserApplicationSummary = async () => {
     });
   }
 
-  const [user, documents] = await Promise.all([
+  const [user, documents, personalRes] = await Promise.all([
     getUserProfile(userId),
     getUserDocuments(userId).catch(() => []),
+    api.put(`/personal-info/update/${userId}`, {}).catch(() => null),
   ]);
+  const personalInfo = personalRes?.data?.data || personalRes?.data || {};
   const draft = readPersonalInfoDraft(userId);
   const { bankAssigned } = await resolveUserAssignedBank(userId, user);
   const counts = countByStatus(documents);
@@ -196,7 +198,7 @@ const fallbackUserApplicationSummary = async () => {
       applicationId: user.applicationId || draft.applicationId || "N/A",
       paymentDone: Boolean(user.paymentDone),
       applicationStatus,
-      loanAmount: user.loanAmount || draft.loanAmount || "N/A",
+      loanAmount: personalInfo.loanAmount || user.loanAmount || draft.loanAmount || "N/A",
       documents: counts,
     },
   });
@@ -233,9 +235,13 @@ const fallbackUserPendingDocuments = async () => {
 
 const fallbackUserLoanAmount = async () => {
   const userId = getUserId();
-  const user = userId ? await getUserProfile(userId) : {};
+  const [user, personalRes] = await Promise.all([
+    userId ? getUserProfile(userId) : Promise.resolve({}),
+    userId ? api.put(`/personal-info/update/${userId}`, {}).catch(() => null) : Promise.resolve(null),
+  ]);
+  const personalInfo = personalRes?.data?.data || personalRes?.data || {};
   const draft = readPersonalInfoDraft(userId);
-  const loanAmount = user.loanAmount || draft.loanAmount || "N/A";
+  const loanAmount = personalInfo.loanAmount || user.loanAmount || draft.loanAmount || "N/A";
   return normalizeChatbotResponse({
     role: "USER",
     intent: "LOAN_AMOUNT",

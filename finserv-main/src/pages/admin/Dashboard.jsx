@@ -1798,6 +1798,35 @@ const DashboardOverview = ({
   setActiveMenu,
 }) => {
   const [statOverlay, setStatOverlay] = useState(null);
+
+  const pendingUserIds = [...new Set(pendingDocs.map(doc => getDocumentOwnerId(doc)).filter(Boolean))];
+  const pendingUsersList = pendingUserIds
+    .map(uid => {
+      const found = users.find(u => String(u.userId) === String(uid));
+      if (found) return found;
+      const doc = pendingDocs.find(d => String(getDocumentOwnerId(d)) === String(uid));
+      return {
+        userId: uid,
+        fullName: doc?.fullName || doc?.userName || doc?.customerName || doc?.email || `User #${uid}`,
+        email: doc?.email || doc?.customerEmail || ""
+      };
+    })
+    .filter(Boolean);
+
+  const approvedUserIds = [...new Set(approvedDocs.map(doc => getDocumentOwnerId(doc)).filter(Boolean))];
+  const approvedUsersList = approvedUserIds
+    .map(uid => {
+      const found = users.find(u => String(u.userId) === String(uid));
+      if (found) return found;
+      const doc = approvedDocs.find(d => String(getDocumentOwnerId(d)) === String(uid));
+      return {
+        userId: uid,
+        fullName: doc?.fullName || doc?.userName || doc?.customerName || doc?.email || `User #${uid}`,
+        email: doc?.email || doc?.customerEmail || ""
+      };
+    })
+    .filter(Boolean);
+
   const stats = [
     {
       label: "Total Users",
@@ -1821,21 +1850,21 @@ const DashboardOverview = ({
       })),
     },
     {
-      label: "Pending Documents",
-      value: pendingDocs.length,
-      icon: <FaFileAlt />,
-      items: pendingDocs.map((doc) => ({
-        title: doc.fileName || doc.documentType || `Document #${doc.documentId}`,
-        subtitle: doc.documentType || "Pending",
+      label: "Pending Users",
+      value: pendingUsersList.length,
+      icon: <FaUsers />,
+      items: pendingUsersList.map((user) => ({
+        title: user.fullName || user.email || `User #${user.userId}`,
+        subtitle: `${pendingDocs.filter(d => String(getDocumentOwnerId(d)) === String(user.userId)).length} pending document(s)`,
       })),
     },
     {
-      label: "Approved Documents",
-      value: approvedDocs.length,
+      label: "Approved Users",
+      value: approvedUsersList.length,
       icon: <FaCheck />,
-      items: approvedDocs.map((doc) => ({
-        title: doc.fileName || doc.documentType || `Document #${doc.documentId}`,
-        subtitle: doc.documentType || "Approved",
+      items: approvedUsersList.map((user) => ({
+        title: user.fullName || user.email || `User #${user.userId}`,
+        subtitle: `${approvedDocs.filter(d => String(getDocumentOwnerId(d)) === String(user.userId)).length} approved document(s)`,
       })),
     },
     {
