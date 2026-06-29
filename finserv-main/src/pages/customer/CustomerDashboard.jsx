@@ -1076,7 +1076,7 @@ const CustomerDashboard = () => {
       return;
     }
     if (file.size > 25 * 1024 * 1024) {
-      toast.error("File must be 2MB or smaller.");
+      toast.error("File must be 25MB or smaller.");
       return;
     }
 

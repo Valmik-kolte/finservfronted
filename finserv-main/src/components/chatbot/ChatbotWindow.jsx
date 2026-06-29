@@ -134,8 +134,8 @@ const DataPreview = ({ data, actionKey, role, onNavigateSection, onAction, menuI
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File must be 5MB or smaller.");
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("File must be 25MB or smaller.");
       return;
     }
 
