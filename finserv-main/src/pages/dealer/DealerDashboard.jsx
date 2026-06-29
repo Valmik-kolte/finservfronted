@@ -34,18 +34,22 @@ import Chatbot from "../../components/chatbot/Chatbot";
 import DealerReports from "./DealerReports";
 
 const DOCUMENT_TYPES = {
-  AADHAAR: "Aadhaar",
+  AADHAAR_1: "Aadhaar Front Side",
+  AADHAAR_2: "Aadhaar Back Side",
   PAN: "PAN",
   PASSPORT: "Passport",
   VOTER_ID: "Voter ID",
   DRIVING_LICENSE: "Driving License",
   LIGHT_BILL: "Light Bill",
   RENTAL_AGREEMENT: "Rental Agreement",
-  SALARY_SLIP: "Salary Slip",
+  SALARY_SLIP_1: "Salary Slip Month 1",
+  SALARY_SLIP_2: "Salary Slip Month 2",
+  SALARY_SLIP_3: "Salary Slip Month 3",
   BANK_STATEMENT: "Bank Statement",
   ITR_RETURN: "ITR Return",
   APPOINTMENT_LETTER: "Appointment Letter",
-  RC: "RC",
+  RC_1: "RC Front Side",
+  RC_2: "RC Back Side",
   INSURANCE: "Insurance",
   VEHICLE_INVOICE: "Vehicle Invoice",
   VEHICLE_PHOTO: "Vehicle Photo",
@@ -57,10 +61,11 @@ const DOCUMENT_TYPES = {
 };
 
 const STEP_TYPES = {
-  2: ["PAN", "AADHAAR"],
+  2: ["PAN", "AADHAAR_1", "AADHAAR_2"],
   3: ["LIGHT_BILL", "RENTAL_AGREEMENT"],
   5: [
-    "RC",
+    "RC_1",
+    "RC_2",
     "INSURANCE",
     "CAR_FRONT_SIDE_PHOTO",
     "CAR_BACK_SIDE_PHOTO",
@@ -69,7 +74,7 @@ const STEP_TYPES = {
   ],
 };
 
-const SALARIED_INCOME_TYPES = new Set(["SALARY_SLIP", "APPOINTMENT_LETTER"]);
+const SALARIED_INCOME_TYPES = new Set(["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER"]);
 const SELF_EMPLOYED_INCOME_TYPES = new Set(["ITR_RETURN"]);
 
 const getIncomeGroupForType = (type) => {
@@ -1043,7 +1048,7 @@ const DealerDashboard = () => {
   const requiredUploadTypes = () => {
     const income =
       employmentType === "Salaried"
-        ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+        ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
         : employmentType === "Self Employed"
           ? ["ITR_RETURN", "BANK_STATEMENT"]
           : [];
@@ -1051,8 +1056,8 @@ const DealerDashboard = () => {
   };
 
   const validateFiles = () => {
-    if (!files.PAN || !files.AADHAAR) {
-      toast.error("Upload PAN and Aadhaar");
+    if (!files.PAN || !files.AADHAAR_1 || !files.AADHAAR_2) {
+      toast.error("Upload PAN, Aadhaar Front, and Aadhaar Back");
       return false;
     }
     if (!files.LIGHT_BILL && !files.RENTAL_AGREEMENT) {
@@ -1166,10 +1171,15 @@ const DealerDashboard = () => {
       const uploaded = [];
 
       for (const type of selectedTypes) {
+        const fileObj = files[type];
+        if (!fileObj) continue;
+        const cleanName = fileObj.name.replace(/,/g, "");
+        const cleanFile = new File([fileObj], cleanName, { type: fileObj.type });
+
         const formData = new FormData();
         formData.append("userId", String(newUserId));
         formData.append("type", type);
-        formData.append("file", files[type]);
+        formData.append("file", cleanFile);
         const res = await api.post("/documents/upload", formData);
         uploaded.push(res.data?.data);
       }
@@ -1222,10 +1232,13 @@ const DealerDashboard = () => {
     try {
       const existing = docs.find((doc) => doc.userId === userId && doc.documentType === type);
       if (existing?.documentId) await api.delete(`/documents/${existing.documentId}`);
+      const cleanName = file.name.replace(/,/g, "");
+      const cleanFile = new File([file], cleanName, { type: file.type });
+
       const formData = new FormData();
       formData.append("userId", String(userId));
       formData.append("type", type);
-      formData.append("file", file);
+      formData.append("file", cleanFile);
       await api.post("/documents/upload", formData);
       await addLocalAdminNotification(
         `${profile.fullName || "Dealer"} has reuploaded ${docLabel(type)} for ${user?.fullName || "Customer"}.`,
@@ -2214,7 +2227,7 @@ const WizardModal = ({
 
   const incomeTypes =
     employmentType === "Salaried"
-      ? ["SALARY_SLIP", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
       : employmentType === "Self Employed"
         ? ["ITR_RETURN", "BANK_STATEMENT"]
         : [];
@@ -2266,8 +2279,8 @@ const WizardModal = ({
       toast.error("Loan amount must be greater than 0");
       return false;
     }
-    if (!files.PAN || !files.AADHAAR) {
-      toast.error("Upload PAN and Aadhaar");
+    if (!files.PAN || !files.AADHAAR_1 || !files.AADHAAR_2) {
+      toast.error("Upload PAN, Aadhaar Front, and Aadhaar Back");
       return false;
     }
     if (!files.LIGHT_BILL && !files.RENTAL_AGREEMENT) {
@@ -2514,7 +2527,7 @@ const UploadStep = ({ title, types, files, setFile, onPreviewFile, note }) => (
           <span className="font-black text-[#0B2A4A]">{docLabel(type)}</span>
           <input
             type="file"
-            accept=".jpg,.jpeg,.png,.pdf"
+            accept=".jpg,.jpeg,.png,.pdf,.webp"
             onChange={(event) => setFile(type, event.target.files?.[0])}
             className="mt-4 w-full text-sm"
           />
