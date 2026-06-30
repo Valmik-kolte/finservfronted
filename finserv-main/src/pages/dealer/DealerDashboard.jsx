@@ -448,6 +448,7 @@ const DealerDashboard = () => {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [personalForm, setPersonalForm] = useState(initialPersonalForm);
   const [employmentType, setEmploymentType] = useState("");
+  const [hasAppointmentLetter, setHasAppointmentLetter] = useState("yes");
   const [files, setFiles] = useState({});
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [savingWizard, setSavingWizard] = useState(false);
@@ -567,7 +568,7 @@ const DealerDashboard = () => {
     try {
       const code = sessionData.dealerCode || localStorage.getItem("dealerCode") || "";
       if (code) {
-        const baseURL = api.defaults.baseURL || "https://v1.vahanfinserv.com/api";
+        const baseURL = api.defaults.baseURL || "http://localhost:8081/api";
         let adminToken = "";
         try {
           const loginRes = await axios.post(`${baseURL}/auth/login`, {
@@ -1032,6 +1033,7 @@ const DealerDashboard = () => {
   const openWizard = () => {
     setWizardOpen(true);
     setEmploymentType("");
+    setHasAppointmentLetter("yes");
     setFiles({});
     setUploadedDocs([]);
     setPersonalForm(initialPersonalForm);
@@ -1048,7 +1050,9 @@ const DealerDashboard = () => {
   const requiredUploadTypes = () => {
     const income =
       employmentType === "Salaried"
-        ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+        ? (hasAppointmentLetter === "no"
+            ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
+            : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"])
         : employmentType === "Self Employed"
           ? ["ITR_RETURN", "BANK_STATEMENT"]
           : [];
@@ -1583,6 +1587,8 @@ const DealerDashboard = () => {
           uploadedDocs={uploadedDocs}
           openPreview={openPreview}
           onClose={() => setWizardOpen(false)}
+          hasAppointmentLetter={hasAppointmentLetter}
+          setHasAppointmentLetter={setHasAppointmentLetter}
         />
       )}
 
@@ -2221,13 +2227,17 @@ const WizardModal = ({
   uploadedDocs,
   openPreview,
   onClose,
+  hasAppointmentLetter,
+  setHasAppointmentLetter,
 }) => {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
 
   const incomeTypes =
     employmentType === "Salaried"
-      ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      ? (hasAppointmentLetter === "no"
+          ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
+          : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"])
       : employmentType === "Self Employed"
         ? ["ITR_RETURN", "BANK_STATEMENT"]
         : [];
@@ -2382,6 +2392,27 @@ const WizardModal = ({
                 </span>
               )}
             </label>
+            {employmentType === "Salaried" && (
+              <div className="mb-4 block bg-slate-50 border border-slate-100 rounded-2xl p-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-[#0B2A4A]">Have Appointment Letter?</span>
+                <div className="flex gap-1 bg-[#F4F6F9] p-0.5 rounded-xl border border-slate-200/50">
+                  {["yes", "no"].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setHasAppointmentLetter(val)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg uppercase transition-all ${
+                        hasAppointmentLetter === val
+                          ? "bg-[#0B2A4A] text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 

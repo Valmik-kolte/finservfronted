@@ -296,7 +296,7 @@ const extractBankAssignmentFromNotifications = (notifications, userId) => {
   return null;
 };
 
-const calculateFurthestStep = (personalInfo, documents, docsByType, employmentType) => {
+const calculateFurthestStep = (personalInfo, documents, docsByType, employmentType, hasAppointmentLetter) => {
   if (!personalInfo || !personalInfo.address || getMissingPersonalInfoFields(personalInfo).length > 0) {
     return 1;
   }
@@ -314,8 +314,12 @@ const calculateFurthestStep = (personalInfo, documents, docsByType, employmentTy
     hasUsableDocument(docsByType, "RENTAL_AGREEMENT");
   if (!hasResidentialProof) return 3;
 
+  const salariedRequired = hasAppointmentLetter === "no"
+    ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
+    : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"];
+
   const missingStep4 = employmentType === "Salaried"
-    ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type))
+    ? salariedRequired.some((type) => !hasUsableDocument(docsByType, type))
     : ["ITR_RETURN", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type));
   if (missingStep4) return 4;
 
@@ -639,6 +643,16 @@ const CustomerDashboard = () => {
   const [currentStep, setCurrentStep] = useState(1);
   const initialLoadRef = useRef(true);
   const [employmentType, setEmploymentType] = useState("Salaried");
+  const [hasAppointmentLetter, setHasAppointmentLetter] = useState(() => {
+    const saved = localStorage.getItem(`has_appointment_letter_${userId}`);
+    return saved === null ? "yes" : saved;
+  });
+
+  const handleHasAppointmentLetterChange = (val) => {
+    setHasAppointmentLetter(val);
+    localStorage.setItem(`has_appointment_letter_${userId}`, val);
+  };
+
   const [applicationNumber, setApplicationNumber] = useState("");
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(PAYMENT_STATUS.DRAFT);
@@ -825,11 +839,13 @@ const CustomerDashboard = () => {
               return acc;
             }, {});
             const inferredIncomeType = getLockedIncomeTypeFromDocs(docsMap);
+            const savedHasAppLetter = localStorage.getItem(`has_appointment_letter_${userId}`) || "yes";
             const furthest = calculateFurthestStep(
               mergedPersonalInfo,
               loadedDocuments,
               docsMap,
-              inferredIncomeType || employmentType
+              inferredIncomeType || employmentType,
+              savedHasAppLetter
             );
             if (furthest === 6) {
               statusVal = PAYMENT_STATUS.PAYMENT_PENDING;
@@ -845,15 +861,17 @@ const CustomerDashboard = () => {
               if (type) acc[type] = pickLatestDocument(acc[type], doc);
               return acc;
             }, {});
-            const inferredIncomeType = getLockedIncomeTypeFromDocs(docsMap);
+             const inferredIncomeType = getLockedIncomeTypeFromDocs(docsMap);
             if (inferredIncomeType) {
               setEmploymentType(inferredIncomeType);
             }
+            const savedHasAppLetter = localStorage.getItem(`has_appointment_letter_${userId}`) || "yes";
             const furthest = calculateFurthestStep(
               mergedPersonalInfo,
               loadedDocuments,
               docsMap,
-              inferredIncomeType || employmentType
+              inferredIncomeType || employmentType,
+              savedHasAppLetter
             );
             setCurrentStep(furthest);
           }
@@ -1288,7 +1306,9 @@ const CustomerDashboard = () => {
 
   const incomeTypes =
     employmentType === "Salaried"
-      ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      ? (hasAppointmentLetter === "no"
+          ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
+          : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"])
       : ["ITR_RETURN", "BANK_STATEMENT"];
 
   const missingRequiredTypes = useMemo(
@@ -1495,6 +1515,8 @@ const CustomerDashboard = () => {
                   currentStep={currentStep}
                   docsByType={docsByType}
                   employmentType={employmentType}
+                  hasAppointmentLetter={hasAppointmentLetter}
+                  setHasAppointmentLetter={handleHasAppointmentLetterChange}
                   applicationNumber={applicationNumber}
                   applicationSubmitted={applicationSubmitted}
                   documents={documents}
@@ -1965,12 +1987,16 @@ const DocumentsTab = ({
   paymentStatus,
   onPayNow,
   paymentProcessing,
+  hasAppointmentLetter,
+  setHasAppointmentLetter,
 }) => {
   const requiredTypesForStep = () => {
     if (currentStep === 2) return ["PAN", "AADHAAR_1", "AADHAAR_2"];
     if (currentStep === 3) return ["RESIDENTIAL_PROOF"];
     if (currentStep === 4) return employmentType === "Salaried"
-      ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"]
+      ? (hasAppointmentLetter === "no"
+          ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
+          : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"])
       : ["ITR_RETURN", "BANK_STATEMENT"];
     if (currentStep === 5) return VEHICLE_REQUIRED_TYPES;
     return [];
@@ -2097,30 +2123,53 @@ const DocumentsTab = ({
           <h2 className="text-xl font-bold text-[#0B2A4A]">
             {STEPS.find((step) => step.id === currentStep)?.title}
           </h2>
-          {currentStep === 4 && (
-            <div className="flex rounded-2xl bg-[#F4F6F9] p-1">
-              {["Salaried", "Self Employed"].map((type) => (
-                <button
-                  key={type}
-                  disabled={!!assignedBank || (!!lockedIncomeType && lockedIncomeType !== type)}
-                  onClick={() => {
-                    if (lockedIncomeType && lockedIncomeType !== type) {
-                      toast.error(
-                        `${lockedIncomeType} income documents already uploaded. Remove them before switching income type.`
-                      );
-                      return;
-                    }
-                    setEmploymentType(type);
-                  }}
-                  className={`px-4 py-2 rounded-xl text-sm font-bold ${
-                    employmentType === type ? "bg-white text-[#0B2A4A] shadow-sm" : "text-slate-500"
-                  } ${lockedIncomeType && lockedIncomeType !== type ? "cursor-not-allowed opacity-50" : ""}`}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-4">
+            {currentStep === 4 && (
+              <div className="flex rounded-2xl bg-[#F4F6F9] p-1">
+                {["Salaried", "Self Employed"].map((type) => (
+                  <button
+                    key={type}
+                    disabled={!!assignedBank || (!!lockedIncomeType && lockedIncomeType !== type)}
+                    onClick={() => {
+                      if (lockedIncomeType && lockedIncomeType !== type) {
+                        toast.error(
+                          `${lockedIncomeType} income documents already uploaded. Remove them before switching income type.`
+                        );
+                        return;
+                      }
+                      setEmploymentType(type);
+                    }}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold ${
+                      employmentType === type ? "bg-white text-[#0B2A4A] shadow-sm" : "text-slate-500"
+                    } ${lockedIncomeType && lockedIncomeType !== type ? "cursor-not-allowed opacity-50" : ""}`}
+                  >
+                    {type}
+                  </button>
+                ))}
+              </div>
+            )}
+            {currentStep === 4 && employmentType === "Salaried" && (
+              <div className="flex items-center gap-3 bg-[#F4F6F9] px-4 py-2 rounded-2xl">
+                <span className="text-xs font-bold text-slate-600">Have Appointment Letter?</span>
+                <div className="flex gap-1 bg-white p-0.5 rounded-xl border border-slate-200/50">
+                  {["yes", "no"].map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setHasAppointmentLetter(val)}
+                      className={`px-3 py-1 text-xs font-bold rounded-lg uppercase transition-all ${
+                        hasAppointmentLetter === val
+                          ? "bg-[#0B2A4A] text-white shadow-sm"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                    >
+                      {val}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <DocumentUploadGrid
           docsByType={docsByType}
