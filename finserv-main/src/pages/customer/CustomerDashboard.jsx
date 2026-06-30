@@ -276,24 +276,28 @@ const extractPaymentStatusFromNotifications = (notifications, userId) => {
   return null;
 };
 
-const extractBankAssignmentFromNotifications = (notifications, userId) => {
-  if (!Array.isArray(notifications)) return null;
+const extractAllBankAssignmentsFromNotifications = (notifications, userId) => {
+  if (!Array.isArray(notifications)) return [];
   const bankNotifications = notifications
     .filter(
       (notif) =>
         String(notif.receiverId) === String(userId) &&
         notif.message &&
         notif.message.startsWith("BANK_ASSIGNED:")
-    )
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  if (bankNotifications.length > 0) {
-    const parts = bankNotifications[0].message.split(":");
+    );
+  
+  const assignments = [];
+  const seenBankIds = new Set();
+  bankNotifications.forEach((notif) => {
+    const parts = notif.message.split(":");
     const bankId = parts[1];
     const bankName = parts.slice(2).join(":");
-    return { bankId, bankName };
-  }
-  return null;
+    if (bankId && !seenBankIds.has(bankId)) {
+      seenBankIds.add(bankId);
+      assignments.push({ bankId, bankName });
+    }
+  });
+  return assignments;
 };
 
 const calculateFurthestStep = (personalInfo, documents, docsByType, employmentType, hasAppointmentLetter) => {
@@ -796,34 +800,35 @@ const CustomerDashboard = () => {
           if (user.applicationId) {
             setApplicationNumber(user.applicationId);
           }
-          const bankId = user.bankId || user.assignedBankId;
-          const backendBankName = user.assignedBankName || user.bankName;
-          const localAssignedBank = readLocalAssignedBank(userId);
-          const dbBankInfo = extractBankAssignmentFromNotifications(fetchedNotifs, userId);
-          if (dbBankInfo) {
-            setAssignedBank({
-              bankId: dbBankInfo.bankId,
-              bankName: dbBankInfo.bankName,
-              assignedBankName: dbBankInfo.bankName,
-            });
-          } else if (bankId) {
-            try {
-              const banksRes = await api.get("/admin/banks");
-              const bankList = Array.isArray(banksRes.data) ? banksRes.data : banksRes.data?.data || [];
-              const bank = bankList.find((b) => String(b.bankId) === String(bankId));
-              setAssignedBank(bank || { ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
-            } catch {
-              setAssignedBank({ ...localAssignedBank, bankId, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
-            }
-          } else if (backendBankName || localAssignedBank) {
-            setAssignedBank({
-              ...(localAssignedBank || {}),
-              bankName: backendBankName || localAssignedBank?.bankName || "Assigned",
-              assignedBankName: backendBankName || localAssignedBank?.assignedBankName || localAssignedBank?.bankName || "Assigned",
-            });
-          } else {
-            setAssignedBank(null);
-          }
+           const bankId = user.bankId || user.assignedBankId;
+           const backendBankName = user.assignedBankName || user.bankName;
+           const localAssignedBank = readLocalAssignedBank(userId);
+           const dbBankInfos = extractAllBankAssignmentsFromNotifications(fetchedNotifs, userId);
+           
+           let resolvedBanks = [];
+           if (dbBankInfos.length > 0) {
+             resolvedBanks = dbBankInfos;
+           } else if (user.assignedBanks && Array.isArray(user.assignedBanks) && user.assignedBanks.length > 0) {
+             resolvedBanks = user.assignedBanks.map(b => ({ bankId: b.bankId, bankName: b.bankName || b.name }));
+           } else if (bankId) {
+             const singleName = backendBankName || localAssignedBank?.bankName || "Assigned";
+             resolvedBanks = [{ bankId, bankName: singleName }];
+           } else if (backendBankName || localAssignedBank) {
+             const singleName = backendBankName || localAssignedBank?.bankName || "Assigned";
+             resolvedBanks = [{ bankId: localAssignedBank?.bankId || 1, bankName: singleName }];
+           }
+ 
+           if (resolvedBanks.length > 0) {
+             const concatenatedNames = resolvedBanks.map(b => b.bankName).join(", ");
+             setAssignedBank({
+               bankId: resolvedBanks[0].bankId,
+               bankName: concatenatedNames,
+               assignedBankName: concatenatedNames,
+               assignedBanks: resolvedBanks,
+             });
+           } else {
+             setAssignedBank(null);
+           }
 
           let statusVal = PAYMENT_STATUS.DRAFT;
           if (dbPaymentStatus) {

@@ -485,22 +485,36 @@ const DealerDashboard = () => {
     return grouped;
   }, [adjustedDocs]);
 
-  const stats = useMemo(
-    () => ({
-      users: users.length,
-      docs: adjustedDocs.length,
-      pending: adjustedDocs.filter((doc) => doc.status === "PENDING").length,
-      approved: adjustedDocs.filter((doc) => doc.status === "APPROVED" || doc.status === "VERIFIED").length,
-      rejected: adjustedDocs.filter((doc) => doc.status === "REJECTED").length,
-      bankAssigned: users.filter(isUserAssignedToBank).length,
-    }),
-    [adjustedDocs, users]
-  );
+  const pendingUsers = useMemo(() => {
+    return users.filter((user) => {
+      const userDocs = docsByUser[user.userId] || [];
+      return userDocs.length > 0 && userDocs.some((doc) => doc.status === "PENDING");
+    });
+  }, [docsByUser, users]);
+
+  const approvedUsers = useMemo(() => {
+    return users.filter((user) => {
+      const userDocs = docsByUser[user.userId] || [];
+      return userDocs.length > 0 && userDocs.every((doc) => doc.status === "APPROVED" || doc.status === "VERIFIED");
+    });
+  }, [docsByUser, users]);
 
   const rejectedUsers = useMemo(() => {
     const rejectedIds = new Set(adjustedDocs.filter((doc) => doc.status === "REJECTED").map((doc) => doc.userId));
     return users.filter((user) => rejectedIds.has(user.userId));
   }, [adjustedDocs, users]);
+
+  const stats = useMemo(
+    () => ({
+      users: users.length,
+      docs: adjustedDocs.length,
+      pending: pendingUsers.length,
+      approved: approvedUsers.length,
+      rejected: rejectedUsers.length,
+      bankAssigned: users.filter(isUserAssignedToBank).length,
+    }),
+    [adjustedDocs.length, pendingUsers.length, approvedUsers.length, rejectedUsers.length, users]
+  );
 
   const dealerCode = profile.dealerCode;
   const notificationDealerId = profile.dealerId || dealerId;
@@ -687,7 +701,9 @@ const DealerDashboard = () => {
             const customerName = match[1].trim().toLowerCase();
             const bankName = match[2].trim();
             if (!parsedBankAssignments[customerName]) {
-              parsedBankAssignments[customerName] = bankName;
+              parsedBankAssignments[customerName] = [bankName];
+            } else if (!parsedBankAssignments[customerName].includes(bankName)) {
+              parsedBankAssignments[customerName].push(bankName);
             }
           }
         });
@@ -704,10 +720,11 @@ const DealerDashboard = () => {
             }
           }
           if (bankName) {
+            const joinedNames = Array.isArray(bankName) ? bankName.join(", ") : bankName;
             return {
               ...updatedUser,
-              bankName,
-              assignedBankName: bankName,
+              bankName: joinedNames,
+              assignedBankName: joinedNames,
               bankId: 1,
               assignedBankId: 1,
               bankStatus: "SENT_TO_BANK",
@@ -845,7 +862,9 @@ const DealerDashboard = () => {
               const customerName = match[1].trim().toLowerCase();
               const bankName = match[2].trim();
               if (!parsedBankAssignments[customerName]) {
-                parsedBankAssignments[customerName] = bankName;
+                parsedBankAssignments[customerName] = [bankName];
+              } else if (!parsedBankAssignments[customerName].includes(bankName)) {
+                parsedBankAssignments[customerName].push(bankName);
               }
             }
           });
@@ -854,10 +873,11 @@ const DealerDashboard = () => {
             const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
             const bankName = parsedBankAssignments[nameKey];
             if (bankName) {
+              const joinedNames = Array.isArray(bankName) ? bankName.join(", ") : bankName;
               return {
                 ...u,
-                bankName,
-                assignedBankName: bankName,
+                bankName: joinedNames,
+                assignedBankName: joinedNames,
                 bankId: 1,
                 assignedBankId: 1,
                 bankStatus: "SENT_TO_BANK",
@@ -1491,6 +1511,8 @@ const DealerDashboard = () => {
               {normalizedMenu === "Dashboard" && (
                 <DashboardTab
                   stats={stats}
+                  pendingUsers={pendingUsers}
+                  approvedUsers={approvedUsers}
                   rejectedUsers={rejectedUsers}
                   notifications={notifications}
                   users={users}
@@ -1628,6 +1650,8 @@ const DealerDashboard = () => {
 
 const DashboardTab = ({
   stats,
+  pendingUsers,
+  approvedUsers,
   rejectedUsers,
   notifications,
   users,
@@ -1650,6 +1674,13 @@ const DashboardTab = ({
       title: userNameById.get(String(doc.userId)) || "Customer",
       subtitle: doc.fileName || docLabel(doc.documentType) || "Uploaded",
     }));
+
+  const userItems = (userList) =>
+    userList.map((user) => ({
+      title: user.fullName || `User #${user.userId}`,
+      subtitle: user.email || user.mobileNumber || "Customer",
+    }));
+
   const statCards = [
     {
       icon: <FaUsers />,
@@ -1665,21 +1696,21 @@ const DashboardTab = ({
     },
     {
       icon: <FaClipboardList />,
-      label: "Admin Approval Pending",
+      label: "Admin Approval Pending (Users)",
       value: stats.pending,
-      items: documentItems(docs.filter((doc) => doc.status === "PENDING")),
+      items: userItems(pendingUsers || []),
     },
     {
       icon: <FaCheckCircle />,
-      label: "Admin Approved Docs",
+      label: "Admin Approved Users",
       value: stats.approved,
-      items: documentItems(docs.filter((doc) => doc.status === "APPROVED" || doc.status === "VERIFIED")),
+      items: userItems(approvedUsers || []),
     },
     {
       icon: <FaRedo />,
-      label: "Admin Rejected Docs",
+      label: "Admin Rejected Users",
       value: stats.rejected || 0,
-      items: documentItems(docs.filter((doc) => doc.status === "REJECTED")),
+      items: userItems(rejectedUsers || []),
     },
     {
       icon: <FaCheckCircle />,

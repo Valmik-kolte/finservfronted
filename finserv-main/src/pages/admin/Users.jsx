@@ -15,6 +15,9 @@ const getAssignedBankId = (user) =>
   "";
 
 const getAssignedBankName = (user, banks) => {
+  if (user.assignedBanks && Array.isArray(user.assignedBanks) && user.assignedBanks.length > 0) {
+    return user.assignedBanks.map((b) => b.bankName || b.name).filter(Boolean).join(", ");
+  }
   if (user.assignedBankName || user.bankName) return user.assignedBankName || user.bankName;
   const bankId = getAssignedBankId(user);
   const bank = banks.find((item) => String(item.bankId) === String(bankId));
@@ -163,30 +166,28 @@ const Users = ({
               * Payment is not approved yet. Bank assignment option is locked.
             </p>
           )}
-          {!getAssignedBankId(selectedUser) && (
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <select
-                value={assignBankId}
-                onChange={(event) => setAssignBankId(event.target.value)}
-                disabled={!isPaymentApproved}
-                className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <option value="">Select bank</option>
-                {banks.map((bank) => (
-                  <option key={bank.bankId} value={bank.bankId}>
-                    {bank.bankName}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={assignBank}
-                disabled={assigningBank || !isPaymentApproved}
-                className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {assigningBank ? "Assigning..." : "Assign"}
-              </button>
-            </div>
-          )}
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <select
+              value={assignBankId}
+              onChange={(event) => setAssignBankId(event.target.value)}
+              disabled={!isPaymentApproved}
+              className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <option value="">Select bank</option>
+              {banks.map((bank) => (
+                <option key={bank.bankId} value={bank.bankId}>
+                  {bank.bankName}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={assignBank}
+              disabled={assigningBank || !isPaymentApproved}
+              className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {assigningBank ? "Assigning..." : "Assign"}
+            </button>
+          </div>
         </div>
 
         {personalInfo && (
