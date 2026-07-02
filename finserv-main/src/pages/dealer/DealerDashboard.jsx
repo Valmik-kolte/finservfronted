@@ -74,6 +74,15 @@ const STEP_TYPES = {
   ],
 };
 
+const WIZARD_STEPS = [
+  { id: 1, title: "Personal Information" },
+  { id: 2, title: "KYC Documents" },
+  { id: 3, title: "Residential" },
+  { id: 4, title: "Income" },
+  { id: 5, title: "Vehicle Documents" },
+  { id: 6, title: "Verify & Submit" },
+];
+
 const SALARIED_INCOME_TYPES = new Set(["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER"]);
 const SELF_EMPLOYED_INCOME_TYPES = new Set(["ITR_RETURN"]);
 
@@ -446,6 +455,7 @@ const DealerDashboard = () => {
   const [trackingData, setTrackingData] = useState(null);
   const [preview, setPreview] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardUser, setWizardUser] = useState(null);
   const [personalForm, setPersonalForm] = useState(initialPersonalForm);
   const [employmentType, setEmploymentType] = useState("");
   const [hasAppointmentLetter, setHasAppointmentLetter] = useState("yes");
@@ -484,6 +494,15 @@ const DealerDashboard = () => {
     });
     return grouped;
   }, [adjustedDocs]);
+
+  const wizardExistingDocsByType = useMemo(() => {
+    if (!wizardUser) return {};
+    return (docsByUser[wizardUser.userId] || []).reduce((acc, doc) => {
+      const type = doc.documentType || doc.type;
+      if (type) acc[type] = doc;
+      return acc;
+    }, {});
+  }, [docsByUser, wizardUser]);
 
   const pendingUsers = useMemo(() => {
     return users.filter((user) => {
@@ -1051,6 +1070,7 @@ const DealerDashboard = () => {
   const personalInfoFor = (userId) => personalInfos.find((item) => item.userId === userId);
 
   const openWizard = () => {
+    setWizardUser(null);
     setWizardOpen(true);
     setEmploymentType("");
     setHasAppointmentLetter("yes");
@@ -1064,7 +1084,26 @@ const DealerDashboard = () => {
       toast.info("This application is already assigned to a bank. Documents are locked.");
       return;
     }
-    toast.info("Document upload wizard is being updated. Please use Status re-upload for rejected documents for now.");
+    const info = personalInfoFor(user.userId) || {};
+    const userDocs = docsByUser[user.userId] || [];
+    const hasSalariedDocs = userDocs.some((doc) => SALARIED_INCOME_TYPES.has(doc.documentType || doc.type));
+    const hasSelfEmployedDocs = userDocs.some((doc) => SELF_EMPLOYED_INCOME_TYPES.has(doc.documentType || doc.type));
+    setWizardUser(user);
+    setWizardOpen(true);
+    setFiles({});
+    setUploadedDocs(userDocs);
+    setHasAppointmentLetter(userDocs.some((doc) => (doc.documentType || doc.type) === "APPOINTMENT_LETTER") ? "yes" : "no");
+    setEmploymentType(hasSalariedDocs ? "Salaried" : hasSelfEmployedDocs ? "Self Employed" : "Others");
+    setPersonalForm({
+      fullName: user.fullName || user.name || "",
+      email: user.email || "",
+      mobileNumber: user.mobileNumber || "",
+      address: info.address || "",
+      city: info.city || "",
+      state: info.state || "",
+      pincode: info.pincode || "",
+      loanAmount: info.loanAmount || "",
+    });
   };
 
   const requiredUploadTypes = () => {
@@ -1080,11 +1119,13 @@ const DealerDashboard = () => {
   };
 
   const validateFiles = () => {
-    if (!files.PAN || !files.AADHAAR_1 || !files.AADHAAR_2) {
+    const hasWizardDocument = (type) => Boolean(files[type] || wizardExistingDocsByType[type]);
+
+    if (!hasWizardDocument("PAN") || !hasWizardDocument("AADHAAR_1") || !hasWizardDocument("AADHAAR_2")) {
       toast.error("Upload PAN, Aadhaar Front, and Aadhaar Back");
       return false;
     }
-    if (!files.LIGHT_BILL && !files.RENTAL_AGREEMENT) {
+    if (!hasWizardDocument("LIGHT_BILL") && !hasWizardDocument("RENTAL_AGREEMENT")) {
       toast.error("Upload Light Bill or Rental Agreement");
       return false;
     }
@@ -1092,7 +1133,7 @@ const DealerDashboard = () => {
       toast.error("Select employment type");
       return false;
     }
-    const missing = requiredUploadTypes().find((type) => !files[type]);
+    const missing = requiredUploadTypes().find((type) => !hasWizardDocument(type));
     if (missing) {
       toast.error(`Upload ${docLabel(missing)}`);
       return false;
@@ -1146,6 +1187,64 @@ const DealerDashboard = () => {
     if (!validateRegistrationForm()) return false;
     setSavingWizard(true);
     try {
+      if (wizardUser) {
+        const existingUserId = wizardUser.userId || wizardUser.id;
+        await api.put(`/personal-info/update/${existingUserId}`, {
+          userId: Number(existingUserId),
+          address: personalForm.address,
+          mobileNumber: personalForm.mobileNumber,
+          city: personalForm.city,
+          state: personalForm.state,
+          pincode: personalForm.pincode,
+          loanAmount: Number(personalForm.loanAmount),
+        });
+        upsertLocalDealerPersonalInfo({
+          userId: Number(existingUserId),
+          fullName: personalForm.fullName,
+          email: personalForm.email,
+          mobileNumber: personalForm.mobileNumber,
+          address: personalForm.address,
+          city: personalForm.city,
+          state: personalForm.state,
+          pincode: personalForm.pincode,
+          loanAmount: Number(personalForm.loanAmount),
+        });
+
+        const uploaded = [];
+        for (const [type, fileObj] of Object.entries(files)) {
+          if (!fileObj) continue;
+          const existingDoc = wizardExistingDocsByType[type];
+          const existingDocumentId = existingDoc?.documentId || existingDoc?.id;
+          if (existingDocumentId) {
+            try {
+              await api.delete(`/documents/${existingDocumentId}`);
+            } catch (deleteError) {
+              if (deleteError?.response?.status !== 404) throw deleteError;
+            }
+          }
+
+          const cleanName = fileObj.name.replace(/,/g, "");
+          const cleanFile = new File([fileObj], cleanName, { type: fileObj.type });
+          const formData = new FormData();
+          formData.append("userId", String(existingUserId));
+          formData.append("type", type);
+          formData.append("file", cleanFile);
+          const res = await api.post("/documents/upload", formData);
+          uploaded.push(res.data?.data);
+        }
+
+        addLocalAdminNotification(
+          `${profile.fullName || "Dealer"} updated documents for ${personalForm.fullName || "a customer"}.`
+        );
+        await loadDashboard();
+        const freshDocs = await getDealerUserDocuments(existingUserId).catch(() => []);
+        setUploadedDocs(freshDocs);
+        setSelectedUserDocs(freshDocs);
+        setActiveMenu("Dashboard");
+        toast.success(uploaded.length > 0 ? "Documents updated and submitted to admin." : "Application details updated.");
+        return true;
+      }
+
       const registerRes = await api.post("/user/register", {
         fullName: personalForm.fullName,
         email: personalForm.email,
@@ -1608,6 +1707,9 @@ const DealerDashboard = () => {
           saving={savingWizard}
           uploadedDocs={uploadedDocs}
           openPreview={openPreview}
+          existingDocsByType={wizardExistingDocsByType}
+          existingDocs={wizardUser ? docsByUser[wizardUser.userId] || [] : []}
+          isExistingUser={Boolean(wizardUser)}
           onClose={() => setWizardOpen(false)}
           hasAppointmentLetter={hasAppointmentLetter}
           setHasAppointmentLetter={setHasAppointmentLetter}
@@ -2257,10 +2359,14 @@ const WizardModal = ({
   saving,
   uploadedDocs,
   openPreview,
+  existingDocsByType = {},
+  existingDocs = [],
+  isExistingUser = false,
   onClose,
   hasAppointmentLetter,
   setHasAppointmentLetter,
 }) => {
+  const [currentStep, setCurrentStep] = useState(1);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
 
@@ -2295,9 +2401,72 @@ const WizardModal = ({
     }
     setFile(type, file);
   };
+  const hasDocument = (type) => Boolean(files[type] || existingDocsByType[type]);
   const selectedDocuments = Object.entries(files)
     .filter(([, file]) => Boolean(file))
-    .map(([type, file]) => ({ type, file }));
+    .map(([type, file]) => ({ type, file, doc: existingDocsByType[type] }));
+  const allReviewDocuments = [
+    ...selectedDocuments,
+    ...existingDocs
+      .filter((doc) => {
+        const type = doc.documentType || doc.type;
+        return type && !files[type];
+      })
+      .map((doc) => ({ type: doc.documentType || doc.type, doc })),
+  ];
+
+  const requiredTypesForStep = () => {
+    if (currentStep === 2) return STEP_TYPES[2];
+    if (currentStep === 3) return ["RESIDENTIAL_PROOF"];
+    if (currentStep === 4) return incomeTypes;
+    if (currentStep === 5) return STEP_TYPES[5];
+    return [];
+  };
+
+  const missingForCurrentStep = () => {
+    if (currentStep === 1) {
+      return [
+        ["fullName", "Full Name"],
+        ["email", "Email"],
+        ["mobileNumber", "Mobile Number"],
+        ["address", "Address"],
+        ["city", "City"],
+        ["state", "State"],
+        ["pincode", "Pincode"],
+        ["loanAmount", "Loan Amount"],
+      ]
+        .filter(([key]) => String(personalForm[key] || "").trim() === "")
+        .map(([, label]) => label);
+    }
+    if (currentStep === 4 && !employmentType) return ["Employment Type"];
+    return requiredTypesForStep().filter((type) => {
+      if (type === "RESIDENTIAL_PROOF") {
+        return !hasDocument("LIGHT_BILL") && !hasDocument("RENTAL_AGREEMENT");
+      }
+      return !hasDocument(type);
+    });
+  };
+
+  const goToStep = (stepId) => {
+    if (stepId <= currentStep) {
+      setCurrentStep(stepId);
+      return;
+    }
+    const missing = missingForCurrentStep();
+    if (missing.length > 0) {
+      if (currentStep === 4 && missing.includes("Employment Type")) {
+        toast.error("Please select employment type before continuing.");
+        return;
+      }
+      toast.error(
+        currentStep === 1
+          ? `Please fill ${missing.join(", ")} before continuing.`
+          : `Please upload ${missing.map((type) => type === "RESIDENTIAL_PROOF" ? "Light Bill or Rental Agreement" : docLabel(type)).join(", ")} before continuing.`
+      );
+      return;
+    }
+    setCurrentStep(stepId);
+  };
 
   const validatePreview = () => {
     const required = [
@@ -2320,20 +2489,20 @@ const WizardModal = ({
       toast.error("Loan amount must be greater than 0");
       return false;
     }
-    if (!files.PAN || !files.AADHAAR_1 || !files.AADHAAR_2) {
+    if (!hasDocument("PAN") || !hasDocument("AADHAAR_1") || !hasDocument("AADHAAR_2")) {
       toast.error("Upload PAN, Aadhaar Front, and Aadhaar Back");
       return false;
     }
-    if (!files.LIGHT_BILL && !files.RENTAL_AGREEMENT) {
+    if (!hasDocument("LIGHT_BILL") && !hasDocument("RENTAL_AGREEMENT")) {
       toast.error("Upload Light Bill or Rental Agreement");
       return false;
     }
-    const missingIncome = incomeTypes.find((type) => !files[type]);
+    const missingIncome = incomeTypes.find((type) => !hasDocument(type));
     if (missingIncome) {
       toast.error(`Upload ${docLabel(missingIncome)}`);
       return false;
     }
-    const missingVehicle = STEP_TYPES[5].find((type) => !files[type]);
+    const missingVehicle = STEP_TYPES[5].find((type) => !hasDocument(type));
     if (missingVehicle) {
       toast.error(`Upload ${docLabel(missingVehicle)}`);
       return false;
@@ -2368,122 +2537,181 @@ const WizardModal = ({
   };
 
   return (
-    <Modal title="New User Loan Registration" onClose={onClose} wide>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (validatePreview()) setReviewOpen(true);
-        }}
-        className="space-y-6"
-      >
-        <section className="rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
-          <h4 className="mb-4 font-black text-[#0B2A4A]">User Details</h4>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormField label="Full Name" value={personalForm.fullName} onChange={(value) => updateForm("fullName", value)} />
-            <FormField label="Email" type="email" value={personalForm.email} onChange={(value) => updateForm("email", value)} />
-            <FormField
-              label="Mobile Number"
-              value={personalForm.mobileNumber}
-              onChange={(value) => updateForm("mobileNumber", value.replace(/\D/g, "").slice(0, 10))}
-            />
-          </div>
-        </section>
-
-        <section className="rounded-3xl bg-white p-4 sm:p-5 shadow-sm">
-          <h4 className="mb-4 font-black text-[#0B2A4A]">Loan & Address Details</h4>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <FormField label="Address" value={personalForm.address} onChange={(value) => updateForm("address", value)} />
-            <FormField label="City" value={personalForm.city} onChange={(value) => updateForm("city", value)} />
-            <FormField label="State" value={personalForm.state} onChange={(value) => updateForm("state", value)} />
-            <FormField
-              label="Pincode"
-              value={personalForm.pincode}
-              onChange={(value) => updateForm("pincode", value.replace(/\D/g, "").slice(0, 6))}
-            />
-            <FormField
-              label="Loan Amount"
-              type="number"
-              value={personalForm.loanAmount}
-              onChange={(value) => updateForm("loanAmount", value.replace(/^-/, ""))}
-            />
-            <label className="mb-4 block">
-              <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">Employment Type</span>
-              <select
-                value={employmentType}
-                onChange={(event) => updateEmploymentType(event.target.value)}
-                className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[#0B2A4A] outline-none focus:border-[#27D3C3]"
+    <Modal title={isExistingUser ? "Update User Documents" : "New User Loan Registration"} onClose={onClose} wide>
+      <div className="space-y-6">
+        <div className="overflow-x-auto rounded-3xl bg-white p-3 shadow-sm">
+          <div className="flex min-w-max gap-3">
+            {WIZARD_STEPS.map((step) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => goToStep(step.id)}
+                className={`rounded-2xl px-5 py-3 text-sm font-bold ${
+                  currentStep === step.id ? "bg-[#0B2A4A] text-white" : "bg-[#F4F6F9] text-[#0B2A4A]"
+                }`}
               >
-                <option value="">Select Employment Type</option>
-                <option value="Salaried" disabled={lockedIncomeType === "Self Employed"}>Salaried</option>
-                <option value="Self Employed" disabled={lockedIncomeType === "Salaried"}>Self Employed</option>
-              </select>
-              {lockedIncomeType && (
-                <span className="mt-2 block text-xs font-semibold text-amber-700">
-                  {lockedIncomeType} income documents selected. Other income type is locked.
-                </span>
-              )}
-            </label>
-            {employmentType === "Salaried" && (
-              <div className="mb-4 block bg-slate-50 border border-slate-100 rounded-2xl p-3 flex items-center justify-between">
-                <span className="text-sm font-semibold text-[#0B2A4A]">Have Appointment Letter?</span>
-                <div className="flex gap-1 bg-[#F4F6F9] p-0.5 rounded-xl border border-slate-200/50">
-                  {["yes", "no"].map((val) => (
-                    <button
-                      key={val}
-                      type="button"
-                      onClick={() => setHasAppointmentLetter(val)}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-lg uppercase transition-all ${
-                        hasAppointmentLetter === val
-                          ? "bg-[#0B2A4A] text-white shadow-sm"
-                          : "text-slate-500 hover:text-slate-800"
-                      }`}
-                    >
-                      {val}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+                {step.id}. {step.title}
+              </button>
+            ))}
           </div>
-        </section>
-
-        <UploadStep title="KYC Documents" types={STEP_TYPES[2]} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} />
-        <UploadStep title="Residential Proof" types={STEP_TYPES[3]} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} note="Upload Light Bill or Rental Agreement." />
-        {incomeTypes.length > 0 && <UploadStep title="Income Documents" types={incomeTypes} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} />}
-        <UploadStep title="Vehicle Documents" types={STEP_TYPES[5]} files={files} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} />
-
-        {uploadedDocs.length > 0 && (
-          <section className="space-y-4 rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
-            <h4 className="font-black text-[#0B2A4A]">Uploaded Documents</h4>
-            <DocumentGrid docs={uploadedDocs} openPreview={openPreview} />
-          </section>
-        )}
-
-        <div className="flex flex-col sm:flex-row sm:justify-end gap-3 border-t border-gray-100 pt-5">
-          <button type="button" onClick={onClose} className="rounded-2xl bg-[#F4F6F9] px-5 py-3 font-bold text-[#0B2A4A]">
-            Close
-          </button>
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => {
-              if (validatePreview()) setReviewOpen(true);
-            }}
-            className="rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white disabled:opacity-60"
-          >
-            Preview Application
-          </button>
         </div>
-      </form>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (currentStep === 6 && validatePreview()) setReviewOpen(true);
+          }}
+          className="space-y-6"
+        >
+          {currentStep === 1 && (
+            <section className="rounded-3xl bg-[#F4F6F9] p-4 sm:p-5">
+              <h4 className="mb-4 font-black text-[#0B2A4A]">Personal Information</h4>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField label="Full Name" value={personalForm.fullName} onChange={(value) => updateForm("fullName", value)} />
+                <FormField label="Email" type="email" value={personalForm.email} onChange={(value) => updateForm("email", value)} />
+                <FormField
+                  label="Mobile Number"
+                  value={personalForm.mobileNumber}
+                  onChange={(value) => updateForm("mobileNumber", value.replace(/\D/g, "").slice(0, 10))}
+                />
+                <FormField label="Address" value={personalForm.address} onChange={(value) => updateForm("address", value)} />
+                <FormField label="City" value={personalForm.city} onChange={(value) => updateForm("city", value)} />
+                <FormField label="State" value={personalForm.state} onChange={(value) => updateForm("state", value)} />
+                <FormField
+                  label="Pincode"
+                  value={personalForm.pincode}
+                  onChange={(value) => updateForm("pincode", value.replace(/\D/g, "").slice(0, 6))}
+                />
+                <FormField
+                  label="Loan Amount"
+                  type="number"
+                  value={personalForm.loanAmount}
+                  onChange={(value) => updateForm("loanAmount", value.replace(/^-/, ""))}
+                />
+              </div>
+              <div className="mt-6 flex justify-end">
+                <button type="button" onClick={() => goToStep(2)} className="rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white">
+                  Next
+                </button>
+              </div>
+            </section>
+          )}
+
+          {currentStep >= 2 && currentStep <= 5 && (
+            <section className="rounded-3xl bg-white p-4 shadow-sm sm:p-6">
+              {currentStep === 2 && (
+                <UploadStep title="KYC Documents" types={STEP_TYPES[2]} files={files} existingDocsByType={existingDocsByType} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} onPreviewExisting={openPreview} />
+              )}
+              {currentStep === 3 && (
+                <UploadStep title="Residential Proof" types={STEP_TYPES[3]} files={files} existingDocsByType={existingDocsByType} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} onPreviewExisting={openPreview} note="Upload Light Bill or Rental Agreement." />
+              )}
+              {currentStep === 4 && (
+                <div className="space-y-5">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-bold text-[#0B2A4A]">Employment Type</span>
+                      <select
+                        value={employmentType}
+                        onChange={(event) => updateEmploymentType(event.target.value)}
+                        className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-[#0B2A4A] outline-none focus:border-[#27D3C3]"
+                      >
+                        <option value="">Select Employment Type</option>
+                        <option value="Salaried" disabled={lockedIncomeType === "Self Employed"}>Salaried</option>
+                        <option value="Self Employed" disabled={lockedIncomeType === "Salaried"}>Self Employed</option>
+                        <option value="Others" disabled={Boolean(lockedIncomeType)}>Others</option>
+                      </select>
+                    </label>
+                    {employmentType === "Salaried" && (
+                      <div className="rounded-2xl border border-slate-100 bg-[#F4F6F9] p-3">
+                        <span className="text-sm font-semibold text-[#0B2A4A]">Have Appointment Letter?</span>
+                        <div className="mt-3 flex gap-1 rounded-xl border border-slate-200/50 bg-white p-0.5">
+                          {["yes", "no"].map((val) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setHasAppointmentLetter(val)}
+                              className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase transition-all ${
+                                hasAppointmentLetter === val ? "bg-[#0B2A4A] text-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                              }`}
+                            >
+                              {val}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {employmentType === "Others" ? (
+                    <div className="rounded-2xl bg-[#EAFBF8] p-4 text-sm font-semibold text-[#0B2A4A]">
+                      No income documents are required for Others employment type.
+                    </div>
+                  ) : incomeTypes.length > 0 ? (
+                    <UploadStep title="Income Documents" types={incomeTypes} files={files} existingDocsByType={existingDocsByType} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} onPreviewExisting={openPreview} />
+                  ) : (
+                    <div className="rounded-2xl bg-[#F4F6F9] p-4 text-sm font-semibold text-[#0B2A4A]">
+                      Select employment type to continue.
+                    </div>
+                  )}
+                </div>
+              )}
+              {currentStep === 5 && (
+                <UploadStep title="Vehicle Documents" types={STEP_TYPES[5]} files={files} existingDocsByType={existingDocsByType} setFile={handleSetFile} onPreviewFile={openSelectedFilePreview} onPreviewExisting={openPreview} />
+              )}
+              <div className="mt-6 flex justify-end">
+                <button type="button" onClick={() => goToStep(Math.min(currentStep + 1, 6))} className="rounded-2xl bg-[#0B2A4A] px-6 py-3 font-bold text-white">
+                  Next
+                </button>
+              </div>
+            </section>
+          )}
+
+          {currentStep === 6 && (
+            <section className="space-y-5 rounded-3xl bg-white p-4 shadow-sm sm:p-6">
+              <h4 className="font-black text-[#0B2A4A]">Verify Details Before Submit</h4>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <InfoTile label="Full Name" value={personalForm.fullName} />
+                <InfoTile label="Email" value={personalForm.email} />
+                <InfoTile label="Mobile" value={personalForm.mobileNumber} />
+                <InfoTile label="Address" value={personalForm.address} />
+                <InfoTile label="City" value={personalForm.city} />
+                <InfoTile label="State" value={personalForm.state} />
+                <InfoTile label="Pincode" value={personalForm.pincode} />
+                <InfoTile label="Loan Amount" value={personalForm.loanAmount} />
+                <InfoTile label="Employment Type" value={employmentType} />
+              </div>
+              <ReviewDocumentsGrid
+                documents={allReviewDocuments}
+                onPreviewFile={openSelectedFilePreview}
+                onPreviewExisting={openPreview}
+              />
+              <div className="flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:justify-end">
+                <button type="button" onClick={onClose} className="rounded-2xl bg-[#F4F6F9] px-5 py-3 font-bold text-[#0B2A4A]">
+                  Close
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    if (validatePreview()) setReviewOpen(true);
+                  }}
+                  className="rounded-2xl bg-[#27D3C3] px-6 py-3 font-black text-[#0B2A4A] disabled:opacity-60"
+                >
+                  {saving ? "Submitting..." : "Verify & Submit"}
+                </button>
+              </div>
+            </section>
+          )}
+        </form>
 
       {reviewOpen && (
         <ApplicationReviewModal
           form={personalForm}
           employmentType={employmentType}
-          documents={selectedDocuments}
+          documents={allReviewDocuments}
           saving={saving}
           onClose={() => setReviewOpen(false)}
           onPreviewFile={openSelectedFilePreview}
+          onPreviewExisting={openPreview}
           onVerifySubmit={handleVerifySubmit}
         />
       )}
@@ -2493,6 +2721,7 @@ const WizardModal = ({
           <FilePreviewFrame preview={localPreview} />
         </Modal>
       )}
+      </div>
     </Modal>
   );
 };
@@ -2504,6 +2733,7 @@ const ApplicationReviewModal = ({
   saving,
   onClose,
   onPreviewFile,
+  onPreviewExisting,
   onVerifySubmit,
 }) => (
   <Modal title="Verify Loan Application" onClose={onClose} wide>
@@ -2526,13 +2756,13 @@ const ApplicationReviewModal = ({
       <section>
         <h4 className="mb-4 font-black text-[#0B2A4A]">Documents Selected</h4>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {documents.map(({ type, file }) => (
+          {documents.map(({ type, file, doc }) => (
             <div key={type} className="rounded-3xl border border-gray-100 bg-white p-4 sm:p-5 shadow-sm">
               <p className="font-black text-[#0B2A4A]">{docLabel(type)}</p>
-              <p className="mt-1 truncate text-sm text-gray-500">{file.name}</p>
+              <p className="mt-1 truncate text-sm text-gray-500">{file?.name || doc?.fileName || "-"}</p>
               <button
                 type="button"
-                onClick={() => onPreviewFile(type, file)}
+                onClick={() => file ? onPreviewFile(type, file) : onPreviewExisting(doc)}
                 className="mt-4 flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
               >
                 <FaEye /> Preview
@@ -2564,6 +2794,50 @@ const ApplicationReviewModal = ({
   </Modal>
 );
 
+const ReviewDocumentsGrid = ({ documents, onPreviewFile, onPreviewExisting }) => (
+  <div className="rounded-3xl bg-white p-4 shadow-sm sm:p-6">
+    <div className="mb-5">
+      <h4 className="font-black text-[#0B2A4A]">Uploaded Documents</h4>
+      <p className="mt-1 text-sm text-slate-500">Preview files and confirm before final submit.</p>
+    </div>
+    {documents.length === 0 ? (
+      <p className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+        No documents selected yet.
+      </p>
+    ) : (
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {documents.map(({ type, file, doc }) => (
+          <div key={`${type}-${file?.name || doc?.documentId || doc?.id || "review"}`} className="rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-[#0B2A4A]">{docLabel(type)}</h3>
+                <p className="mt-1 break-all text-xs text-slate-500">{file?.name || doc?.fileName || "-"}</p>
+              </div>
+              <span className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                file ? "bg-[#EAFBF8] text-[#0B2A4A]" : statusStyles[doc?.status] || "bg-slate-100 text-slate-600"
+              }`}>
+                {file ? (doc ? "Replacing" : "Ready") : doc?.status || "Uploaded"}
+              </span>
+            </div>
+            {doc?.remarks && (
+              <p className="mt-3 rounded-2xl bg-red-50 p-3 text-sm text-red-700">
+                Admin remarks: {doc.remarks}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => file ? onPreviewFile(type, file) : onPreviewExisting(doc)}
+              className="mt-4 flex items-center gap-2 rounded-2xl bg-[#F4F6F9] px-4 py-2 text-sm font-bold text-[#0B2A4A]"
+            >
+              <FaEye /> Preview
+            </button>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
+
 const FilePreviewFrame = ({ preview }) => (
   <div className="flex h-[65vh] sm:h-[75vh] items-center justify-center overflow-hidden rounded-2xl border border-gray-100 bg-[#F4F6F9]">
     {preview.isPdf ? (
@@ -2579,34 +2853,54 @@ const FilePreviewFrame = ({ preview }) => (
   </div>
 );
 
-const UploadStep = ({ title, types, files, setFile, onPreviewFile, note }) => (
+const UploadStep = ({ title, types, files, existingDocsByType = {}, setFile, onPreviewFile, onPreviewExisting, note }) => (
   <div>
     <h4 className="font-black text-[#0B2A4A]">{title}</h4>
     {note && <p className="mt-1 text-sm text-gray-500">{note}</p>}
     <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {types.map((type) => (
-        <div key={type} className="rounded-3xl border border-gray-100 bg-[#F4F6F9] p-4 sm:p-5">
-          <span className="font-black text-[#0B2A4A]">{docLabel(type)}</span>
-          <input
-            type="file"
-            accept=".jpg,.jpeg,.png,.pdf,.webp"
-            onChange={(event) => setFile(type, event.target.files?.[0])}
-            className="mt-4 w-full text-sm"
-          />
-          {files[type] && (
-            <div className="mt-3 rounded-2xl bg-white p-3">
-              <span className="block truncate text-sm font-semibold text-gray-600">{files[type].name}</span>
-              <button
-                type="button"
-                onClick={() => onPreviewFile(type, files[type])}
-                className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
-              >
-                <FaEye /> Preview
-              </button>
-            </div>
-          )}
-        </div>
-      ))}
+      {types.map((type) => {
+        const existingDoc = existingDocsByType[type];
+        return (
+          <div key={type} className="rounded-3xl border border-gray-100 bg-[#F4F6F9] p-4 sm:p-5">
+            <span className="font-black text-[#0B2A4A]">{docLabel(type)}</span>
+            {existingDoc && !files[type] && (
+              <div className="mt-3 rounded-2xl bg-white p-3">
+                <span className="block truncate text-sm font-semibold text-gray-600">{existingDoc.fileName}</span>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onPreviewExisting(existingDoc)}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
+                  >
+                    <FaEye /> Preview
+                  </button>
+                  <span className="rounded-full bg-[#EAFBF8] px-3 py-2 text-xs font-bold text-[#0B2A4A]">
+                    Uploaded
+                  </span>
+                </div>
+              </div>
+            )}
+            <input
+              type="file"
+              accept=".jpg,.jpeg,.png,.pdf,.webp"
+              onChange={(event) => setFile(type, event.target.files?.[0])}
+              className="mt-4 w-full text-sm"
+            />
+            {files[type] && (
+              <div className="mt-3 rounded-2xl bg-white p-3">
+                <span className="block truncate text-sm font-semibold text-gray-600">{files[type].name}</span>
+                <button
+                  type="button"
+                  onClick={() => onPreviewFile(type, files[type])}
+                  className="mt-3 inline-flex items-center gap-2 rounded-2xl bg-[#0B2A4A] px-4 py-2 text-sm font-bold text-white"
+                >
+                  <FaEye /> Preview
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   </div>
 );

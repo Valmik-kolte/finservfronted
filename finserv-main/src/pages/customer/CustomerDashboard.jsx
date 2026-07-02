@@ -322,9 +322,13 @@ const calculateFurthestStep = (personalInfo, documents, docsByType, employmentTy
     ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
     : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"];
 
-  const missingStep4 = employmentType === "Salaried"
-    ? salariedRequired.some((type) => !hasUsableDocument(docsByType, type))
-    : ["ITR_RETURN", "BANK_STATEMENT"].some((type) => !hasUsableDocument(docsByType, type));
+  const selfEmployedRequired = ["ITR_RETURN", "BANK_STATEMENT"];
+  const missingStep4 =
+    employmentType === "Salaried"
+      ? salariedRequired.some((type) => !hasUsableDocument(docsByType, type))
+      : employmentType === "Self Employed"
+        ? selfEmployedRequired.some((type) => !hasUsableDocument(docsByType, type))
+        : false;
   if (missingStep4) return 4;
 
   const missingStep5 = [
@@ -1314,7 +1318,9 @@ const CustomerDashboard = () => {
       ? (hasAppointmentLetter === "no"
           ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
           : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"])
-      : ["ITR_RETURN", "BANK_STATEMENT"];
+      : employmentType === "Self Employed"
+        ? ["ITR_RETURN", "BANK_STATEMENT"]
+        : [];
 
   const missingRequiredTypes = useMemo(
     () => {
@@ -1998,11 +2004,15 @@ const DocumentsTab = ({
   const requiredTypesForStep = () => {
     if (currentStep === 2) return ["PAN", "AADHAAR_1", "AADHAAR_2"];
     if (currentStep === 3) return ["RESIDENTIAL_PROOF"];
-    if (currentStep === 4) return employmentType === "Salaried"
-      ? (hasAppointmentLetter === "no"
+    if (currentStep === 4) {
+      if (employmentType === "Salaried") {
+        return hasAppointmentLetter === "no"
           ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
-          : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"])
-      : ["ITR_RETURN", "BANK_STATEMENT"];
+          : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"];
+      }
+      if (employmentType === "Self Employed") return ["ITR_RETURN", "BANK_STATEMENT"];
+      return [];
+    }
     if (currentStep === 5) return VEHICLE_REQUIRED_TYPES;
     return [];
   };
@@ -2131,7 +2141,7 @@ const DocumentsTab = ({
           <div className="flex flex-wrap items-center gap-4">
             {currentStep === 4 && (
               <div className="flex rounded-2xl bg-[#F4F6F9] p-1">
-                {["Salaried", "Self Employed"].map((type) => (
+                {["Salaried", "Self Employed", "Others"].map((type) => (
                   <button
                     key={type}
                     disabled={!!assignedBank || (!!lockedIncomeType && lockedIncomeType !== type)}

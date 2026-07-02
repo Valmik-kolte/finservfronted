@@ -47,7 +47,7 @@ const Footer = ({ logoutOnNavigate = false }) => {
                 <li><Link to="/loan-calculator" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Loan Calculator</Link></li>
             
               </ul>
-              
+
             </div>
 
             {/* Contact */}
@@ -61,9 +61,14 @@ const Footer = ({ logoutOnNavigate = false }) => {
             </div>
           </div>
 
-          <div className="border-t border-gray-700 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-400">
-            <p>&copy; 2026 Vahan Finserv. All rights reserved by Caryanamindia Pvt Ltd</p>
-            <div className="flex flex-wrap justify-center gap-4">
+          <div className="relative border-t border-gray-700 pt-8 text-sm text-gray-400">
+            <p className="text-center">
+              &copy; 2026 Vahan Finserv. All rights reserved by Caryanamindia Pvt Ltd
+            </p>
+            <p className="mt-3 text-center sm:absolute sm:left-0 sm:top-8 sm:mt-0 sm:text-left">
+              Developed by <span className="text-[#1ECFC3]">Caryanamindia Pvt Ltd</span>
+            </p>
+            <div className="mt-3 flex flex-wrap justify-center gap-4 sm:absolute sm:right-0 sm:top-8 sm:mt-0 sm:justify-end">
               <Link to="/privacy-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Privacy Policy</Link>
               <Link to="/terms-and-conditions" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Terms & Conditions</Link>
               <Link to="/refund-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Refund Policy</Link>
