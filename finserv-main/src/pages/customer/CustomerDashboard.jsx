@@ -420,6 +420,14 @@ const missingLabel = (type) =>
     ? "Light Bill or Rental Agreement"
     : DOCUMENT_LABELS[type] || type;
 
+const formatUserApplicationId = (value) => {
+  if (!value) return "";
+  const raw = String(value);
+  if (/^USR\s+/i.test(raw)) return raw.replace(/^USR/i, "Usr");
+  const numeric = raw.match(/\d+/)?.[0] || raw;
+  return `Usr ${numeric}`;
+};
+
 const PAYMENT_STATUS = {
   DRAFT: "DRAFT",
   PAYMENT_PENDING: "PAYMENT_PENDING",
@@ -801,9 +809,7 @@ const CustomerDashboard = () => {
           if (backendPersonalInfo && backendPersonalInfo.address) {
             setHasPersonalInfo(true);
           }
-          if (user.applicationId) {
-            setApplicationNumber(user.applicationId);
-          }
+          setApplicationNumber(formatUserApplicationId(user.applicationId || user.userId || userId));
            const bankId = user.bankId || user.assignedBankId;
            const backendBankName = user.assignedBankName || user.bankName;
            const localAssignedBank = readLocalAssignedBank(userId);

@@ -130,6 +130,48 @@ const formatDate = (value) => {
 };
 
 const docLabel = (type) => DOCUMENT_TYPES[type] || String(type || "-").replace(/_/g, " ");
+const getUserIdValue = (user) => user?.userId || user?.id;
+const formatDealerApplicationId = (userOrId) => {
+  const raw = typeof userOrId === "object"
+    ? userOrId?.applicationId || userOrId?.userId || userOrId?.id
+    : userOrId;
+  if (!raw) return "";
+  const text = String(raw);
+  if (/^DLR\s+/i.test(text)) return text;
+  const numeric = text.match(/\d+/)?.[0] || text;
+  return `DLR ${numeric}`;
+};
+
+const hasUsableDealerDoc = (docsByType, type) => {
+  const doc = docsByType[type];
+  return !!doc && doc.status !== "REJECTED";
+};
+
+const getDealerIncomeTypes = (employmentType, hasAppointmentLetter = "yes") => {
+  if (employmentType === "Salaried") {
+    return hasAppointmentLetter === "no"
+      ? ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "BANK_STATEMENT"]
+      : ["SALARY_SLIP_1", "SALARY_SLIP_2", "SALARY_SLIP_3", "APPOINTMENT_LETTER", "BANK_STATEMENT"];
+  }
+  if (employmentType === "Self Employed") return ["ITR_RETURN", "BANK_STATEMENT"];
+  return [];
+};
+
+const getDealerResumeStep = ({ info = {}, docs = [], employmentType = "", hasAppointmentLetter = "yes" }) => {
+  const requiredInfo = ["fullName", "email", "mobileNumber", "address", "city", "state", "pincode", "loanAmount"];
+  if (requiredInfo.some((key) => String(info[key] || "").trim() === "")) return 1;
+  const docsByType = docs.reduce((acc, doc) => {
+    const type = doc.documentType || doc.type;
+    if (type) acc[type] = doc;
+    return acc;
+  }, {});
+  if (STEP_TYPES[2].some((type) => !hasUsableDealerDoc(docsByType, type))) return 2;
+  if (!hasUsableDealerDoc(docsByType, "LIGHT_BILL") && !hasUsableDealerDoc(docsByType, "RENTAL_AGREEMENT")) return 3;
+  if (!employmentType) return 4;
+  if (getDealerIncomeTypes(employmentType, hasAppointmentLetter).some((type) => !hasUsableDealerDoc(docsByType, type))) return 4;
+  if (STEP_TYPES[5].some((type) => !hasUsableDealerDoc(docsByType, type))) return 5;
+  return 6;
+};
 
 const getMessage = (error, fallback) =>
   error?.response?.data?.message || error?.response?.data || error?.message || fallback;
@@ -456,6 +498,7 @@ const DealerDashboard = () => {
   const [preview, setPreview] = useState(null);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardUser, setWizardUser] = useState(null);
+  const [wizardInitialStep, setWizardInitialStep] = useState(1);
   const [personalForm, setPersonalForm] = useState(initialPersonalForm);
   const [employmentType, setEmploymentType] = useState("");
   const [hasAppointmentLetter, setHasAppointmentLetter] = useState("yes");
@@ -1071,6 +1114,7 @@ const DealerDashboard = () => {
 
   const openWizard = () => {
     setWizardUser(null);
+    setWizardInitialStep(1);
     setWizardOpen(true);
     setEmploymentType("");
     setHasAppointmentLetter("yes");
@@ -1088,13 +1132,9 @@ const DealerDashboard = () => {
     const userDocs = docsByUser[user.userId] || [];
     const hasSalariedDocs = userDocs.some((doc) => SALARIED_INCOME_TYPES.has(doc.documentType || doc.type));
     const hasSelfEmployedDocs = userDocs.some((doc) => SELF_EMPLOYED_INCOME_TYPES.has(doc.documentType || doc.type));
-    setWizardUser(user);
-    setWizardOpen(true);
-    setFiles({});
-    setUploadedDocs(userDocs);
-    setHasAppointmentLetter(userDocs.some((doc) => (doc.documentType || doc.type) === "APPOINTMENT_LETTER") ? "yes" : "no");
-    setEmploymentType(hasSalariedDocs ? "Salaried" : hasSelfEmployedDocs ? "Self Employed" : "Others");
-    setPersonalForm({
+    const resolvedEmploymentType = info.employmentType || user.employmentType || (hasSalariedDocs ? "Salaried" : hasSelfEmployedDocs ? "Self Employed" : "");
+    const resolvedHasAppointmentLetter = info.hasAppointmentLetter || (userDocs.some((doc) => (doc.documentType || doc.type) === "APPOINTMENT_LETTER") ? "yes" : "no");
+    const resumeInfo = {
       fullName: user.fullName || user.name || "",
       email: user.email || "",
       mobileNumber: user.mobileNumber || "",
@@ -1103,7 +1143,20 @@ const DealerDashboard = () => {
       state: info.state || "",
       pincode: info.pincode || "",
       loanAmount: info.loanAmount || "",
-    });
+    };
+    setWizardUser(user);
+    setWizardOpen(true);
+    setWizardInitialStep(getDealerResumeStep({
+      info: resumeInfo,
+      docs: userDocs,
+      employmentType: resolvedEmploymentType,
+      hasAppointmentLetter: resolvedHasAppointmentLetter,
+    }));
+    setFiles({});
+    setUploadedDocs(userDocs);
+    setHasAppointmentLetter(resolvedHasAppointmentLetter);
+    setEmploymentType(resolvedEmploymentType);
+    setPersonalForm(resumeInfo);
   };
 
   const requiredUploadTypes = () => {
@@ -1183,12 +1236,179 @@ const DealerDashboard = () => {
     return matched?.userId || matched?.id;
   };
 
+  const validateDraftPersonalForm = () => {
+    const required = [
+      personalForm.fullName,
+      personalForm.email,
+      personalForm.mobileNumber,
+      personalForm.address,
+      personalForm.city,
+      personalForm.state,
+      personalForm.pincode,
+      personalForm.loanAmount,
+    ];
+    if (required.some((value) => String(value || "").trim() === "")) {
+      toast.error("Fill all registration and loan fields");
+      return false;
+    }
+    if (!/^\d{10}$/.test(String(personalForm.mobileNumber))) {
+      toast.error("Mobile number must be 10 digits");
+      return false;
+    }
+    if (!/^\d{6}$/.test(String(personalForm.pincode))) {
+      toast.error("Pincode must be 6 digits");
+      return false;
+    }
+    if (Number(personalForm.loanAmount) <= 100000) {
+      toast.error("Loan amount must be greater than 1 Lakh");
+      return false;
+    }
+    return true;
+  };
+
+  const ensureDealerDraftUser = async () => {
+    if (!validateDraftPersonalForm()) return null;
+    if (wizardUser) {
+      const existingUserId = getUserIdValue(wizardUser);
+      try {
+        await api.put(`/personal-info/update/${existingUserId}`, {
+          userId: Number(existingUserId),
+          address: personalForm.address,
+          mobileNumber: personalForm.mobileNumber,
+          city: personalForm.city,
+          state: personalForm.state,
+          pincode: personalForm.pincode,
+          loanAmount: Number(personalForm.loanAmount),
+        });
+      } catch (error) {
+        console.warn("Failed to refresh dealer draft personal info:", error);
+      }
+      upsertLocalDealerPersonalInfo({
+        userId: Number(existingUserId),
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        address: personalForm.address,
+        city: personalForm.city,
+        state: personalForm.state,
+        pincode: personalForm.pincode,
+        loanAmount: Number(personalForm.loanAmount),
+        employmentType,
+        hasAppointmentLetter,
+      });
+      return wizardUser;
+    }
+
+    setSavingWizard(true);
+    try {
+      const registerRes = await api.post("/user/register", {
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        password: `${personalForm.mobileNumber}@Vahan`,
+        registrationType: "DEALER",
+        dealerCode: profile.dealerCode,
+        dealerId: profile.dealerId,
+      });
+      const newUserId = await resolveRegisteredUserId(registerRes.data?.data);
+      if (!newUserId) throw new Error("User registered, but backend did not return a userId");
+      const draftUser = {
+        ...(registerRes.data?.data || {}),
+        userId: newUserId,
+        id: newUserId,
+        applicationId: formatDealerApplicationId(newUserId),
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        registrationType: "DEALER",
+        dealerCode: profile.dealerCode,
+        dealerId: profile.dealerId,
+        paymentDone: true,
+        paymentStatus: "DRAFT",
+      };
+      upsertLocalDealerUser(draftUser);
+      await api.post("/personal-info/save", {
+        userId: Number(newUserId),
+        address: personalForm.address,
+        mobileNumber: personalForm.mobileNumber,
+        city: personalForm.city,
+        state: personalForm.state,
+        pincode: personalForm.pincode,
+        loanAmount: Number(personalForm.loanAmount),
+      });
+      upsertLocalDealerPersonalInfo({
+        userId: Number(newUserId),
+        fullName: personalForm.fullName,
+        email: personalForm.email,
+        mobileNumber: personalForm.mobileNumber,
+        address: personalForm.address,
+        city: personalForm.city,
+        state: personalForm.state,
+        pincode: personalForm.pincode,
+        loanAmount: Number(personalForm.loanAmount),
+        employmentType,
+        hasAppointmentLetter,
+      });
+      setWizardUser(draftUser);
+      setUsers((prev) => mergeUsersById(prev, [draftUser]));
+      toast.success(`Draft application ${formatDealerApplicationId(newUserId)} saved.`);
+      return draftUser;
+    } catch (error) {
+      showError(error, "Failed to save dealer application draft");
+      return null;
+    } finally {
+      setSavingWizard(false);
+    }
+  };
+
+  const uploadWizardDocument = async (type, file) => {
+    if (!file) return false;
+    const user = await ensureDealerDraftUser();
+    if (!user) return false;
+    const userId = getUserIdValue(user);
+
+    setSavingWizard(true);
+    try {
+      const existingDoc = (docsByUser[userId] || []).find((doc) => (doc.documentType || doc.type) === type);
+      const existingDocumentId = existingDoc?.documentId || existingDoc?.id;
+      if (existingDocumentId) {
+        try {
+          await api.delete(`/documents/${existingDocumentId}`);
+        } catch (deleteError) {
+          if (deleteError?.response?.status !== 404) throw deleteError;
+        }
+      }
+
+      const cleanName = file.name.replace(/,/g, "");
+      const cleanFile = new File([file], cleanName, { type: file.type });
+      const formData = new FormData();
+      formData.append("userId", String(userId));
+      formData.append("type", type);
+      formData.append("file", cleanFile);
+      await api.post("/documents/upload", formData);
+      const freshDocs = await getDealerUserDocuments(userId).catch(() => []);
+      setDocs((prev) => uniqueDocuments([...prev.filter((doc) => String(doc.userId) !== String(userId)), ...freshDocs.map((doc) => ({ ...doc, userId }))]));
+      setUploadedDocs(freshDocs);
+      if (selectedUser && String(selectedUser.userId) === String(userId)) setSelectedUserDocs(freshDocs);
+      toast.success(`${docLabel(type)} uploaded.`);
+      return true;
+    } catch (error) {
+      showError(error, "Failed to upload document");
+      return false;
+    } finally {
+      setSavingWizard(false);
+    }
+  };
+
   const submitLoanRegistration = async () => {
     if (!validateRegistrationForm()) return false;
     setSavingWizard(true);
     try {
-      if (wizardUser) {
-        const existingUserId = wizardUser.userId || wizardUser.id;
+      const activeWizardUser = wizardUser || await ensureDealerDraftUser();
+      if (!activeWizardUser) return false;
+
+      {
+        const existingUserId = activeWizardUser.userId || activeWizardUser.id;
         await api.put(`/personal-info/update/${existingUserId}`, {
           userId: Number(existingUserId),
           address: personalForm.address,
@@ -1236,12 +1456,26 @@ const DealerDashboard = () => {
         addLocalAdminNotification(
           `${profile.fullName || "Dealer"} updated documents for ${personalForm.fullName || "a customer"}.`
         );
+        upsertLocalDealerUser({
+          ...activeWizardUser,
+          userId: existingUserId,
+          id: existingUserId,
+          applicationId: formatDealerApplicationId(existingUserId),
+          fullName: personalForm.fullName,
+          email: personalForm.email,
+          mobileNumber: personalForm.mobileNumber,
+          dealerCode: profile.dealerCode,
+          dealerId: profile.dealerId,
+          registrationType: "DEALER",
+          paymentDone: true,
+          paymentStatus: "SUBMITTED_TO_ADMIN",
+        });
         await loadDashboard();
         const freshDocs = await getDealerUserDocuments(existingUserId).catch(() => []);
         setUploadedDocs(freshDocs);
         setSelectedUserDocs(freshDocs);
         setActiveMenu("Dashboard");
-        toast.success(uploaded.length > 0 ? "Documents updated and submitted to admin." : "Application details updated.");
+        toast.success("Application and documents submitted to admin.");
         return true;
       }
 
@@ -1619,6 +1853,7 @@ const DealerDashboard = () => {
                   markRead={markRead}
                   openNewCustomer={openWizard}
                   openUserModal={openUserModal}
+                  openEditWizard={openUploadWizard}
                   openTrackingModal={openTrackingModal}
                   clearAllNotifications={clearAllNotifications}
                   fadingNotifications={fadingNotifications}
@@ -1630,6 +1865,7 @@ const DealerDashboard = () => {
                 <UsersTab
                   users={users}
                   openUserModal={openUserModal}
+                  openEditWizard={openUploadWizard}
                   openTrackingModal={openTrackingModal}
                   onDeleteUser={handleDeleteUser}
                 />
@@ -1704,12 +1940,15 @@ const DealerDashboard = () => {
           files={files}
           setFiles={setFiles}
           onSubmit={submitLoanRegistration}
+          onSaveDraft={ensureDealerDraftUser}
+          onUploadDocument={uploadWizardDocument}
           saving={savingWizard}
           uploadedDocs={uploadedDocs}
           openPreview={openPreview}
           existingDocsByType={wizardExistingDocsByType}
           existingDocs={wizardUser ? docsByUser[wizardUser.userId] || [] : []}
           isExistingUser={Boolean(wizardUser)}
+          initialStep={wizardInitialStep}
           onClose={() => setWizardOpen(false)}
           hasAppointmentLetter={hasAppointmentLetter}
           setHasAppointmentLetter={setHasAppointmentLetter}
@@ -1761,6 +2000,7 @@ const DashboardTab = ({
   markRead,
   openNewCustomer,
   openUserModal,
+  openEditWizard,
   openTrackingModal,
   clearAllNotifications,
   fadingNotifications,
@@ -1862,6 +2102,7 @@ const DashboardTab = ({
           <UserTable
             users={recentUsers}
             openUserModal={openUserModal}
+            openEditWizard={openEditWizard}
             openTrackingModal={openTrackingModal}
             onDeleteUser={onDeleteUser}
           />
@@ -1967,13 +2208,14 @@ const getUserStatusStyle = (user) => {
   return "border-sky-200 bg-sky-50 text-sky-700";
 };
 
-const UserTable = ({ users, openUserModal, openTrackingModal, onDeleteUser }) => (
+const UserTable = ({ users, openUserModal, openEditWizard, openTrackingModal, onDeleteUser }) => (
   <div className="overflow-hidden rounded-3xl bg-white shadow-sm">
     <div className="overflow-x-auto">
       <table className="w-full min-w-[620px] text-left">
         <thead className="bg-[#0B2A4A] text-xs text-white">
           <tr>
             <th className="px-3.5 py-3">Name</th>
+            <th className="px-3.5 py-3">Application ID</th>
             <th className="px-3.5 py-3">Email</th>
             <th className="px-3.5 py-3">Mobile</th>
             <th className="px-3.5 py-3">Approved Docs</th>
@@ -1992,6 +2234,7 @@ const UserTable = ({ users, openUserModal, openTrackingModal, onDeleteUser }) =>
             return (
               <tr key={user.userId} className="border-b border-gray-50 text-xs">
                 <td className="px-3.5 py-3 font-bold text-[#0B2A4A] whitespace-nowrap">{user.fullName || "-"}</td>
+                <td className="px-3.5 py-3 font-bold text-[#0B2A4A] whitespace-nowrap">{formatDealerApplicationId(user)}</td>
                 <td className="px-3.5 py-3 text-gray-600 truncate max-w-[140px]" title={user.email}>{user.email || "-"}</td>
                 <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap">{user.mobileNumber || "-"}</td>
                 <td className="px-3.5 py-3 text-gray-600 whitespace-nowrap font-semibold">
@@ -2015,6 +2258,14 @@ const UserTable = ({ users, openUserModal, openTrackingModal, onDeleteUser }) =>
                     >
                       Info
                     </button>
+                    {openEditWizard && !isUserAssignedToBank(user) && (
+                      <button
+                        onClick={() => openEditWizard(user)}
+                        className="inline-flex items-center gap-1 rounded-xl bg-[#EAFBF8] px-2.5 py-1.5 text-xs font-black text-[#0B2A4A] hover:bg-[#d7f7f2] transition-colors"
+                      >
+                        <FaEdit className="text-[10px]" /> Edit
+                      </button>
+                    )}
                     <button
                       onClick={() => openTrackingModal(user)}
                       className="rounded-xl bg-[#27D3C3] px-2.5 py-1.5 text-xs font-black text-[#0B2A4A] hover:bg-[#1fbaa9] transition-colors"
@@ -2042,12 +2293,13 @@ const UserTable = ({ users, openUserModal, openTrackingModal, onDeleteUser }) =>
   </div>
 );
 
-const UsersTab = ({ users, openUserModal, openTrackingModal, onDeleteUser }) => (
+const UsersTab = ({ users, openUserModal, openEditWizard, openTrackingModal, onDeleteUser }) => (
   <div className="space-y-5">
     <SectionTitle title="My Users" />
     <UserTable
       users={users}
       openUserModal={openUserModal}
+      openEditWizard={openEditWizard}
       openTrackingModal={openTrackingModal}
       onDeleteUser={onDeleteUser}
     />
@@ -2145,6 +2397,7 @@ const UserModal = ({ user, info, docs, counts, onClose, openPreview, openWizard,
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <InfoTile label="Name" value={user.fullName} />
+        <InfoTile label="Application ID" value={formatDealerApplicationId(user)} />
         <InfoTile label="Email" value={user.email} />
         <InfoTile label="Mobile" value={user.mobileNumber} />
       </div>
@@ -2356,17 +2609,20 @@ const WizardModal = ({
   files,
   setFiles,
   onSubmit,
+  onSaveDraft,
+  onUploadDocument,
   saving,
   uploadedDocs,
   openPreview,
   existingDocsByType = {},
   existingDocs = [],
   isExistingUser = false,
+  initialStep = 1,
   onClose,
   hasAppointmentLetter,
   setHasAppointmentLetter,
 }) => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(initialStep);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [localPreview, setLocalPreview] = useState(null);
 
@@ -2391,7 +2647,7 @@ const WizardModal = ({
     }
     setEmploymentType(type);
   };
-  const handleSetFile = (type, file) => {
+  const handleSetFile = async (type, file) => {
     const incomeGroup = getIncomeGroupForType(type);
     if (file && incomeGroup && lockedIncomeType && lockedIncomeType !== incomeGroup) {
       toast.error(
@@ -2399,7 +2655,15 @@ const WizardModal = ({
       );
       return;
     }
-    setFile(type, file);
+    if (!file) return;
+    const uploaded = await onUploadDocument(type, file);
+    if (uploaded) {
+      setFiles((prev) => {
+        const next = { ...prev };
+        delete next[type];
+        return next;
+      });
+    }
   };
   const hasDocument = (type) => Boolean(files[type] || existingDocsByType[type]);
   const selectedDocuments = Object.entries(files)
@@ -2447,7 +2711,7 @@ const WizardModal = ({
     });
   };
 
-  const goToStep = (stepId) => {
+  const goToStep = async (stepId) => {
     if (stepId <= currentStep) {
       setCurrentStep(stepId);
       return;
@@ -2464,6 +2728,14 @@ const WizardModal = ({
           : `Please upload ${missing.map((type) => type === "RESIDENTIAL_PROOF" ? "Light Bill or Rental Agreement" : docLabel(type)).join(", ")} before continuing.`
       );
       return;
+    }
+    if (currentStep === 1 && stepId > 1) {
+      const draft = await onSaveDraft();
+      if (!draft) return;
+    }
+    if (currentStep === 4 && stepId > 4) {
+      const draft = await onSaveDraft();
+      if (!draft) return;
     }
     setCurrentStep(stepId);
   };
@@ -2990,7 +3262,7 @@ const TrackingModal = ({ user, docs, counts, tracking, onClose }) => {
           <h3 className="mt-1 text-2xl font-black">{tracking?.customerName || user.fullName}</h3>
           <p className="text-sm opacity-80">{user.email} • {user.mobileNumber}</p>
           <div className="mt-4 border-t border-white/10 pt-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-center text-xs opacity-75">
-            <span>App ID: {tracking?.applicationId || user.applicationId || "N/A"}</span>
+            <span>App ID: {formatDealerApplicationId(tracking?.applicationId || user.applicationId || user.userId || user.id) || "N/A"}</span>
             <span>Registered: {formatDate(user.createdAt)}</span>
           </div>
           {(tracking?.assignedBankName || user.assignedBankName || user.bankName) && (
