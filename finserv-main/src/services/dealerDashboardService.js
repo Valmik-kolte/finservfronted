@@ -124,7 +124,9 @@ export const getDealerDashboardSummary = async () => {
         const customerName = match[1].trim().toLowerCase();
         const bankName = match[2].trim();
         if (!parsedBankAssignments[customerName]) {
-          parsedBankAssignments[customerName] = bankName;
+          parsedBankAssignments[customerName] = [bankName];
+        } else if (!parsedBankAssignments[customerName].includes(bankName)) {
+          parsedBankAssignments[customerName].push(bankName);
         }
       }
     });
@@ -145,10 +147,11 @@ export const getDealerDashboardSummary = async () => {
       const nameKey = String(u.fullName || u.name || "").trim().toLowerCase();
       const bankName = parsedBankAssignments[nameKey];
       if (bankName) {
+        const joinedNames = Array.isArray(bankName) ? bankName.join(", ") : bankName;
         return {
           ...u,
-          bankName,
-          assignedBankName: bankName,
+          bankName: joinedNames,
+          assignedBankName: joinedNames,
           bankId: 1,
           assignedBankId: 1,
           bankStatus: "SENT_TO_BANK",

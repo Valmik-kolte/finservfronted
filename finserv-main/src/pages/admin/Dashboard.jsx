@@ -146,8 +146,49 @@ const getApiFailureSummary = (entries) =>
 
 const readAssignedBankId = (userId) => "";
 const getAssignedBankDetailKey = (userId) => `user_bank_assignment_detail_${userId}`;
+const readAssignedBankDetails = (userId) => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getAssignedBankDetailKey(userId)) || "[]");
+    if (Array.isArray(parsed)) return parsed;
+    return parsed ? [parsed] : [];
+  } catch {
+    return [];
+  }
+};
+const mergeAssignedBanks = (...lists) => {
+  const map = new Map();
+  lists.flat().filter(Boolean).forEach((bank) => {
+    const id = bank.bankId || bank.assignedBankId || bank.id || bank.name || bank.bankName;
+    const name = bank.bankName || bank.assignedBankName || bank.name;
+    if (!id && !name) return;
+    const key = String(id || name).toLowerCase();
+    map.set(key, {
+      ...map.get(key),
+      ...bank,
+      bankId: id,
+      bankName: name || map.get(key)?.bankName || "",
+    });
+  });
+  return Array.from(map.values());
+};
+const writeAssignedBankDetails = (userId, banks) => {
+  if (!userId) return;
+  localStorage.setItem(getAssignedBankDetailKey(userId), JSON.stringify(mergeAssignedBanks(banks)));
+};
+const getAssignedBankSummary = (assignedBanks) => {
+  const banks = mergeAssignedBanks(assignedBanks);
+  return {
+    assignedBanks: banks,
+    bankId: banks[0]?.bankId || "",
+    assignedBankId: banks[0]?.bankId || "",
+    bankName: banks.map((bank) => bank.bankName).filter(Boolean).join(", "),
+    assignedBankName: banks.map((bank) => bank.bankName).filter(Boolean).join(", "),
+    bankStatus: banks.length > 0 ? "SENT_TO_BANK" : "",
+  };
+};
 const isUserAssignedToBank = (user) =>
   !!(
+    (Array.isArray(user?.assignedBanks) && user.assignedBanks.length > 0) ||
     user?.bankId ||
     user?.assignedBankId ||
     user?.assignedBankName ||
@@ -773,7 +814,8 @@ const Dashboard = () => {
                 list.forEach((u) => {
                   const uid = u.userId || u.id;
                   if (uid) {
-                    userBankMap.set(String(uid), {
+                    const current = userBankMap.get(String(uid)) || [];
+                    userBankMap.set(String(uid), mergeAssignedBanks(current, [{
                       bankId: bank.bankId,
                       assignedBankId: bank.bankId,
                       bankName: bank.bankName,
@@ -781,7 +823,7 @@ const Dashboard = () => {
                       representativeName: bank.representativeName,
                       bankEmail: bank.email,
                       bankContactNumber: bank.contactNumber,
-                    });
+                    }]));
                   }
                 });
               }
@@ -789,9 +831,11 @@ const Dashboard = () => {
 
             loadedUsers = loadedUsers.map((user) => {
               const userId = user.userId || user.id;
-              const bankDetails = userBankMap.get(String(userId));
-              if (bankDetails) {
-                return { ...user, ...bankDetails };
+              const dbBankDetails = userBankMap.get(String(userId)) || [];
+              const localBankDetails = readAssignedBankDetails(userId);
+              const assignedBanks = mergeAssignedBanks(user.assignedBanks || [], dbBankDetails, localBankDetails);
+              if (assignedBanks.length > 0) {
+                return { ...user, ...getAssignedBankSummary(assignedBanks) };
               }
               return user;
             });
@@ -799,6 +843,15 @@ const Dashboard = () => {
             console.error("Failed to query bank assignments from database:", err);
           }
         }
+
+        loadedUsers = loadedUsers.map((user) => {
+          const userId = user.userId || user.id;
+          const assignedBanks = mergeAssignedBanks(user.assignedBanks || [], readAssignedBankDetails(userId));
+          if (assignedBanks.length > 0) {
+            return { ...user, ...getAssignedBankSummary(assignedBanks) };
+          }
+          return user;
+        });
 
         if (loadedUsers.length > 0) {
           setUsers(loadedUsers);
@@ -925,7 +978,7 @@ const Dashboard = () => {
   const openUser = async (user) => {
     setSelectedUser(user);
     setAssigningBank(false);
-    setAssignBankId(String(user.bankId || user.assignedBankId || readAssignedBankId(user.userId) || ""));
+    setAssignBankId("");
 
     // Fetch user personal info (address, city, state, pincode) dynamically from database
     try {
@@ -1078,6 +1131,11 @@ const Dashboard = () => {
       toast.error("Personal info is missing for this user. Add required details or ask the dealer/customer to complete them before assigning a bank.");
       return;
     }
+    const existingAssignedBanks = mergeAssignedBanks(selectedUser.assignedBanks || [], readAssignedBankDetails(selectedUser.userId));
+    if (existingAssignedBanks.some((bank) => String(bank.bankId) === String(assignBankId))) {
+      toast.info(`${assignedBank?.bankName || "This bank"} is already assigned to this user.`);
+      return;
+    }
 
     try {
       setAssigningBank(true);
@@ -1107,13 +1165,23 @@ const Dashboard = () => {
         userId: selectedUser.userId,
         message: `BANK_ASSIGNED:${assignBankId}:${assignedBank?.bankName || "a bank"}`,
       });
-      toast.success("Bank assigned successfully and documents approved.");
-      const bankFields = {
+      const nextBank = {
         bankId: Number(assignBankId),
         assignedBankId: Number(assignBankId),
         assignedBankName: assignedBank?.bankName || "",
         bankName: assignedBank?.bankName || "",
+        representativeName: assignedBank?.representativeName || "",
+        bankEmail: assignedBank?.email || "",
+        bankContactNumber: assignedBank?.contactNumber || "",
       };
+      const assignedBanks = mergeAssignedBanks(existingAssignedBanks, [nextBank]);
+      writeAssignedBankDetails(selectedUser.userId, assignedBanks);
+      const bankFields = getAssignedBankSummary(assignedBanks);
+      toast.success(
+        assignedBanks.length > 1
+          ? `Bank assigned successfully. ${assignedBanks.length} banks are now assigned.`
+          : "Bank assigned successfully and documents approved."
+      );
       setSelectedUserDocs((prev) =>
         prev.map((doc) => (doc.documentId ? { ...doc, status: "APPROVED", remarks: "" } : doc))
       );

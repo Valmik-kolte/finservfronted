@@ -452,7 +452,26 @@ const getStoredPaymentStatus = (userId) => {
 const getAssignedBankDetailKey = (userId) => `user_bank_assignment_detail_${userId}`;
 
 const readLocalAssignedBank = (userId) => {
-  return null;
+  try {
+    const parsed = JSON.parse(localStorage.getItem(getAssignedBankDetailKey(userId)) || "[]");
+    const banks = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+    const map = new Map();
+    banks.filter(Boolean).forEach((bank) => {
+      const bankId = bank.bankId || bank.assignedBankId || bank.id || bank.bankName || bank.name;
+      const bankName = bank.bankName || bank.assignedBankName || bank.name;
+      if (!bankId && !bankName) return;
+      map.set(String(bankId || bankName).toLowerCase(), { bankId, bankName });
+    });
+    const assignedBanks = Array.from(map.values());
+    if (assignedBanks.length === 0) return null;
+    return {
+      bankId: assignedBanks[0].bankId,
+      bankName: assignedBanks.map((bank) => bank.bankName).filter(Boolean).join(", "),
+      assignedBanks,
+    };
+  } catch {
+    return null;
+  }
 };
 
 const inferPaymentStatus = (user) =>
@@ -815,18 +834,30 @@ const CustomerDashboard = () => {
            const localAssignedBank = readLocalAssignedBank(userId);
            const dbBankInfos = extractAllBankAssignmentsFromNotifications(fetchedNotifs, userId);
            
-           let resolvedBanks = [];
-           if (dbBankInfos.length > 0) {
-             resolvedBanks = dbBankInfos;
-           } else if (user.assignedBanks && Array.isArray(user.assignedBanks) && user.assignedBanks.length > 0) {
-             resolvedBanks = user.assignedBanks.map(b => ({ bankId: b.bankId, bankName: b.bankName || b.name }));
-           } else if (bankId) {
-             const singleName = backendBankName || localAssignedBank?.bankName || "Assigned";
-             resolvedBanks = [{ bankId, bankName: singleName }];
-           } else if (backendBankName || localAssignedBank) {
-             const singleName = backendBankName || localAssignedBank?.bankName || "Assigned";
-             resolvedBanks = [{ bankId: localAssignedBank?.bankId || 1, bankName: singleName }];
+           const bankMap = new Map();
+           const addResolvedBank = (bank) => {
+             const resolvedBankId = bank?.bankId || bank?.assignedBankId || bank?.id || bank?.bankName || bank?.name;
+             const resolvedBankName = bank?.bankName || bank?.assignedBankName || bank?.name;
+             if (!resolvedBankId && !resolvedBankName) return;
+             bankMap.set(String(resolvedBankId || resolvedBankName).toLowerCase(), {
+               bankId: resolvedBankId,
+               bankName: resolvedBankName || "Assigned",
+             });
+           };
+           dbBankInfos.forEach(addResolvedBank);
+           if (user.assignedBanks && Array.isArray(user.assignedBanks)) {
+             user.assignedBanks.forEach(addResolvedBank);
            }
+           if (localAssignedBank?.assignedBanks) {
+             localAssignedBank.assignedBanks.forEach(addResolvedBank);
+           }
+           if (bankId || backendBankName) {
+             addResolvedBank({ bankId: bankId || localAssignedBank?.bankId || 1, bankName: backendBankName || localAssignedBank?.bankName || "Assigned" });
+           }
+           if (localAssignedBank && bankMap.size === 0) {
+             addResolvedBank(localAssignedBank);
+           }
+           let resolvedBanks = Array.from(bankMap.values());
  
            if (resolvedBanks.length > 0) {
              const concatenatedNames = resolvedBanks.map(b => b.bankName).join(", ");

@@ -156,7 +156,7 @@ const Users = ({
         <div className="mt-5 bg-[#F4F6F9] rounded-2xl p-4">
           <h3 className="font-bold text-[#0B2A4A] mb-3">Assign Bank</h3>
           <p className="text-sm text-slate-500 mb-3">
-            Current bank:{" "}
+            Assigned banks:{" "}
             <span className="font-semibold text-[#0B2A4A]">
               {getAssignedBankName(selectedUser, banks) || "Not assigned"}
             </span>
@@ -185,7 +185,7 @@ const Users = ({
               disabled={assigningBank || !isPaymentApproved}
               className="bg-[#0B2A4A] text-white rounded-2xl px-5 py-3 font-bold disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {assigningBank ? "Assigning..." : "Assign"}
+              {assigningBank ? "Assigning..." : "Add Bank"}
             </button>
           </div>
         </div>

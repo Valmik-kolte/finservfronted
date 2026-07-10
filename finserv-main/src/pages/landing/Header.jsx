@@ -1,17 +1,20 @@
-﻿import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { FaBars, FaTimes } from "react-icons/fa";
 import logo from "../../assets/vahan-logo.jpg";
 const navLinks = [
   { label: "Home", href: "/#top", id: "top" },
   { label: "Our Banks", href: "/#our-banks", id: "our-banks" },
   { label: "How It Works", href: "/#how-it-works", id: "how-it-works" },
+  { label: "Loan Calculator", href: "/loan-calculator", id: "loan-calculator" },
   { label: "About Us", href: "/#about-us", id: "about-us" }
 ];
 
 const Header = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("top");
+  const location = useLocation();
+  const isCalculatorPage = location.pathname === "/loan-calculator";
 
   useEffect(() => {
     const sections = navLinks.map((item) => item.id);
@@ -64,7 +67,7 @@ const Header = () => {
                 key={item.label}
                 to={item.href}
                 className={`relative text-md font-medium transition-colors ${
-                  activeSection === item.id
+                  (isCalculatorPage && item.id === "loan-calculator") || (!isCalculatorPage && activeSection === item.id)
                     ? "text-[#1ECFC3]"
                     : "text-slate-200 hover:text-white"
                 }`}
@@ -111,7 +114,7 @@ const Header = () => {
                 key={item.label}
                 to={item.href}
                 className={`text-sm font-medium transition-colors ${
-                  activeSection === item.id
+                  (isCalculatorPage && item.id === "loan-calculator") || (!isCalculatorPage && activeSection === item.id)
                     ? "text-[#1ECFC3]"
                     : "text-slate-200 hover:text-white"
                 }`}
