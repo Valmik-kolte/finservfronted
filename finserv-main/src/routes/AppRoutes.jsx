@@ -7,6 +7,7 @@ import Faq from "../pages/landing/Faq";
 import PrivacyPolicy from "../pages/landing/PrivacyPolicy";
 import TermsCondition from "../pages/landing/TermsCondition";
 import RefundPolicy from "../pages/landing/RefundPolicy";
+import DeleteAccount from "../pages/landing/DeleteAccount";
 
 import Login from "../pages/auth/Login";
 import Register from "../pages/auth/Register";
@@ -30,6 +31,7 @@ const AppRoutes = () => (
     <Route path="/terms-condition" element={<TermsCondition />} />
     <Route path="/terms-conditions" element={<TermsCondition />} />
     <Route path="/refund-policy" element={<RefundPolicy />} />
+    <Route path="/delete-account" element={<DeleteAccount />} />
     <Route path="/login" element={<Login />} />
     <Route path="/register" element={<Register />} />
     <Route path="/register/dealer" element={<Register defaultRole="DEALER" />} />

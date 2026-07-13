@@ -3,8 +3,14 @@ import { Link } from "react-router-dom";
 import { clearAuthSession } from "../../utils/authSession";
 
 const Footer = ({ logoutOnNavigate = false }) => {
-  const handleFooterNavigate = () => {
+  const handleFooterNavigate = (event) => {
     if (logoutOnNavigate) clearAuthSession();
+    const target = event?.currentTarget;
+    const hash = target?.hash || "";
+    if (hash && hash !== "#top") return;
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+    });
   };
 
   return (
@@ -45,6 +51,15 @@ const Footer = ({ logoutOnNavigate = false }) => {
               <ul className="space-y-2 text-sm text-gray-300">
                 <li><Link to="/faq" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">FAQs</Link></li>
                 <li><Link to="/loan-calculator" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Loan Calculator</Link></li>
+                <li>
+                  <Link
+                    to="/delete-account"
+                    onClick={handleFooterNavigate}
+                    className="hover:text-[#27D3C3]"
+                  >
+                    Delete My Account
+                  </Link>
+                </li>
             
               </ul>
 
@@ -72,6 +87,7 @@ const Footer = ({ logoutOnNavigate = false }) => {
               <Link to="/privacy-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Privacy Policy</Link>
               <Link to="/terms-and-conditions" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Terms & Conditions</Link>
               <Link to="/refund-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Refund Policy</Link>
+              <Link to="/delete-account" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Delete My Account</Link>
             </div>
           </div>
         </div>
