@@ -688,6 +688,67 @@ const CustomerDashboard = () => {
     localStorage.setItem(`has_appointment_letter_${userId}`, val);
   };
 
+  const [regNo, setRegNo] = useState("");
+  const [isFetchingRc, setIsFetchingRc] = useState(false);
+  const [rcData, setRcData] = useState(null);
+  const [isRcModalOpen, setIsRcModalOpen] = useState(false);
+
+  const handleFetchRc = async () => {
+    if (!regNo) {
+      toast.error("Please enter a vehicle number.");
+      return;
+    }
+    setIsFetchingRc(true);
+    try {
+      const token = getAuthToken();
+      const baseUrl = api.defaults.baseURL ? api.defaults.baseURL.replace(/\/api$/, "") : "https://v1.vahanfinserv.com";
+      const res = await fetch(`${baseUrl}/srv2/validation/rc`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          api_id: "APID2629",
+          api_key: "8cbaecfa-70cc-480d-9e21-0c9b11c81cb2",
+          token_id: "K2I4y1qrQVtUme7OKFpIKVYfQfvFZFHm",
+          reg_no: regNo.toUpperCase().replace(/\s/g, ""),
+        }),
+      });
+
+      if (!res.ok) {
+        let errorMsg = "Failed to fetch RC details.";
+        try {
+          const text = await res.text();
+          if (text) {
+            try {
+              const parsed = JSON.parse(text);
+              errorMsg = parsed.message || parsed.msg || parsed.error || text;
+            } catch (_) {
+              errorMsg = text;
+            }
+          }
+        } catch (_) {}
+        throw new Error(errorMsg);
+      }
+
+      const data = await res.json();
+      const resultData = data.data || data;
+
+      if (resultData) {
+        setRcData(resultData);
+        setIsRcModalOpen(true);
+        toast.success("RC details fetched successfully!");
+      } else {
+        toast.error("No data found for this vehicle number.");
+      }
+    } catch (error) {
+      toast.error(error.message || "Something went wrong while fetching RC details.");
+    } finally {
+      setIsFetchingRc(false);
+    }
+  };
+
   const [applicationNumber, setApplicationNumber] = useState("");
   const [applicationSubmitted, setApplicationSubmitted] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState(PAYMENT_STATUS.DRAFT);
@@ -1584,6 +1645,13 @@ const CustomerDashboard = () => {
                   paymentStatus={paymentStatus}
                   onPayNow={startRazorpayPayment}
                   paymentProcessing={paymentProcessing}
+                  regNo={regNo}
+                  setRegNo={setRegNo}
+                  isFetchingRc={isFetchingRc}
+                  handleFetchRc={handleFetchRc}
+                  rcData={rcData}
+                  isRcModalOpen={isRcModalOpen}
+                  setIsRcModalOpen={setIsRcModalOpen}
                 />
               )}
 
@@ -2037,6 +2105,13 @@ const DocumentsTab = ({
   paymentProcessing,
   hasAppointmentLetter,
   setHasAppointmentLetter,
+  regNo,
+  setRegNo,
+  isFetchingRc,
+  handleFetchRc,
+  rcData,
+  isRcModalOpen,
+  setIsRcModalOpen,
 }) => {
   const requiredTypesForStep = () => {
     if (currentStep === 2) return ["PAN", "AADHAAR_1", "AADHAAR_2"];
@@ -2172,9 +2247,37 @@ const DocumentsTab = ({
     ) : (
       <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-          <h2 className="text-xl font-bold text-[#0B2A4A]">
-            {STEPS.find((step) => step.id === currentStep)?.title}
-          </h2>
+          <div className="flex flex-wrap items-center gap-4">
+            <h2 className="text-xl font-bold text-[#0B2A4A]">
+              {STEPS.find((step) => step.id === currentStep)?.title}
+            </h2>
+            {currentStep === 5 && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={regNo}
+                  onChange={(e) => setRegNo(e.target.value.toUpperCase().replace(/\s/g, ""))}
+                  placeholder="Enter Vehicle Number"
+                  className="px-3 py-1.5 text-xs sm:text-sm rounded-xl border border-gray-200 outline-none focus:border-[#0B2A4A] uppercase font-semibold w-36 sm:w-48 text-[#0B2A4A] bg-white shadow-inner"
+                />
+                <button
+                  type="button"
+                  onClick={handleFetchRc}
+                  disabled={isFetchingRc}
+                  className="bg-[#0B2A4A] text-white px-3 py-1.5 text-xs sm:text-sm rounded-xl font-bold hover:bg-[#123962] transition-colors disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap shadow-sm"
+                >
+                  {isFetchingRc ? (
+                    <>
+                      <FaSpinner className="animate-spin text-[10px] sm:text-xs" />
+                      <span>Fetching...</span>
+                    </>
+                  ) : (
+                    "Check RC"
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-4">
             {currentStep === 4 && (
               <div className="flex rounded-2xl bg-[#F4F6F9] p-1">
@@ -2243,6 +2346,11 @@ const DocumentsTab = ({
         )}
       </div>
     )}
+    <RcDetailsModal
+      isOpen={isRcModalOpen}
+      onClose={() => setIsRcModalOpen(false)}
+      data={rcData}
+    />
   </div>
   );
 };
@@ -2898,6 +3006,58 @@ const ConfirmationModal = ({ isOpen, title, message, confirmText = "Delete", can
             {confirmText}
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+
+const RcDetailsModal = ({ isOpen, onClose, data }) => {
+  if (!isOpen || !data) return null;
+
+  const formatKey = (key) => {
+    return key
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center overflow-y-auto">
+      <div className="bg-white rounded-3xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative my-8">
+        <button
+          onClick={onClose}
+          type="button"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition-colors"
+        >
+          <FaTimes size={20} />
+        </button>
+
+        <h3 className="text-xl font-bold text-[#0B2A4A] mb-4 border-b pb-2">
+          Vehicle RC Details
+        </h3>
+
+        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+          {Object.entries(data).map(([key, value]) => {
+            if (typeof value === "object" && value !== null) {
+              return null;
+            }
+            if (value === null || value === undefined || value === "") return null;
+            return (
+              <div key={key} className="flex justify-between border-b border-slate-100 pb-2 text-sm gap-4">
+                <span className="font-semibold text-slate-500 whitespace-nowrap">{formatKey(key)}</span>
+                <span className="font-bold text-slate-800 text-right">{String(value)}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          onClick={onClose}
+          type="button"
+          className="mt-6 w-full bg-[#0B2A4A] text-white py-3 rounded-2xl font-bold hover:bg-[#081d33] transition-colors"
+        >
+          Close
+        </button>
       </div>
     </div>
   );
