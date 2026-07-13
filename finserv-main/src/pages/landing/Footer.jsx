@@ -87,7 +87,7 @@ const Footer = ({ logoutOnNavigate = false }) => {
               <Link to="/privacy-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Privacy Policy</Link>
               <Link to="/terms-and-conditions" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Terms & Conditions</Link>
               <Link to="/refund-policy" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Refund Policy</Link>
-              <Link to="/delete-account" onClick={handleFooterNavigate} className="hover:text-[#27D3C3]">Delete My Account</Link>
+              
             </div>
           </div>
         </div>
