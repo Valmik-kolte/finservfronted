@@ -422,7 +422,7 @@ const Landing = () => {
         <div className="flex flex-wrap gap-4 pt-6">
 
           <a
-            href="https://drive.google.com/file/d/1tqfntwqVE3kFMXy2jo999bll2t-4_tGj/view?usp=sharing"
+            href="https://github.com/Valmik-kolte/VahanFinserv/releases/download/v1.0.0/VahanFinserv.apk"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 px-6 py-3 bg-[#082544] text-white font-semibold rounded-full border border-gray-200  transition"

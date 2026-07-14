@@ -7,6 +7,7 @@ import {
   FaBars,
   FaCheckCircle,
   FaCloudUploadAlt,
+  FaDownload,
   FaEye,
   FaEyeSlash,
   FaFileAlt,
@@ -692,6 +693,7 @@ const CustomerDashboard = () => {
   const [isFetchingRc, setIsFetchingRc] = useState(false);
   const [rcData, setRcData] = useState(null);
   const [isRcModalOpen, setIsRcModalOpen] = useState(false);
+  const [showRcChallanScreen, setShowRcChallanScreen] = useState(false);
 
   const handleFetchRc = async () => {
     if (!regNo) {
@@ -1158,8 +1160,8 @@ const CustomerDashboard = () => {
             await fetchDashboardDataRef.current(false);
             setPaymentStatus(PAYMENT_STATUS.PAYMENT_VERIFICATION_PENDING);
             setPaymentPromptOpen(false);
-            setActiveMenu("Status");
-            toast.success("Payment successful. Your application is pending admin approval.");
+            setShowRcChallanScreen(true);
+            toast.success("Payment successful! Check your vehicle RC & Challan below.");
           } catch (error) {
             toast.error(getErrorMessage(error) || "Payment succeeded, but confirmation failed.");
           } finally {
@@ -1832,6 +1834,37 @@ const CustomerDashboard = () => {
         onCancel={() => setConfirmModalOpen(false)}
         isDanger={true}
       />
+
+      <RcDetailsModal
+        isOpen={isRcModalOpen}
+        onClose={() => setIsRcModalOpen(false)}
+        data={rcData}
+      />
+      <ChallanDetailsModal
+        isOpen={isChallanModalOpen}
+        onClose={() => setIsChallanModalOpen(false)}
+        data={challanData}
+      />
+      {showRcChallanScreen && (
+        <PostPaymentRcScreen
+          regNo={regNo}
+          setRegNo={setRegNo}
+          isFetchingRc={isFetchingRc}
+          handleFetchRc={handleFetchRc}
+          isFetchingChallan={isFetchingChallan}
+          handleFetchChallan={handleFetchChallan}
+          isRcModalOpen={isRcModalOpen}
+          setIsRcModalOpen={setIsRcModalOpen}
+          rcData={rcData}
+          isChallanModalOpen={isChallanModalOpen}
+          setIsChallanModalOpen={setIsChallanModalOpen}
+          challanData={challanData}
+          onDone={() => {
+            setShowRcChallanScreen(false);
+            setActiveMenu("Status");
+          }}
+        />
+      )}
     </div>
   );
 };
@@ -2337,47 +2370,6 @@ const DocumentsTab = ({
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            {currentStep === 5 && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <input
-                  type="text"
-                  value={regNo}
-                  onChange={(e) => setRegNo(e.target.value.toUpperCase().replace(/\s/g, ""))}
-                  placeholder="Enter Vehicle Number"
-                  className="px-3 py-1.5 text-xs sm:text-sm rounded-xl border border-gray-200 outline-none focus:border-[#0B2A4A] uppercase font-semibold w-36 sm:w-48 text-[#0B2A4A] bg-white shadow-inner"
-                />
-                <button
-                  type="button"
-                  onClick={handleFetchRc}
-                  disabled={isFetchingRc || isFetchingChallan}
-                  className="bg-[#0B2A4A] text-white px-3 py-1.5 text-xs sm:text-sm rounded-xl font-bold hover:bg-[#123962] transition-colors disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap shadow-sm"
-                >
-                  {isFetchingRc ? (
-                    <>
-                      <FaSpinner className="animate-spin text-[10px] sm:text-xs" />
-                      <span>Fetching...</span>
-                    </>
-                  ) : (
-                    "Check RC"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleFetchChallan}
-                  disabled={isFetchingChallan || isFetchingRc}
-                  className="bg-amber-600 text-white px-3 py-1.5 text-xs sm:text-sm rounded-xl font-bold hover:bg-amber-700 transition-colors disabled:opacity-60 flex items-center gap-1.5 whitespace-nowrap shadow-sm"
-                >
-                  {isFetchingChallan ? (
-                    <>
-                      <FaSpinner className="animate-spin text-[10px] sm:text-xs" />
-                      <span>Fetching...</span>
-                    </>
-                  ) : (
-                    "Check Challan"
-                  )}
-                </button>
-              </div>
-            )}
             {currentStep === 4 && (
               <div className="flex rounded-2xl bg-[#F4F6F9] p-1">
                 {["Salaried", "Self Employed", "Others"].map((type) => (
@@ -2445,16 +2437,6 @@ const DocumentsTab = ({
         )}
       </div>
     )}
-    <RcDetailsModal
-      isOpen={isRcModalOpen}
-      onClose={() => setIsRcModalOpen(false)}
-      data={rcData}
-    />
-    <ChallanDetailsModal
-      isOpen={isChallanModalOpen}
-      onClose={() => setIsChallanModalOpen(false)}
-      data={challanData}
-    />
   </div>
   );
 };
@@ -3124,6 +3106,61 @@ const formatDetailKey = (key) =>
 const RcDetailsModal = ({ isOpen, onClose, data }) => {
   if (!isOpen || !data) return null;
 
+  const downloadPdf = () => {
+    import("jspdf").then(({ jsPDF }) => {
+      const doc = new jsPDF();
+      const pageW = doc.internal.pageSize.getWidth();
+
+      // Header bar
+      doc.setFillColor(11, 42, 74);
+      doc.rect(0, 0, pageW, 22, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text("Vahan Finserv", 14, 10);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text("Vehicle RC Details Report", 14, 17);
+
+      // Date stamp
+      doc.setFontSize(8);
+      doc.setTextColor(200, 200, 200);
+      doc.text(`Generated: ${new Date().toLocaleString("en-IN")}`, pageW - 14, 17, { align: "right" });
+
+      // Body
+      let y = 32;
+      doc.setFontSize(10);
+      const rows = Object.entries(data).filter(
+        ([, v]) => v !== null && v !== undefined && v !== "" && typeof v !== "object"
+      );
+      rows.forEach(([key, value], idx) => {
+        if (y > 270) { doc.addPage(); y = 20; }
+        if (idx % 2 === 0) {
+          doc.setFillColor(245, 247, 250);
+          doc.rect(10, y - 5, pageW - 20, 10, "F");
+        }
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(100, 116, 139);
+        doc.text(formatDetailKey(key), 14, y);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(15, 23, 42);
+        doc.text(String(value), pageW - 14, y, { align: "right", maxWidth: 90 });
+        y += 11;
+      });
+
+      // Footer line
+      doc.setDrawColor(11, 42, 74);
+      doc.setLineWidth(0.4);
+      doc.line(10, 280, pageW - 10, 280);
+      doc.setFontSize(7);
+      doc.setTextColor(150, 150, 150);
+      doc.text("vahanfinserv.com", pageW / 2, 286, { align: "center" });
+
+      const reg = data.reg_no || data.vehicle_number || "vehicle";
+      doc.save(`RC_${reg}_${Date.now()}.pdf`);
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center overflow-y-auto">
       <div className="bg-white rounded-3xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative my-8">
@@ -3139,7 +3176,7 @@ const RcDetailsModal = ({ isOpen, onClose, data }) => {
           Vehicle RC Details
         </h3>
 
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
           {Object.entries(data).map(([key, value]) => {
             if (typeof value === "object" && value !== null) return null;
             if (value === null || value === undefined || value === "") return null;
@@ -3152,13 +3189,23 @@ const RcDetailsModal = ({ isOpen, onClose, data }) => {
           })}
         </div>
 
-        <button
-          onClick={onClose}
-          type="button"
-          className="mt-6 w-full bg-[#0B2A4A] text-white py-3 rounded-2xl font-bold hover:bg-[#081d33] transition-colors"
-        >
-          Close
-        </button>
+        <div className="mt-6 flex gap-3">
+          <button
+            onClick={downloadPdf}
+            type="button"
+            className="flex-1 bg-emerald-600 text-white py-3 rounded-2xl font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <FaDownload size={14} />
+            Download PDF
+          </button>
+          <button
+            onClick={onClose}
+            type="button"
+            className="flex-1 bg-[#0B2A4A] text-white py-3 rounded-2xl font-bold hover:bg-[#081d33] transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -3194,6 +3241,91 @@ const ChallanDetailsModal = ({ isOpen, onClose, data }) => {
     return <span className="font-bold text-slate-800 text-right">{String(value)}</span>;
   };
 
+  const downloadPdf = () => {
+    import("jspdf").then(({ jsPDF }) => {
+      const doc = new jsPDF();
+      const pageW = doc.internal.pageSize.getWidth();
+
+      // Header bar – amber theme
+      doc.setFillColor(180, 83, 9);
+      doc.rect(0, 0, pageW, 22, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(13);
+      doc.setFont("helvetica", "bold");
+      doc.text("Vahan Finserv", 14, 10);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text("E-Challan Details Report", 14, 17);
+
+      doc.setFontSize(8);
+      doc.setTextColor(255, 220, 150);
+      doc.text(`Generated: ${new Date().toLocaleString("en-IN")}`, pageW - 14, 17, { align: "right" });
+
+      let y = 32;
+      doc.setFontSize(10);
+
+      const flatPrint = (entries, indent = 0) => {
+        entries.forEach(([key, value], idx) => {
+          if (y > 270) { doc.addPage(); y = 20; }
+          if (Array.isArray(value)) {
+            // Section heading for arrays
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(180, 83, 9);
+            doc.setFontSize(9);
+            doc.text(formatDetailKey(key), 14 + indent, y);
+            y += 9;
+            value.forEach((item, i) => {
+              if (typeof item === "object" && item !== null) {
+                doc.setFont("helvetica", "bold");
+                doc.setTextColor(100, 116, 139);
+                doc.setFontSize(8);
+                doc.text(`  #${i + 1}`, 14 + indent, y);
+                y += 7;
+                Object.entries(item).forEach(([k, v]) => {
+                  if (typeof v === "object" || v === null || v === "") return;
+                  if (y > 270) { doc.addPage(); y = 20; }
+                  doc.setFont("helvetica", "bold");
+                  doc.setTextColor(100, 116, 139);
+                  doc.setFontSize(8);
+                  doc.text(`    ${formatDetailKey(k)}`, 14 + indent, y);
+                  doc.setFont("helvetica", "normal");
+                  doc.setTextColor(15, 23, 42);
+                  doc.text(String(v), pageW - 14, y, { align: "right", maxWidth: 80 });
+                  y += 8;
+                });
+              }
+            });
+          } else if (typeof value !== "object" && value !== null && value !== "") {
+            if (idx % 2 === 0) {
+              doc.setFillColor(255, 251, 235);
+              doc.rect(10, y - 5, pageW - 20, 10, "F");
+            }
+            doc.setFont("helvetica", "bold");
+            doc.setTextColor(100, 116, 139);
+            doc.setFontSize(10);
+            doc.text(formatDetailKey(key), 14 + indent, y);
+            doc.setFont("helvetica", "normal");
+            doc.setTextColor(15, 23, 42);
+            doc.text(String(value), pageW - 14, y, { align: "right", maxWidth: 90 });
+            y += 11;
+          }
+        });
+      };
+
+      flatPrint(Object.entries(data));
+
+      doc.setDrawColor(180, 83, 9);
+      doc.setLineWidth(0.4);
+      doc.line(10, 280, pageW - 10, 280);
+      doc.setFontSize(7);
+      doc.setTextColor(150, 150, 150);
+      doc.text("vahanfinserv.com", pageW / 2, 286, { align: "center" });
+
+      const reg = data.reg_no || data.vehicle_num || data.regNo || "vehicle";
+      doc.save(`Challan_${reg}_${Date.now()}.pdf`);
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center overflow-y-auto">
       <div className="bg-white rounded-3xl w-full max-w-lg p-5 sm:p-6 shadow-2xl relative my-8">
@@ -3208,9 +3340,9 @@ const ChallanDetailsModal = ({ isOpen, onClose, data }) => {
         <h3 className="text-xl font-bold text-amber-700 mb-1 border-b border-amber-100 pb-2">
           E-Challan Details
         </h3>
-        <p className="text-xs text-slate-400 mb-4">Vehicle registration: {data.reg_no || data.regNo || ""}</p>
+        <p className="text-xs text-slate-400 mb-4">Vehicle registration: {data.reg_no || data.vehicle_num || data.regNo || ""}</p>
 
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-1">
           {Object.entries(data).map(([key, value]) => {
             const rendered = renderValue(value);
             if (rendered === null) return null;
@@ -3230,16 +3362,116 @@ const ChallanDetailsModal = ({ isOpen, onClose, data }) => {
           })}
         </div>
 
-        <button
-          onClick={onClose}
-          type="button"
-          className="mt-6 w-full bg-amber-600 text-white py-3 rounded-2xl font-bold hover:bg-amber-700 transition-colors"
-        >
-          Close
-        </button>
+        <div className="mt-6 flex gap-3">
+          <button
+            onClick={downloadPdf}
+            type="button"
+            className="flex-1 bg-emerald-600 text-white py-3 rounded-2xl font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <FaDownload size={14} />
+            Download PDF
+          </button>
+          <button
+            onClick={onClose}
+            type="button"
+            className="flex-1 bg-amber-600 text-white py-3 rounded-2xl font-bold hover:bg-amber-700 transition-colors"
+          >
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );
 };
+
+const PostPaymentRcScreen = ({
+  regNo, setRegNo,
+  isFetchingRc, handleFetchRc,
+  isFetchingChallan, handleFetchChallan,
+  isRcModalOpen, setIsRcModalOpen, rcData,
+  isChallanModalOpen, setIsChallanModalOpen, challanData,
+  onDone,
+}) => (
+  <div className="fixed inset-0 z-[60] flex flex-col bg-gradient-to-br from-[#0B2A4A] via-[#0e3560] to-[#0B2A4A]">
+    {/* Top bar */}
+    <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+      <div className="flex items-center gap-3">
+        <div className="h-8 w-8 rounded-xl bg-white/10 flex items-center justify-center">
+          <FaCheckCircle className="text-emerald-400" size={16} />
+        </div>
+        <div>
+          <p className="text-emerald-400 text-xs font-bold tracking-wide uppercase">Payment Successful</p>
+          <h2 className="text-white text-lg font-bold leading-tight">Vehicle Verification</h2>
+        </div>
+      </div>
+      <button
+        onClick={onDone}
+        type="button"
+        className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-sm font-bold px-4 py-2 rounded-xl transition-colors"
+      >
+        <span>Continue to Status</span>
+        <FaRedo size={12} />
+      </button>
+    </div>
+
+    {/* Main content */}
+    <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-6 gap-6">
+      {/* Info card */}
+      <div className="w-full max-w-lg bg-white/10 backdrop-blur-sm rounded-3xl p-5 border border-white/10 text-center">
+        <p className="text-white/80 text-sm leading-relaxed">
+          Your payment has been received. Before proceeding, verify your vehicle's RC details and outstanding E-Challans.
+          Enter the vehicle registration number below.
+        </p>
+        <p className="text-amber-300 text-xs mt-2 font-semibold">
+          ⚠️ This screen will not be shown again once you leave.
+        </p>
+      </div>
+
+      {/* Input + Buttons */}
+      <div className="w-full max-w-lg bg-white/10 backdrop-blur-sm rounded-3xl p-6 border border-white/10 flex flex-col gap-4">
+        <label className="text-white/70 text-xs font-bold uppercase tracking-wider">Vehicle Registration Number</label>
+        <input
+          type="text"
+          value={regNo}
+          onChange={(e) => setRegNo(e.target.value.toUpperCase().replace(/\s/g, ""))}
+          placeholder="e.g. MH14LK5987"
+          className="w-full px-4 py-3 rounded-2xl bg-white text-[#0B2A4A] font-bold text-lg uppercase tracking-widest outline-none border-2 border-transparent focus:border-emerald-400 transition-colors placeholder:text-slate-300 placeholder:font-normal placeholder:text-base shadow-inner"
+        />
+        <div className="flex gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={handleFetchRc}
+            disabled={isFetchingRc || isFetchingChallan}
+            className="flex-1 min-w-[130px] bg-[#0B2A4A] border border-white/20 text-white py-3 rounded-2xl font-bold hover:bg-[#0e3560] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+          >
+            {isFetchingRc ? <><FaSpinner className="animate-spin" /><span>Fetching RC...</span></> : <><FaFileAlt size={14} /><span>Check RC</span></>}
+          </button>
+          <button
+            type="button"
+            onClick={handleFetchChallan}
+            disabled={isFetchingChallan || isFetchingRc}
+            className="flex-1 min-w-[130px] bg-amber-600 text-white py-3 rounded-2xl font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+          >
+            {isFetchingChallan ? <><FaSpinner className="animate-spin" /><span>Fetching...</span></> : <><FaFileAlt size={14} /><span>Check Challan</span></>}
+          </button>
+        </div>
+      </div>
+
+      {/* Done button */}
+      <button
+        onClick={onDone}
+        type="button"
+        className="w-full max-w-lg bg-emerald-500 hover:bg-emerald-600 text-white py-4 rounded-2xl font-bold text-base transition-colors shadow-xl flex items-center justify-center gap-2"
+      >
+        <FaCheckCircle size={16} />
+        Done — Go to Status
+      </button>
+    </div>
+
+    {/* Modals */}
+    <RcDetailsModal isOpen={isRcModalOpen} onClose={() => setIsRcModalOpen(false)} data={rcData} />
+    <ChallanDetailsModal isOpen={isChallanModalOpen} onClose={() => setIsChallanModalOpen(false)} data={challanData} />
+  </div>
+);
 
 export default CustomerDashboard;
