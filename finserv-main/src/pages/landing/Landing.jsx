@@ -1,7 +1,7 @@
 
 import { Link, useLocation } from "react-router-dom";
 import { useEffect } from "react";
-import { FaCheck, FaUniversity, FaBolt, FaFileAlt, FaShieldAlt, FaArrowRight, FaAndroid, FaApple,FaDownload } from "react-icons/fa";
+import { FaCheck, FaUniversity, FaBolt, FaFileAlt, FaShieldAlt, FaArrowRight, FaAndroid, FaApple, FaDownload, FaWhatsapp } from "react-icons/fa";
 import { MdDirectionsCar, MdVerified, MdTimer } from "react-icons/md";
 import Header from "./Header";
 import Footer from "./Footer";
@@ -35,16 +35,16 @@ const Landing = () => {
       {/* Hero Section */}
 
       <section className="relative overflow-hidden bg-gradient-to-br from-[#112B5A]/5 to-[#1ECFC3]/5">
-  <video
-    className="absolute inset-0 h-full w-full object-cover"
-    autoPlay
-    muted
-    loop
-    playsInline
-    preload="auto"
-  >
-    <source src={heroVideo} type="video/mp4" />
-  </video>
+        <video
+          className="absolute inset-0 h-full w-full object-cover"
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+        >
+          <source src={heroVideo} type="video/mp4" />
+        </video>
 
         {/* Enhanced dark overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-black/20 to-transparent" />
@@ -58,41 +58,41 @@ const Landing = () => {
               {/* LEFT CONTENT */}
               <div className="flex flex-col justify-center space-y-6 lg:space-y-8 order-2 lg:order-1">
                 {/* Badge */}
-              
+
                 {/* <div className="inline-flex items-center gap-2 rounded-full bg-[#1ECFC3]/20 px-4 py-2 w-fit border border-[#1ECFC3]/30 backdrop-blur-sm">
                   <div className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1ECFC3]/30">
                     <MdDirectionsCar className="text-[#1ECFC3] text-sm" />
                   </div>
                   <span className="text-xs sm:text-sm font-semibold text-[#1ECFC3]">Fast Vehicle Loans</span>
                 </div> */}
-<div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#1ECFC3]/40 bg-white/95 px-4 py-2 shadow-lg shadow-[#1ECFC3]/10 backdrop-blur-sm">
-  <span className="text-[#1ECFC3] text-xs">★</span>
+                <div className="inline-flex w-fit items-center gap-2 rounded-full border border-[#1ECFC3]/40 bg-white/95 px-4 py-2 shadow-lg shadow-[#1ECFC3]/10 backdrop-blur-sm">
+                  <span className="text-[#1ECFC3] text-xs">★</span>
 
-  <span className="whitespace-nowrap text-sm font-semibold text-[#1ECFC3]">
-    Driving Aspirations Forward
-  </span>
-</div>
-               {/* Main Heading */}
-<div className="space-y-4">
-  <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-black leading-tight text-[#112B5A] tracking-tight">
-    Get Your
-    <br className="hidden sm:block" />
-    Dream
-    <br />
-    <span className="bg-gradient-to-r from-[#1ECFC3] to-[#00B4D8] bg-clip-text text-transparent drop-shadow-lg">
-      Vehicle Loan
-    </span>
-  </h1>
+                  <span className="whitespace-nowrap text-sm font-semibold text-[#1ECFC3]">
+                    Driving Aspirations Forward
+                  </span>
+                </div>
+                {/* Main Heading */}
+                <div className="space-y-4">
+                  <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-black leading-tight text-[#112B5A] tracking-tight">
+                    Get Your
+                    <br className="hidden sm:block" />
+                    Dream
+                    <br />
+                    <span className="bg-gradient-to-r from-[#1ECFC3] to-[#00B4D8] bg-clip-text text-transparent drop-shadow-lg">
+                      Vehicle Loan
+                    </span>
+                  </h1>
 
- 
-</div>
+
+                </div>
 
                 {/* Description */}
                 <p className="text-base sm:text-lg text-black font-bold leading-relaxed max-w-xl">
-  तुमच्या Dream Car चं स्वप्न आता एका Click वर!
-  Best Interest Rates, Quick Approval आणि Trusted Bank Partners सोबत
-  Drive Your Success Today.
-</p>
+                  तुमच्या Dream Car चं स्वप्न आता एका Click वर!
+                  Best Interest Rates, Quick Approval आणि Trusted Bank Partners सोबत
+                  Drive Your Success Today.
+                </p>
 
                 {/* CTA Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-2">
@@ -126,7 +126,7 @@ const Landing = () => {
                 </div>
               </div>
 
-              
+
             </div>
           </div>
         </div>
@@ -215,7 +215,7 @@ const Landing = () => {
                   <h3 className="text-lg font-bold text-[#112B5A] mb-3">{item.title}</h3>
                   <p className="text-gray-600 text-sm">{item.desc}</p>
                 </div>
-               
+
               </div>
             ))}
           </div>
@@ -224,232 +224,243 @@ const Landing = () => {
 
       {/* About Us & Features Section */}
       <section
-  id="about-us"
-  className="relative overflow-hidden px-4 sm:px-6 py-14 sm:py-20 lg:px-10 bg-gradient-to-r from-[#112B5A] to-[#1a3f7a]"
->
-  {/* Background Glow */}
-  <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#1ECFC3]/20 blur-3xl"></div>
-  <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-300/10 blur-3xl"></div>
+        id="about-us"
+        className="relative overflow-hidden px-4 sm:px-6 py-14 sm:py-20 lg:px-10 bg-gradient-to-r from-[#112B5A] to-[#1a3f7a]"
+      >
+        {/* Background Glow */}
+        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-[#1ECFC3]/20 blur-3xl"></div>
+        <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-300/10 blur-3xl"></div>
 
-  <div className="relative mx-auto max-w-7xl">
-    {/* About Content */}
-    <div className="grid gap-10 lg:grid-cols-2 lg:items-center mb-16">
-      <div>
-        <div className="inline-flex items-center rounded-full border border-[#1ECFC3]/40 bg-white/10 px-4 py-2 text-sm font-semibold text-[#1ECFC3] mb-5">
-          About Vahan Finserv
-        </div>
-
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-5 leading-tight">
-          Smart Vehicle Finance,
-          <span className="text-[#1ECFC3]"> Made Simple</span>
-        </h2>
-
-        <p className="text-base sm:text-lg text-gray-200 leading-8 mb-5">
-          Vahan Finserv is a digital vehicle finance platform built to make
-          used-car loan processing faster, simpler, and more transparent. We
-          help customers apply for loans, upload documents, track application
-          progress, and connect with trusted banking partners.
-        </p>
-
-        <p className="text-base sm:text-lg text-gray-200 leading-8 mb-7">
-          Our goal is to simplify the complete loan journey for customers,
-          dealers, and financial partners through a secure and easy-to-use
-          digital platform.
-        </p>
-
-        <div className="inline-flex items-center gap-3 rounded-full bg-[#1ECFC3]/15 border border-[#1ECFC3]/40 px-5 py-3">
-          <span className="h-3 w-3 rounded-full bg-[#1ECFC3] shadow-[0_0_15px_#1ECFC3]"></span>
-          <span className="text-white font-semibold">
-            A product by Caryanamindia Pvt Ltd
-          </span>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-white/15 bg-white/10 backdrop-blur-sm p-6 sm:p-8 shadow-2xl">
-        <h3 className="text-2xl sm:text-3xl font-bold text-white mb-4">
-          Built for a Better Loan Experience
-        </h3>
-
-        <p className="text-gray-200 leading-7 mb-6">
-          From application submission to bank assignment and document review,
-          Vahan Finserv keeps the process organized, trackable, and customer
-          friendly.
-        </p>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
-            <h4 className="text-[#1ECFC3] font-bold text-xl">Fast</h4>
-            <p className="text-gray-300 text-sm mt-1">
-              Quick application and review flow
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
-            <h4 className="text-[#1ECFC3] font-bold text-xl">Secure</h4>
-            <p className="text-gray-300 text-sm mt-1">
-              Safe document and customer data handling
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
-            <h4 className="text-[#1ECFC3] font-bold text-xl">Trusted</h4>
-            <p className="text-gray-300 text-sm mt-1">
-              Connect with verified banking partners
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
-            <h4 className="text-[#1ECFC3] font-bold text-xl">Simple</h4>
-            <p className="text-gray-300 text-sm mt-1">
-              Easy status tracking and updates
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {/* Why Choose Us */}
-    <div className="text-center mb-12">
-      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
-        Why Choose Us?
-      </h2>
-      <p className="text-lg text-gray-200">
-        Experience the easiest way to get a vehicle loan
-      </p>
-    </div>
-
-    <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-      {[
-        {
-          icon: <FaUniversity className="text-2xl text-[#1ECFC3]" />,
-          title: "10+ Banks",
-          desc: "Compare offers from India's leading financial institutions",
-        },
-        {
-          icon: <FaBolt className="text-2xl text-[#1ECFC3]" />,
-          title: "24-Hour Approval",
-          desc: "Get faster loan processing without unnecessary delays",
-        },
-        {
-          icon: <FaFileAlt className="text-2xl text-[#1ECFC3]" />,
-          title: "Minimal Docs",
-          desc: "Paperless process with easy online document upload",
-        },
-        {
-          icon: <FaShieldAlt className="text-2xl text-[#1ECFC3]" />,
-          title: "100% Secure",
-          desc: "Bank-level security for all your personal information",
-        },
-      ].map((item, idx) => (
-        <div
-          key={idx}
-          className="group rounded-2xl bg-white/10 backdrop-blur-sm p-5 sm:p-8 border border-[#1ECFC3]/20 hover:border-[#1ECFC3]/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
-        >
-          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[#1ECFC3]/20 group-hover:bg-[#1ECFC3]/30 transition-all">
-            {item.icon}
-          </div>
-
-          <h3 className="text-lg font-bold text-white mb-2">
-            {item.title}
-          </h3>
-
-          <p className="text-gray-300 text-sm leading-6">
-            {item.desc}
-          </p>
-        </div>
-      ))}
-    </div>
-  </div>
-</section>
-
-     {/* Mobile App Section */}
-<section className="bg-[#1ECFC3]/5 px-4 sm:px-6 py-14 sm:py-20 lg:px-10">
-  <div className="mx-auto max-w-7xl">
-
-    {/* UPDATED GRID (left small, right large) */}
-    <div className="grid gap-12 lg:grid-cols-[1fr_1.8fr] lg:items-center">
-
-      {/* LEFT SIDE - SMALL MOBILE MOCKUP */}
-      <div className="flex justify-center lg:justify-start">
-        <div className="relative w-52 h-80 lg:w-60 lg:h-96 bg-gradient-to-b from-gray-900 to-black rounded-[3rem] border-8 border-gray-800 shadow-2xl overflow-hidden">
-
-          <div className="absolute inset-0 bg-gradient-to-b from-[#1ECFC3]/20 to-transparent" />
-
-          <div className="relative z-10 h-full flex items-center justify-center">
-            <div className="text-center text-white">
-              <div className="text-5xl mb-3">📱</div>
-              <p className="text-sm font-medium">Mobile App</p>
-              <p className="text-xs text-gray-400 mt-2">Coming Soon</p>
-            </div>
-          </div>
-
-        </div>
-      </div>
-
-      {/* RIGHT SIDE - LARGE CONTENT */}
-      <div className="space-y-6 text-[#112B5A]">
-
-        <h2 className="text-3xl sm:text-4xl font-bold leading-tight lg:text-5xl">
-          Manage Your Loan <br />
-          <span className="bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">
-            Anytime, Anywhere
-          </span>
-        </h2>
-
-        <p className="text-gray-700 text-lg leading-relaxed max-w-2xl">
-          Download our mobile app and stay updated on your loan application status,
-          compare bank offers, and manage all your documents from your smartphone.
-        </p>
-
-        {/* FEATURES */}
-        <div className="space-y-4 pt-4">
-          {[
-            "Real-time application tracking",
-            "Compare multiple bank offers",
-            "Instant document upload",
-            "Push notifications & alerts"
-          ].map((feature, idx) => (
-            <div key={idx} className="flex items-center gap-3">
-              <div className="rounded-full bg-[#1ECFC3]/20 p-2">
-                <FaCheck className="text-[#1ECFC3]" size={16} />
+        <div className="relative mx-auto max-w-7xl">
+          {/* About Content */}
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-center mb-16">
+            <div>
+              <div className="inline-flex items-center rounded-full border border-[#1ECFC3]/40 bg-white/10 px-4 py-2 text-sm font-semibold text-[#1ECFC3] mb-5">
+                About Vahan Finserv
               </div>
-              <span className="text-gray-700">{feature}</span>
+
+              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-5 leading-tight">
+                Smart Vehicle Finance,
+                <span className="text-[#1ECFC3]"> Made Simple</span>
+              </h2>
+
+              <p className="text-base sm:text-lg text-gray-200 leading-8 mb-5">
+                Vahan Finserv is a digital vehicle finance platform built to make
+                used-car loan processing faster, simpler, and more transparent. We
+                help customers apply for loans, upload documents, track application
+                progress, and connect with trusted banking partners.
+              </p>
+
+              <p className="text-base sm:text-lg text-gray-200 leading-8 mb-7">
+                Our goal is to simplify the complete loan journey for customers,
+                dealers, and financial partners through a secure and easy-to-use
+                digital platform.
+              </p>
+
+              <div className="inline-flex items-center gap-3 rounded-full bg-[#1ECFC3]/15 border border-[#1ECFC3]/40 px-5 py-3">
+                <span className="h-3 w-3 rounded-full bg-[#1ECFC3] shadow-[0_0_15px_#1ECFC3]"></span>
+                <span className="text-white font-semibold">
+                  A product by Caryanamindia Pvt Ltd
+                </span>
+              </div>
             </div>
-          ))}
+
+            <div className="rounded-3xl border border-white/15 bg-white/10 backdrop-blur-sm p-6 sm:p-8 shadow-2xl">
+              <h3 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+                Built for a Better Loan Experience
+              </h3>
+
+              <p className="text-gray-200 leading-7 mb-6">
+                From application submission to bank assignment and document review,
+                Vahan Finserv keeps the process organized, trackable, and customer
+                friendly.
+              </p>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+                  <h4 className="text-[#1ECFC3] font-bold text-xl">Fast</h4>
+                  <p className="text-gray-300 text-sm mt-1">
+                    Quick application and review flow
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+                  <h4 className="text-[#1ECFC3] font-bold text-xl">Secure</h4>
+                  <p className="text-gray-300 text-sm mt-1">
+                    Safe document and customer data handling
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+                  <h4 className="text-[#1ECFC3] font-bold text-xl">Trusted</h4>
+                  <p className="text-gray-300 text-sm mt-1">
+                    Connect with verified banking partners
+                  </p>
+                </div>
+
+                <div className="rounded-2xl bg-white/10 p-4 border border-white/10">
+                  <h4 className="text-[#1ECFC3] font-bold text-xl">Simple</h4>
+                  <p className="text-gray-300 text-sm mt-1">
+                    Easy status tracking and updates
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Why Choose Us */}
+          <div className="text-center mb-12">
+            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-4">
+              Why Choose Us?
+            </h2>
+            <p className="text-lg text-gray-200">
+              Experience the easiest way to get a vehicle loan
+            </p>
+          </div>
+
+          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                icon: <FaUniversity className="text-2xl text-[#1ECFC3]" />,
+                title: "10+ Banks",
+                desc: "Compare offers from India's leading financial institutions",
+              },
+              {
+                icon: <FaBolt className="text-2xl text-[#1ECFC3]" />,
+                title: "24-Hour Approval",
+                desc: "Get faster loan processing without unnecessary delays",
+              },
+              {
+                icon: <FaFileAlt className="text-2xl text-[#1ECFC3]" />,
+                title: "Minimal Docs",
+                desc: "Paperless process with easy online document upload",
+              },
+              {
+                icon: <FaShieldAlt className="text-2xl text-[#1ECFC3]" />,
+                title: "100% Secure",
+                desc: "Bank-level security for all your personal information",
+              },
+            ].map((item, idx) => (
+              <div
+                key={idx}
+                className="group rounded-2xl bg-white/10 backdrop-blur-sm p-5 sm:p-8 border border-[#1ECFC3]/20 hover:border-[#1ECFC3]/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+              >
+                <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-[#1ECFC3]/20 group-hover:bg-[#1ECFC3]/30 transition-all">
+                  {item.icon}
+                </div>
+
+                <h3 className="text-lg font-bold text-white mb-2">
+                  {item.title}
+                </h3>
+
+                <p className="text-gray-300 text-sm leading-6">
+                  {item.desc}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
+      </section>
 
-        {/* BUTTONS */}
-        <div className="flex flex-wrap gap-4 pt-6">
+      {/* Mobile App Section */}
+      <section className="bg-[#1ECFC3]/5 px-4 sm:px-6 py-14 sm:py-20 lg:px-10">
+        <div className="mx-auto max-w-7xl">
 
-          <a
-            href="https://github.com/Valmik-kolte/VahanFinserv/releases/download/v1.0.0/VahanFinserv.apk"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-[#082544] text-white font-semibold rounded-full border border-gray-200  transition"
-          >
-            <FaAndroid size={18} /> Play Store
-          </a>
+          {/* UPDATED GRID (left small, right large) */}
+          <div className="grid gap-12 lg:grid-cols-[1fr_1.8fr] lg:items-center">
 
-          <a
-            href="https://apps.apple.com/app/vahan-finserv"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#1ECFC3] to-[#00B4D8] text-white font-semibold rounded-full hover:bg-[#00B4D8] transition"
-          >
-            <FaApple size={18} /> App Store
-          </a>
+            {/* LEFT SIDE - SMALL MOBILE MOCKUP */}
+            <div className="flex justify-center lg:justify-start">
+              <div className="relative w-52 h-80 lg:w-60 lg:h-96 bg-gradient-to-b from-gray-900 to-black rounded-[3rem] border-8 border-gray-800 shadow-2xl overflow-hidden">
 
+                <div className="absolute inset-0 bg-gradient-to-b from-[#1ECFC3]/20 to-transparent" />
+
+                <div className="relative z-10 h-full flex items-center justify-center">
+                  <div className="text-center text-white">
+                    <div className="text-5xl mb-3">📱</div>
+                    <p className="text-sm font-medium">Mobile App</p>
+                    <p className="text-xs text-gray-400 mt-2">Coming Soon</p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* RIGHT SIDE - LARGE CONTENT */}
+            <div className="space-y-6 text-[#112B5A]">
+
+              <h2 className="text-3xl sm:text-4xl font-bold leading-tight lg:text-5xl">
+                Manage Your Loan <br />
+                <span className="bg-gradient-to-r from-[#1ECFC3] to-[#00D4AF] bg-clip-text text-transparent">
+                  Anytime, Anywhere
+                </span>
+              </h2>
+
+              <p className="text-gray-700 text-lg leading-relaxed max-w-2xl">
+                Download our mobile app and stay updated on your loan application status,
+                compare bank offers, and manage all your documents from your smartphone.
+              </p>
+
+              {/* FEATURES */}
+              <div className="space-y-4 pt-4">
+                {[
+                  "Real-time application tracking",
+                  "Compare multiple bank offers",
+                  "Instant document upload",
+                  "Push notifications & alerts"
+                ].map((feature, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <div className="rounded-full bg-[#1ECFC3]/20 p-2">
+                      <FaCheck className="text-[#1ECFC3]" size={16} />
+                    </div>
+                    <span className="text-gray-700">{feature}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* BUTTONS */}
+              <div className="flex flex-wrap gap-4 pt-6">
+
+                <a
+                  href="https://github.com/Valmik-kolte/VahanFinserv/releases/download/v1.0.0/VahanFinserv.apk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-[#082544] text-white font-semibold rounded-full border border-gray-200  transition"
+                >
+                  <FaAndroid size={18} /> Play Store
+                </a>
+
+                <a
+                  href="https://apps.apple.com/app/vahan-finserv"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#1ECFC3] to-[#00B4D8] text-white font-semibold rounded-full hover:bg-[#00B4D8] transition"
+                >
+                  <FaApple size={18} /> App Store
+                </a>
+
+              </div>
+
+            </div>
+          </div>
         </div>
+      </section>
 
-      </div>
-    </div>
-  </div>
-</section>
-      
 
-     
 
-    
+
+
+      {/* Floating WhatsApp Button */}
+      <a
+        href="https://wa.me/917887334123?text=Hi%2C%20I'm%20interested%20in%20applying%20for%20a%20vehicle%20loan."
+        target="_blank"
+        rel="noopener noreferrer"
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-[#25D366]/40"
+        aria-label="Chat on WhatsApp"
+      >
+        <FaWhatsapp size={32} />
+      </a>
+
       <Footer />
     </div>
   );
