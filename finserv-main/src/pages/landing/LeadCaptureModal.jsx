@@ -37,23 +37,14 @@ const LeadCaptureModal = ({ isOpen, onClose, onSuccess }) => {
         mobileNumber: mobileNumber.trim()
       });
 
-      toast.success("Lead registered! Redirecting to WhatsApp...");
-      onSuccess();
-      onClose();
+      // Store in localStorage for future bypasses
+      localStorage.setItem("whatsapp_lead_mobile", mobileNumber.trim());
     } catch (err) {
       console.error("Failed to save WhatsApp lead:", err);
-      // Fallback message extraction
-      const serverMessage = err.response?.data?.message || "Failed to register lead. Please try again.";
-      setError(serverMessage);
-      toast.error(serverMessage);
-      
-      // If there's an API failure, we should still allow redirection as fallback for optimal UX
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 1500);
     } finally {
       setIsSubmitting(false);
+      onSuccess();
+      onClose();
     }
   };
 

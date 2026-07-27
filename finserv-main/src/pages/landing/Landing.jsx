@@ -8,6 +8,7 @@ import Footer from "./Footer";
 import MockMobileApp from "./MockMobileApp";
 import PromoBanner from "./PromoBanner";
 import LeadCaptureModal from "./LeadCaptureModal";
+import axios from "axios";
 import heroVideo from "../../assets/hero-car-video.mp4";
 import hdfc from "../../assets/HDFC_Bank_Logo.png";
 import sbi from "../../assets/SBI.png";
@@ -21,6 +22,38 @@ const Landing = () => {
 
   const handleWhatsAppRedirect = () => {
     window.open("https://wa.me/917887334123?text=Hi%2C%20I'm%20interested%20in%20applying%20for%20a%20vehicle%20loan.", "_blank");
+  };
+
+  const handleWhatsAppClick = async () => {
+    let mobile = null;
+    try {
+      const userData = JSON.parse(localStorage.getItem("userData") || "null");
+      if (userData?.mobileNumber) mobile = userData.mobileNumber;
+      if (!mobile) {
+        const user = JSON.parse(localStorage.getItem("user") || "null");
+        if (user?.mobileNumber) mobile = user.mobileNumber;
+      }
+    } catch (e) {
+      console.warn("Failed to retrieve user session mobile:", e);
+    }
+
+    if (!mobile) {
+      mobile = localStorage.getItem("whatsapp_lead_mobile");
+    }
+
+    if (mobile) {
+      try {
+        const response = await axios.get(`http://localhost:8085/api/v1/whatsapp-leads/check?mobileNumber=${mobile}`);
+        if (response.data && response.data.exists) {
+          handleWhatsAppRedirect();
+          return;
+        }
+      } catch (err) {
+        console.warn("Database check failed, falling back to show modal:", err);
+      }
+    }
+
+    setIsLeadModalOpen(true);
   };
 
   useEffect(() => {
@@ -449,7 +482,7 @@ const Landing = () => {
       {/* Floating WhatsApp Button & Promo Banner */}
       <PromoBanner />
       <button
-        onClick={() => setIsLeadModalOpen(true)}
+        onClick={handleWhatsAppClick}
         className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-[#25D366]/40 cursor-pointer"
         aria-label="Chat on WhatsApp"
       >
