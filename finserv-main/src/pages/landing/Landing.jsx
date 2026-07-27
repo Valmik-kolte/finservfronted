@@ -1,12 +1,13 @@
 
 import { Link, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { FaCheck, FaUniversity, FaBolt, FaFileAlt, FaShieldAlt, FaArrowRight, FaAndroid, FaApple, FaDownload, FaWhatsapp } from "react-icons/fa";
 import { MdDirectionsCar, MdVerified, MdTimer } from "react-icons/md";
 import Header from "./Header";
 import Footer from "./Footer";
 import MockMobileApp from "./MockMobileApp";
 import PromoBanner from "./PromoBanner";
+import LeadCaptureModal from "./LeadCaptureModal";
 import heroVideo from "../../assets/hero-car-video.mp4";
 import hdfc from "../../assets/HDFC_Bank_Logo.png";
 import sbi from "../../assets/SBI.png";
@@ -16,6 +17,11 @@ import pnb from "../../assets/Punjab_National_Bank_new_logo.png";
 
 const Landing = () => {
   const location = useLocation();
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+
+  const handleWhatsAppRedirect = () => {
+    window.open("https://wa.me/917887334123?text=Hi%2C%20I'm%20interested%20in%20applying%20for%20a%20vehicle%20loan.", "_blank");
+  };
 
   useEffect(() => {
     if (!location.hash) return;
@@ -442,15 +448,20 @@ const Landing = () => {
 
       {/* Floating WhatsApp Button & Promo Banner */}
       <PromoBanner />
-      <a
-        href="https://wa.me/917887334123?text=Hi%2C%20I'm%20interested%20in%20applying%20for%20a%20vehicle%20loan."
-        target="_blank"
-        rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-[#25D366]/40"
+      <button
+        onClick={() => setIsLeadModalOpen(true)}
+        className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg transition-all duration-300 hover:scale-110 hover:shadow-xl hover:shadow-[#25D366]/40 cursor-pointer"
         aria-label="Chat on WhatsApp"
       >
         <FaWhatsapp size={32} />
-      </a>
+      </button>
+
+      {/* Lead Capture Modal */}
+      <LeadCaptureModal 
+        isOpen={isLeadModalOpen} 
+        onClose={() => setIsLeadModalOpen(false)} 
+        onSuccess={handleWhatsAppRedirect} 
+      />
 
       <Footer />
     </div>
