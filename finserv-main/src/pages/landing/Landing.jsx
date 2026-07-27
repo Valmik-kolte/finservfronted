@@ -6,6 +6,7 @@ import { MdDirectionsCar, MdVerified, MdTimer } from "react-icons/md";
 import Header from "./Header";
 import Footer from "./Footer";
 import MockMobileApp from "./MockMobileApp";
+import PromoBanner from "./PromoBanner";
 import heroVideo from "../../assets/hero-car-video.mp4";
 import hdfc from "../../assets/HDFC_Bank_Logo.png";
 import sbi from "../../assets/SBI.png";
@@ -439,7 +440,8 @@ const Landing = () => {
 
 
 
-      {/* Floating WhatsApp Button */}
+      {/* Floating WhatsApp Button & Promo Banner */}
+      <PromoBanner />
       <a
         href="https://wa.me/917887334123?text=Hi%2C%20I'm%20interested%20in%20applying%20for%20a%20vehicle%20loan."
         target="_blank"
