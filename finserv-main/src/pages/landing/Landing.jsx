@@ -5,6 +5,7 @@ import { FaCheck, FaUniversity, FaBolt, FaFileAlt, FaShieldAlt, FaArrowRight, Fa
 import { MdDirectionsCar, MdVerified, MdTimer } from "react-icons/md";
 import Header from "./Header";
 import Footer from "./Footer";
+import MockMobileApp from "./MockMobileApp";
 import heroVideo from "../../assets/hero-car-video.mp4";
 import hdfc from "../../assets/HDFC_Bank_Logo.png";
 import sbi from "../../assets/SBI.png";
@@ -369,21 +370,9 @@ const Landing = () => {
           {/* UPDATED GRID (left small, right large) */}
           <div className="grid gap-12 lg:grid-cols-[1fr_1.8fr] lg:items-center">
 
-            {/* LEFT SIDE - SMALL MOBILE MOCKUP */}
+            {/* LEFT SIDE - INTERACTIVE MOBILE MOCKUP */}
             <div className="flex justify-center lg:justify-start">
-              <div className="relative w-52 h-80 lg:w-60 lg:h-96 bg-gradient-to-b from-gray-900 to-black rounded-[3rem] border-8 border-gray-800 shadow-2xl overflow-hidden">
-
-                <div className="absolute inset-0 bg-gradient-to-b from-[#1ECFC3]/20 to-transparent" />
-
-                <div className="relative z-10 h-full flex items-center justify-center">
-                  <div className="text-center text-white">
-                    <div className="text-5xl mb-3">📱</div>
-                    <p className="text-sm font-medium">Mobile App</p>
-                    <p className="text-xs text-gray-400 mt-2">Coming Soon</p>
-                  </div>
-                </div>
-
-              </div>
+              <MockMobileApp />
             </div>
 
             {/* RIGHT SIDE - LARGE CONTENT */}
