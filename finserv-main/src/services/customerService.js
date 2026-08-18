@@ -60,3 +60,16 @@ export const registerUserVerifyOtp = async (dto) => {
   const response = await api.post("/user/register/verify-otp", dto, { skipAuth: true });
   return response.data;
 };
+
+export const registerUserSendMobileOtp = async (mobileNumber) => {
+  const response = await api.post(`/user/register/send-mobile-otp?mobileNumber=${encodeURIComponent(mobileNumber)}`, null, {
+    skipAuth: true,
+  });
+  return response.data;
+};
+
+export const registerUserVerifyMobileOtp = async (dto) => {
+  const response = await api.post("/user/register/verify-mobile-otp", dto, { skipAuth: true });
+  return response.data;
+};
+

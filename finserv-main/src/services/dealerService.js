@@ -43,3 +43,16 @@ export const registerDealerVerifyOtp = async (dto) => {
   const response = await api.post("/dealer/register/verify-otp", dto, { skipAuth: true });
   return response.data;
 };
+
+export const registerDealerSendMobileOtp = async (mobileNumber) => {
+  const response = await api.post(`/dealer/register/send-mobile-otp?mobileNumber=${encodeURIComponent(mobileNumber)}`, null, {
+    skipAuth: true,
+  });
+  return response.data;
+};
+
+export const registerDealerVerifyMobileOtp = async (dto) => {
+  const response = await api.post("/dealer/register/verify-mobile-otp", dto, { skipAuth: true });
+  return response.data;
+};
+

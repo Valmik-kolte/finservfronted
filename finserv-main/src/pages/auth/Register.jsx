@@ -13,8 +13,20 @@ import {
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { registerUser, registerUserSendOtp, registerUserVerifyOtp } from "../../services/customerService.js";
-import { registerDealer, registerDealerSendOtp, registerDealerVerifyOtp } from "../../services/dealerService.js";
+import {
+  registerUser,
+  registerUserSendOtp,
+  registerUserVerifyOtp,
+  registerUserSendMobileOtp,
+  registerUserVerifyMobileOtp
+} from "../../services/customerService.js";
+import {
+  registerDealer,
+  registerDealerSendOtp,
+  registerDealerVerifyOtp,
+  registerDealerSendMobileOtp,
+  registerDealerVerifyMobileOtp
+} from "../../services/dealerService.js";
 import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
@@ -52,6 +64,13 @@ const Register = ({ defaultRole }) => {
   const [otpVerifying, setOtpVerifying] = useState(false);
   const [resendTimer, setResendTimer] = useState(0);
 
+  const [mobileOtpSent, setMobileOtpSent] = useState(false);
+  const [mobileVerified, setMobileVerified] = useState(false);
+  const [mobileOtp, setMobileOtp] = useState("");
+  const [sendingMobileOtp, setSendingMobileOtp] = useState(false);
+  const [mobileOtpVerifying, setMobileOtpVerifying] = useState(false);
+  const [mobileResendTimer, setMobileResendTimer] = useState(0);
+
   useEffect(() => {
     if (resendTimer <= 0) return;
     const interval = setInterval(() => {
@@ -60,21 +79,40 @@ const Register = ({ defaultRole }) => {
     return () => clearInterval(interval);
   }, [resendTimer]);
 
+  useEffect(() => {
+    if (mobileResendTimer <= 0) return;
+    const interval = setInterval(() => {
+      setMobileResendTimer((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [mobileResendTimer]);
+
   const formatTimer = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  const otpLabelTop = 406;
-  const otpWrapTop = 423;
-  
-  const passwordLabelTop = otpSent ? 472 : 406;
-  const passwordWrapTop = otpSent ? 489 : 423;
-  
-  const submitTop = otpSent ? 548 : 482;
-  const loginLinkTop = otpSent ? 610 : 544;
-  const cardHeight = otpSent ? 650 : 584;
+  const mobileShift = 40 + (mobileOtpSent ? 66 : 0);
+  const emailShift = otpSent ? 66 : 0;
+
+  const verifyMobileBtnTop = 296;
+  const mobileOtpLabelTop = 340;
+  const mobileOtpWrapTop = 357;
+
+  const emailLabelTop = 300 + mobileShift;
+  const emailWrapTop = 317 + mobileShift;
+  const verifyEmailBtnTop = 362 + mobileShift;
+
+  const emailOtpLabelTop = 406 + mobileShift;
+  const emailOtpWrapTop = 423 + mobileShift;
+
+  const passwordLabelTop = 406 + mobileShift + emailShift;
+  const passwordWrapTop = 423 + mobileShift + emailShift;
+
+  const submitTop = 482 + mobileShift + emailShift;
+  const loginLinkTop = 544 + mobileShift + emailShift;
+  const cardHeight = 584 + mobileShift + emailShift;
 
   const features = [
     { label: "Car Loan", icon: <FaCar />, left: 70 },
@@ -88,6 +126,10 @@ const Register = ({ defaultRole }) => {
     setOtpVerified(false);
     setOtp("");
     setResendTimer(0);
+    setMobileOtpSent(false);
+    setMobileVerified(false);
+    setMobileOtp("");
+    setMobileResendTimer(0);
   };
 
   const handleSendOtp = async () => {
@@ -164,10 +206,88 @@ const Register = ({ defaultRole }) => {
     }
   };
 
+  const handleSendMobileOtp = async () => {
+    const trimmedMobile = form.mobile.trim();
+    if (!trimmedMobile) {
+      toast.error("Please enter your mobile number.");
+      return;
+    }
+    if (!/^\d{10}$/.test(trimmedMobile)) {
+      toast.error("Mobile number should be 10 digits");
+      return;
+    }
+
+    setSendingMobileOtp(true);
+    try {
+      const response =
+        role === "DEALER"
+          ? await registerDealerSendMobileOtp(trimmedMobile)
+          : await registerUserSendMobileOtp(trimmedMobile);
+      
+      setMobileOtpSent(true);
+      setMobileResendTimer(300);
+      toast.success(response?.message || response || "OTP sent to your mobile.");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error?.message || "Failed to send OTP.");
+    } finally {
+      setSendingMobileOtp(false);
+    }
+  };
+
+  const handleVerifyMobileOtp = async () => {
+    if (!mobileOtp || mobileOtp.trim().length === 0) {
+      toast.error("Please enter OTP");
+      return;
+    }
+
+    try {
+      setMobileOtpVerifying(true);
+      const dto = { mobileNumber: form.mobile.trim(), otp: mobileOtp.trim() };
+      const response =
+        role === "DEALER"
+          ? await registerDealerVerifyMobileOtp(dto)
+          : await registerUserVerifyMobileOtp(dto);
+
+      const resData = response;
+      const message = typeof resData === "string" ? resData.toLowerCase() : (resData?.message?.toLowerCase() || "");
+      const success =
+        resData?.statusCode === 200 ||
+        resData?.status === true ||
+        resData?.success === true ||
+        message.includes("verified") ||
+        message.includes("success") ||
+        resData === "verified" ||
+        resData === "success" ||
+        (typeof resData === "string" && resData.toLowerCase().includes("success")) ||
+        (typeof resData === "string" && resData.toLowerCase().includes("verified"));
+
+      if (success) {
+        setMobileVerified(true);
+        toast.success("Mobile OTP verified successfully");
+      } else {
+        setMobileVerified(false);
+        toast.error("Invalid OTP");
+      }
+    } catch (error) {
+      setMobileVerified(false);
+      const errorMessage =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Invalid OTP";
+      toast.error(errorMessage);
+    } finally {
+      setMobileOtpVerifying(false);
+    }
+  };
+
   const handleChange = (event) => {
     const { name, value } = event.target;
     if (name === "mobile") {
       setForm((prev) => ({ ...prev, mobile: value.replace(/\D/g, "").slice(0, 10) }));
+      setMobileOtpSent(false);
+      setMobileVerified(false);
+      setMobileOtp("");
+      setMobileResendTimer(0);
       return;
     }
     if (name === "email") {
@@ -183,6 +303,10 @@ const Register = ({ defaultRole }) => {
     event.preventDefault();
     if (!/^\d{10}$/.test(form.mobile)) {
       toast.error("Mobile number should be 10 digits");
+      return;
+    }
+    if (!mobileVerified) {
+      toast.error("Please verify your mobile number first.");
       return;
     }
     if (!otpVerified) {
@@ -545,10 +669,10 @@ const Register = ({ defaultRole }) => {
           line-height: 1;
         }
 
-        .verify-email-btn {
+        .verify-email-btn,
+        .verify-mobile-btn {
           position: absolute;
           left: 37px;
-          top: 362px;
           border: 0;
           border-radius: 12px;
           background: linear-gradient(90deg, #00e0d3 0%, #007bff 100%);
@@ -562,11 +686,19 @@ const Register = ({ defaultRole }) => {
           box-shadow: 0 4px 12px rgba(0, 224, 211, 0.2);
           transition: transform 200ms ease, box-shadow 200ms ease;
         }
-        .verify-email-btn:hover:not(:disabled) {
+        .verify-email-btn {
+          top: 362px;
+        }
+        .verify-mobile-btn {
+          top: 296px;
+        }
+        .verify-email-btn:hover:not(:disabled),
+        .verify-mobile-btn:hover:not(:disabled) {
           transform: translateY(-1px);
           box-shadow: 0 6px 16px rgba(0, 224, 211, 0.4);
         }
-        .verify-email-btn:disabled {
+        .verify-email-btn:disabled,
+        .verify-mobile-btn:disabled {
           opacity: 0.6;
           cursor: not-allowed;
         }
@@ -1028,7 +1160,8 @@ const Register = ({ defaultRole }) => {
             text-align: center !important;
           }
 
-          .verify-email-btn {
+          .verify-email-btn,
+          .verify-mobile-btn {
             position: relative !important;
             left: auto !important;
             top: auto !important;
@@ -1187,14 +1320,95 @@ const Register = ({ defaultRole }) => {
                 inputMode="numeric"
                 maxLength={10}
                 required
-                className="register-input"
+                readOnly={mobileVerified}
+                className={`register-input ${mobileVerified ? "opacity-75 cursor-not-allowed" : ""}`}
               />
             </div>
 
-            <label className="register-label email" htmlFor="register-email">
+            <button
+              type="button"
+              onClick={handleSendMobileOtp}
+              disabled={sendingMobileOtp || mobileVerified || !form.mobile || mobileResendTimer > 0}
+              className="verify-mobile-btn"
+              style={{ top: `${verifyMobileBtnTop}px` }}
+            >
+              {sendingMobileOtp ? (
+                "Sending..."
+              ) : mobileVerified ? (
+                "Mobile Verified"
+              ) : mobileResendTimer > 0 ? (
+                `Resend in ${formatTimer(mobileResendTimer)}`
+              ) : mobileOtpSent ? (
+                "Resend OTP"
+              ) : (
+                "Verify Mobile"
+              )}
+            </button>
+
+            {mobileOtpSent && (
+              <>
+                <div
+                  className="otp-label-container"
+                  style={{ top: `${mobileOtpLabelTop}px` }}
+                >
+                  <label
+                    className="register-label"
+                    htmlFor="register-mobile-otp"
+                    style={{ position: "static", margin: 0, padding: 0 }}
+                  >
+                    OTP
+                  </label>
+                  {!mobileVerified && (
+                    <button
+                      type="button"
+                      onClick={handleSendMobileOtp}
+                      disabled={sendingMobileOtp || mobileResendTimer > 0}
+                      className="otp-resend-btn"
+                    >
+                      {mobileResendTimer > 0 ? `Resend in ${formatTimer(mobileResendTimer)}` : "Resend OTP"}
+                    </button>
+                  )}
+                </div>
+                <div
+                  className="otp-input-wrapper"
+                  style={{ top: `${mobileOtpWrapTop}px` }}
+                >
+                  <FaShieldAlt className="otp-icon" />
+                  <input
+                    id="register-mobile-otp"
+                    type="text"
+                    placeholder="Enter OTP"
+                    value={mobileOtp}
+                    onChange={(e) => {
+                      if (mobileVerified) return;
+                      setMobileOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                    }}
+                    readOnly={mobileVerified}
+                    className={`otp-input ${mobileVerified ? "otp-readonly" : ""}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleVerifyMobileOtp}
+                    disabled={mobileOtpVerifying || mobileVerified}
+                    className={`verify-otp-inside-btn ${mobileVerified ? "verified-btn" : ""}`}
+                  >
+                    {mobileOtpVerifying ? "Verifying..." : mobileVerified ? "Verified" : "Verify OTP"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            <label
+              className="register-label email"
+              htmlFor="register-email"
+              style={{ top: `${emailLabelTop}px` }}
+            >
               Email
             </label>
-            <div className="register-input-wrap email">
+            <div
+              className="register-input-wrap email"
+              style={{ top: `${emailWrapTop}px` }}
+            >
               <FaEnvelope className="register-input-icon" />
               <input
                 id="register-email"
@@ -1214,6 +1428,7 @@ const Register = ({ defaultRole }) => {
               onClick={handleSendOtp}
               disabled={sendingOtp || otpVerified || !form.email || resendTimer > 0}
               className="verify-email-btn"
+              style={{ top: `${verifyEmailBtnTop}px` }}
             >
               {sendingOtp ? (
                 "Sending..."
@@ -1232,7 +1447,7 @@ const Register = ({ defaultRole }) => {
               <>
                 <div
                   className="otp-label-container"
-                  style={{ top: `${otpLabelTop}px` }}
+                  style={{ top: `${emailOtpLabelTop}px` }}
                 >
                   <label
                     className="register-label"
@@ -1254,7 +1469,7 @@ const Register = ({ defaultRole }) => {
                 </div>
                 <div
                   className="otp-input-wrapper"
-                  style={{ top: `${otpWrapTop}px` }}
+                  style={{ top: `${emailOtpWrapTop}px` }}
                 >
                   <FaShieldAlt className="otp-icon" />
                   <input
@@ -1315,7 +1530,7 @@ const Register = ({ defaultRole }) => {
 
             <button
               type="submit"
-              disabled={loading || !otpVerified}
+              disabled={loading || !otpVerified || !mobileVerified}
               className="register-submit"
               style={{ top: `${submitTop}px` }}
             >
