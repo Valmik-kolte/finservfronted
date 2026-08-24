@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   FaCar,
+  FaCheckCircle,
   FaClipboardCheck,
   FaEnvelope,
   FaEye,
@@ -9,7 +10,6 @@ import {
   FaPhone,
   FaShieldAlt,
   FaUser,
-  FaUsers,
 } from "react-icons/fa";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
@@ -18,25 +18,19 @@ import {
   registerUserSendOtp,
   registerUserVerifyOtp,
   registerUserSendMobileOtp,
-  registerUserVerifyMobileOtp
+  registerUserVerifyMobileOtp,
 } from "../../services/customerService.js";
 import {
   registerDealer,
   registerDealerSendOtp,
   registerDealerVerifyOtp,
   registerDealerSendMobileOtp,
-  registerDealerVerifyMobileOtp
+  registerDealerVerifyMobileOtp,
 } from "../../services/dealerService.js";
 import loginVideo from "../../assets/login-bg.mp4";
 
 const bullet = "\u2022";
 const rightArrow = "\u2192";
-const quoteOpen = "\u201C";
-const quoteClose = "\u201D";
-const quoteLine1 =
-  "\u0924\u0941\u092e\u091a\u094d\u092f\u093e \u0938\u094d\u0935\u092a\u094d\u0928\u093e\u0924\u0940\u0932 \u0935\u093e\u0939\u0928\u093e\u0938\u093e\u0920\u0940";
-const quoteLine2 =
-  "\u0935\u093f\u0936\u094d\u0935\u093e\u0938\u093e\u091a\u0940 \u0906\u0930\u094d\u0925\u093f\u0915 \u0938\u093e\u0925";
 
 const getInitialRole = (pathname, defaultRole) => {
   if (defaultRole) return defaultRole;
@@ -93,33 +87,6 @@ const Register = ({ defaultRole }) => {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  const mobileShift = 40 + (mobileOtpSent ? 66 : 0);
-  const emailShift = otpSent ? 66 : 0;
-
-  const verifyMobileBtnTop = 296;
-  const mobileOtpLabelTop = 340;
-  const mobileOtpWrapTop = 357;
-
-  const emailLabelTop = 300 + mobileShift;
-  const emailWrapTop = 317 + mobileShift;
-  const verifyEmailBtnTop = 362 + mobileShift;
-
-  const emailOtpLabelTop = 406 + mobileShift;
-  const emailOtpWrapTop = 423 + mobileShift;
-
-  const passwordLabelTop = 406 + mobileShift + emailShift;
-  const passwordWrapTop = 423 + mobileShift + emailShift;
-
-  const submitTop = 482 + mobileShift + emailShift;
-  const loginLinkTop = 544 + mobileShift + emailShift;
-  const cardHeight = 584 + mobileShift + emailShift;
-
-  const features = [
-    { label: "Car Loan", icon: <FaCar />, left: 70 },
-    { label: "Quick Approval", icon: <FaShieldAlt />, left: 157 },
-    { label: "Minimal Documents", icon: <FaClipboardCheck />, left: 256 },
-  ];
-
   const handleRoleChange = (newRole) => {
     setRole(newRole);
     setOtpSent(false);
@@ -149,7 +116,7 @@ const Register = ({ defaultRole }) => {
         role === "DEALER"
           ? await registerDealerSendOtp(trimmedEmail)
           : await registerUserSendOtp(trimmedEmail);
-      
+
       setOtpSent(true);
       setResendTimer(300);
       toast.success(response?.message || response || "OTP sent to your email.");
@@ -223,7 +190,7 @@ const Register = ({ defaultRole }) => {
         role === "DEALER"
           ? await registerDealerSendMobileOtp(trimmedMobile)
           : await registerUserSendMobileOtp(trimmedMobile);
-      
+
       setMobileOtpSent(true);
       setMobileResendTimer(300);
       toast.success(response?.message || response || "OTP sent to your mobile.");
@@ -356,42 +323,41 @@ const Register = ({ defaultRole }) => {
   return (
     <div className="finserv-register-page">
       <style>{`
-        @keyframes registerFadeLeft {
-          from { opacity: 0; transform: translateX(-24px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-
-        @keyframes registerFadeUp {
-          from { opacity: 0; transform: translateY(22px); }
-          to { opacity: 1; transform: translateY(0); }
+        html, body {
+          overflow: hidden !important;
+          height: 100vh !important;
         }
 
         .finserv-register-page {
-          min-height: 100vh;
-          width: 100%;
+          position: fixed;
+          inset: 0;
+          height: 100vh;
+          width: 100vw;
           display: flex;
           align-items: center;
           justify-content: center;
-          overflow-x: hidden;
-          overflow-y: auto;
-          padding: 8px;
           background: linear-gradient(135deg, #02142d 0%, #001a3a 58%, #041e4d 100%);
-          color: #061842;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          letter-spacing: 0;
+          font-family: "Inter", sans-serif;
+          color: #ffffff;
+          overflow: hidden;
+          padding: 12px 16px;
+          box-sizing: border-box;
+          z-index: 999;
         }
 
-        .register-stage {
+        .register-container {
+          width: 100%;
+          max-width: 980px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 28px;
+          align-items: center;
           position: relative;
-          width: 100vw;
-          height: 100vh;
-          overflow: hidden;
-          background: #001a3a;
-          --auth-left-nudge: 24px;
+          z-index: 10;
         }
 
         .register-bg {
-          position: absolute;
+          position: fixed;
           inset: 0;
           overflow: hidden;
           z-index: 1;
@@ -399,1152 +365,570 @@ const Register = ({ defaultRole }) => {
         }
 
         .register-bg-video {
-          position: absolute;
-          inset: 0;
-          width: 100%;
-          height: 100%;
+          width: 100vw;
+          height: 100vh;
           object-fit: cover;
+          opacity: 0.25;
         }
 
-        .register-left {
-          position: absolute;
-          left: 0;
-          top: 0;
-          width: 52%;
-          height: 100%;
-          color: #ffffff;
+        .register-left-content {
+          position: relative;
           z-index: 5;
-          animation: registerFadeLeft 650ms ease-out both;
         }
-
-        .register-left::before { content: none; }
-        .register-left::after { content: none; }
 
         .register-heading {
-          position: absolute;
-          left: calc(70px + var(--auth-left-nudge));
-          top: 117px;
-          z-index: 2;
-          width: 410px;
-          margin: 0;
-          color: #ffffff;
-          font-family: "Montserrat ExtraBold", "Noto Sans Devanagari", sans-serif;
-          font-size: 36px;
+          font-size: 34px;
           font-weight: 800;
-          line-height: 37px;
-          letter-spacing: -0.8px;
+          line-height: 1.2;
+          margin: 0 0 10px 0;
+          letter-spacing: -0.5px;
         }
 
         .register-heading span {
-          color: #00e0d3;
+          color: #00D4B4;
+          background: linear-gradient(90deg, #00D4B4 0%, #00e0d3 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
         }
 
         .register-subtitle {
-          position: absolute;
-          left: calc(70px + var(--auth-left-nudge));
-          top: 204px;
-          z-index: 2;
-          margin: 0;
-          color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 18px;
-          font-weight: 500;
-          line-height: 24px;
+          font-size: 14px;
+          color: rgba(255, 255, 255, 0.85);
+          margin-bottom: 16px;
         }
 
-        .register-teal {
-          color: #00e0d3;
-        }
-
-        .register-underline {
-          position: absolute;
-          left: calc(70px + var(--auth-left-nudge));
-          top: 233px;
-          z-index: 2;
-          width: 36px;
-          height: 2px;
-          border-radius: 2px;
-          background: #00e0d3;
-        }
-
-        .register-feature {
-          position: absolute;
-          top: 260px;
-          z-index: 2;
-          width: 52px;
-          text-align: center;
-          animation: registerFadeUp 650ms ease-out both;
-        }
-
-        .register-feature-card {
-          width: 52px;
-          height: 52px;
+        .register-features-row {
           display: flex;
+          gap: 12px;
+          margin-top: 20px;
+        }
+
+        .feature-card-item {
+          display: flex;
+          flex-direction: column;
           align-items: center;
-          justify-content: center;
-          border: 1px solid rgba(0, 224, 211, 0.45);
-          border-radius: 10px;
-          background: rgba(0, 25, 65, 0.45);
-          color: #ffffff;
-          font-size: 27px;
-          box-shadow: 0 0 14px rgba(0, 224, 211, 0.25);
+          gap: 6px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          padding: 10px 14px;
+          border-radius: 12px;
           backdrop-filter: blur(10px);
-          transition: transform 220ms ease, box-shadow 220ms ease;
-        }
-
-        .register-feature-card:hover {
-          transform: translateY(-4px);
-          box-shadow: 0 0 22px rgba(0, 224, 211, 0.36);
-        }
-
-        .register-feature-label {
-          position: absolute;
-          top: 61px;
-          left: 50%;
-          margin: 0;
-          transform: translateX(-50%);
-          color: rgba(255, 255, 255, 0.9);
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 11px;
-          font-weight: 400;
-          line-height: 1;
-          white-space: nowrap;
+          font-weight: 600;
+          text-align: center;
         }
 
-        .register-quote {
-          position: absolute;
-          left: calc(70px + var(--auth-left-nudge));
-          top: 348px;
-          z-index: 2;
-          width: 310px;
+        .feature-icon-box {
+          font-size: 18px;
+          color: #00D4B4;
         }
 
-        .register-quote-text {
-          margin: 0;
-          color: #ffffff;
-          font-family: "Noto Sans Devanagari", "Inter", sans-serif;
-          font-size: 16px;
-          font-weight: 500;
-          line-height: 30px;
-        }
-
-        .register-quote-mark {
-          color: #00e0d3;
-          font-size: 26px;
-          font-weight: 900;
-          line-height: 1;
-        }
-
-        .register-quote-line {
-          margin-left: 5px;
-        }
-
-        .register-quote-line.second {
-          margin-left: 24px;
-        }
-
-        .register-right {
-          position: absolute;
-          right: 0;
-          top: 0;
-          width: 48%;
-          height: 90%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          z-index: 5;
-        }
-
-        .register-card {
+        .register-right-card {
           position: relative;
-          left: 0;
-          top: 30px;
-          width: 414px;
-          height: 543px;
-          animation: registerFadeUp 650ms ease-out both;
-          background: transparent;
-          border: 1px solid #ffffff;
-          border-radius: 24px;
-          box-shadow:
-            0 8px 32px rgba(0, 0, 0, 0.25),
-            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+          z-index: 5;
+          background: rgba(11, 42, 74, 0.85);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          backdrop-filter: blur(20px);
+          border-radius: 20px;
+          padding: 16px 20px;
+          box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+          max-height: 96vh;
+          overflow: hidden;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
         }
 
-        .register-card::before {
-          content: "";
-          position: absolute;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 40%;
-          background: linear-gradient(
-            180deg,
-            rgba(255, 255, 255, 0.15),
-            transparent
-          );
-          pointer-events: none;
-          border-radius: 24px;
+        .register-right-card::-webkit-scrollbar {
+          display: none;
+          width: 0px;
+          height: 0px;
         }
 
         .register-title {
-          position: absolute;
-          left: 0;
-          top: 22px;
-          width: 100%;
-          margin: 0;
+          font-size: 22px;
+          font-weight: 800;
           text-align: center;
+          margin: 0 0 2px 0;
           color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 34px;
-          font-weight: 700;
-          line-height: 1.1;
         }
 
         .register-card-subtitle {
-          position: absolute;
-          left: 0;
-          top: 66px;
-          width: 100%;
-          margin: 0;
+          font-size: 12px;
           text-align: center;
-          color: rgba(255, 255, 255, 0.8);
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 400;
-          line-height: 1;
+          color: rgba(255, 255, 255, 0.7);
+          margin-bottom: 12px;
         }
 
-        .register-divider {
-          position: absolute;
-          left: calc(50% - 20px);
-          top: 92px;
-          width: 40px;
-          height: 2px;
-          border-radius: 2px;
-          background: #00D4B4;
-        }
-
-        .role-switch {
-          position: absolute;
-          left: 37px;
-          top: 112px;
-          width: 340px;
-          box-sizing: border-box;
-          height: 40px;
+        .role-switch-container {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 4px;
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          border-radius: 8px;
-          background: rgba(255, 255, 255, 0.1);
-          padding: 4px;
+          background: rgba(0, 0, 0, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          padding: 3px;
+          border-radius: 10px;
+          margin-bottom: 12px;
         }
 
-        .role-option {
+        .role-switch-btn {
+          padding: 6px 10px;
           border: 0;
-          border-radius: 6px;
+          border-radius: 8px;
           background: transparent;
           color: rgba(255, 255, 255, 0.7);
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
+          font-size: 12px;
           font-weight: 700;
           cursor: pointer;
-          transition: background 180ms ease, color 180ms ease, box-shadow 180ms ease;
+          transition: all 200ms ease;
         }
 
-        .role-option.active {
+        .role-switch-btn.active {
           background: linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%);
           color: #ffffff;
-          box-shadow: 0 8px 18px rgba(0, 212, 180, 0.22);
+          box-shadow: 0 4px 12px rgba(0, 212, 180, 0.3);
         }
 
-        .register-label {
-          position: absolute;
-          left: 37px;
-          margin: 0;
-          color: rgba(255, 255, 255, 0.9);
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 600;
-          line-height: 1;
+        .form-group-block {
+          display: flex;
+          flex-direction: column;
+          gap: 3px;
+          margin-bottom: 8px;
         }
 
-        .verify-email-btn,
-        .verify-mobile-btn {
-          position: absolute;
-          left: 37px;
-          border: 0;
-          border-radius: 12px;
-          background: linear-gradient(90deg, #00e0d3 0%, #007bff 100%);
-          color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
+        .form-field-label {
           font-size: 11px;
-          font-weight: 700;
-          cursor: pointer;
-          height: 32px;
-          padding: 0 16px;
-          box-shadow: 0 4px 12px rgba(0, 224, 211, 0.2);
-          transition: transform 200ms ease, box-shadow 200ms ease;
-        }
-        .verify-email-btn {
-          top: 362px;
-        }
-        .verify-mobile-btn {
-          top: 296px;
-        }
-        .verify-email-btn:hover:not(:disabled),
-        .verify-mobile-btn:hover:not(:disabled) {
-          transform: translateY(-1px);
-          box-shadow: 0 6px 16px rgba(0, 224, 211, 0.4);
-        }
-        .verify-email-btn:disabled,
-        .verify-mobile-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .otp-label-container {
-          position: absolute;
-          left: 37px;
-          width: 340px;
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.9);
           display: flex;
           justify-content: space-between;
           align-items: center;
         }
 
-        .otp-resend-btn {
-          background: transparent;
-          border: 0;
-          color: #00D4B4;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 11px;
-          font-weight: 700;
-          cursor: pointer;
-          padding: 0;
-          transition: opacity 150ms ease;
-        }
-        .otp-resend-btn:hover:not(:disabled) {
-          text-decoration: underline;
-          opacity: 0.9;
-        }
-        .otp-resend-btn:disabled {
-          color: rgba(255, 255, 255, 0.4);
-          cursor: not-allowed;
-        }
-
-        .otp-input-wrapper {
-          position: absolute;
-          left: 37px;
-          width: 340px;
-          box-sizing: border-box;
-          height: 44px;
-          border: 1px solid #00e5e5;
-          border-radius: 14px;
-          background: rgba(0, 0, 0, 0.25);
+        .input-pill-wrapper {
           display: flex;
           align-items: center;
+          background: rgba(0, 0, 0, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          border-radius: 10px;
+          padding: 0 4px 0 10px;
+          height: 38px;
           transition: border-color 200ms ease, box-shadow 200ms ease;
         }
 
-        .otp-input-wrapper:focus-within {
+        .input-pill-wrapper:focus-within {
           border-color: #00D4B4;
-          box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.25);
+          box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.2);
         }
 
-        .otp-icon {
-          position: absolute;
-          left: 14px;
-          color: rgba(255, 255, 255, 0.7);
-          font-size: 15px;
+        .field-icon {
+          color: rgba(255, 255, 255, 0.6);
+          font-size: 13px;
+          flex-shrink: 0;
         }
 
-        .otp-input {
-          width: 100%;
-          height: 100%;
-          padding-left: 48px;
-          padding-right: 118px;
+        .field-input {
+          flex: 1;
           background: transparent;
-          border: none;
+          border: 0;
           outline: none;
           color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 14px;
-          font-weight: 600;
-        }
-
-        .otp-input::placeholder {
-          color: rgba(255, 255, 255, 0.5);
-        }
-
-        .verify-otp-inside-btn {
-          position: absolute;
-          right: 6px;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 96px;
-          height: 32px;
-          border-radius: 12px;
-          border: none;
-          background: linear-gradient(90deg, #00D6DC 0%, #0095F5 100%);
-          color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
           font-size: 12px;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          white-space: nowrap;
-          box-shadow: 0 6px 16px rgba(0, 149, 245, 0.28);
-          transition: all 0.25s ease;
-        }
-
-        .verify-otp-inside-btn:hover:not(:disabled) {
-          box-shadow: 0 8px 20px rgba(0, 149, 245, 0.35);
-          transform: translateY(-50%) scale(1.02);
-        }
-
-        .verify-otp-inside-btn:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .otp-readonly {
-          opacity: 0.85;
-          cursor: not-allowed;
-        }
-
-        .verified-btn {
-          background: linear-gradient(90deg, #16A34A 0%, #22C55E 100%) !important;
-          cursor: not-allowed;
-          box-shadow: 0 6px 16px rgba(34, 197, 94, 0.28) !important;
-        }
-
-        .register-label.name { top: 168px; }
-        .register-label.mobile { top: 234px; }
-        .register-label.email { top: 300px; }
-        .register-label.password { top: 366px; }
-
-        .register-input-wrap {
-          position: absolute;
-          left: 37px;
-          width: 340px;
-          box-sizing: border-box;
-          height: 37px;
-          display: flex;
-          align-items: center;
-          border: 1px solid #ffffff;
-          border-radius: 12px;
-          background: rgba(255, 255, 255, 0.15);
-          color: rgba(255, 255, 255, 0.85);
-          transition: border-color 200ms ease, box-shadow 200ms ease;
-        }
-
-        .register-input-wrap.name { top: 185px; }
-        .register-input-wrap.mobile { top: 251px; }
-        .register-input-wrap.email { top: 317px; }
-        .register-input-wrap.password { top: 383px; }
-
-        .register-input-wrap:focus-within {
-          border-color: #00D4B4;
-          box-shadow: 0 0 0 3px rgba(0, 212, 180, 0.25);
-        }
-
-        .register-input-wrap:focus-within,
-        .register-input-wrap:has(input:not(:placeholder-shown)) {
-          background: rgba(0, 0, 0, 0.45) !important;
-        }
-
-        .register-input-icon {
-          flex: 0 0 auto;
-          margin-left: 14px;
-          color: rgba(255, 255, 255, 0.7);
-          font-size: 15px;
-        }
-
-        .register-input {
-          width: 100%;
+          font-weight: 500;
+          padding: 0 8px;
           min-width: 0;
-          margin-left: 15px;
+        }
+
+        .field-input::placeholder {
+          color: rgba(255, 255, 255, 0.4);
+        }
+
+        .inline-action-btn {
+          height: 28px;
+          padding: 0 10px;
           border: 0;
-          outline: 0;
-          background: transparent;
-          color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 500;
-        }
-
-        .register-input:-webkit-autofill,
-        .register-input:-webkit-autofill:hover, 
-        .register-input:-webkit-autofill:focus, 
-        .register-input:-webkit-autofill:active {
-          -webkit-background-clip: text !important;
-          -webkit-text-fill-color: #ffffff !important;
-          transition: background-color 5000s ease-in-out 0s !important;
-          box-shadow: inset 0 0 20px 20px transparent !important;
-        }
-
-        .register-input::placeholder {
-          color: rgba(255, 255, 255, 0.5);
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-weight: 500;
-        }
-
-        .register-password-toggle {
-          flex: 0 0 auto;
-          margin: 0 13px 0 8px;
-          border: 0;
-          padding: 0;
-          background: transparent;
-          color: rgba(255, 255, 255, 0.7);
-          font-size: 15px;
-          line-height: 1;
-          cursor: pointer;
-        }
-
-        .register-submit {
-          position: absolute;
-          left: 37px;
-          top: 442px;
-          width: 340px;
-          height: 43px;
-          border: 0;
-          border-radius: 12px;
+          border-radius: 6px;
           background: linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%);
           color: #ffffff;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 16px;
+          font-size: 10.5px;
+          font-weight: 700;
+          white-space: nowrap;
+          cursor: pointer;
+          flex-shrink: 0;
+          transition: transform 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+        }
+
+        .inline-action-btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(0, 212, 180, 0.4);
+        }
+
+        .inline-action-btn:disabled {
+          opacity: 0.55;
+          cursor: not-allowed;
+        }
+
+        .verified-badge {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          background: rgba(39, 211, 195, 0.15);
+          color: #27D3C3;
+          border: 1px solid rgba(39, 211, 195, 0.3);
+          padding: 2px 8px;
+          border-radius: 6px;
+          font-size: 10px;
+          font-weight: 700;
+          flex-shrink: 0;
+        }
+
+        .inline-otp-section {
+          background: rgba(0, 212, 180, 0.05);
+          border: 1px solid rgba(0, 212, 180, 0.25);
+          border-radius: 10px;
+          padding: 6px 10px;
+          margin-top: 3px;
+          margin-bottom: 4px;
+        }
+
+        .password-toggle-btn {
+          background: transparent;
+          border: 0;
+          color: rgba(255, 255, 255, 0.6);
+          cursor: pointer;
+          padding: 4px;
+          display: flex;
+          align-items: center;
+        }
+
+        .submit-register-btn {
+          width: 100%;
+          height: 40px;
+          border: 0;
+          border-radius: 10px;
+          background: linear-gradient(90deg, #00D4B4 0%, #0D6EFD 100%);
+          color: #ffffff;
+          font-size: 14px;
           font-weight: 700;
           cursor: pointer;
-          box-shadow: 0 0 20px rgba(0, 212, 180, 0.35);
-          transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
+          margin-top: 6px;
+          box-shadow: 0 6px 16px rgba(0, 212, 180, 0.3);
+          transition: transform 200ms ease, box-shadow 200ms ease;
         }
 
-        .register-submit:hover:not(:disabled) {
-          transform: translateY(-2px) scale(1.02);
-          box-shadow: 0 0 26px rgba(0, 212, 180, 0.55), 0 10px 20px rgba(0, 0, 0, 0.15);
+        .submit-register-btn:hover:not(:disabled) {
+          transform: translateY(-1px);
+          box-shadow: 0 10px 20px rgba(0, 212, 180, 0.45);
         }
 
-        .register-submit:disabled {
+        .submit-register-btn:disabled {
+          opacity: 0.5;
           cursor: not-allowed;
-          opacity: 0.6;
         }
 
-        .register-login-link {
-          position: absolute;
-          left: 0;
-          top: 504px;
-          width: 100%;
-          margin: 0;
+        .login-footer-text {
           text-align: center;
-          color: rgba(255, 255, 255, 0.8);
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 400;
-          line-height: 1;
+          font-size: 12px;
+          color: rgba(255, 255, 255, 0.7);
+          margin-top: 10px;
         }
 
-        .register-login-link button {
-          margin-left: 8px;
-          border: 0;
-          padding: 0;
-          background: transparent;
+        .login-footer-link {
           color: #00D4B4;
-          font-family: "Inter", "Noto Sans Devanagari", sans-serif;
-          font-size: 13px;
-          font-weight: 500;
+          font-weight: 700;
+          background: transparent;
+          border: 0;
           cursor: pointer;
+          margin-left: 6px;
         }
 
-        @media (max-width: 920px) {
-          .finserv-register-page {
-            display: block;
-            min-height: 100vh;
-            overflow-y: auto;
-            padding: 0;
+        @media (max-width: 900px) {
+          .register-container {
+            grid-template-columns: 1fr;
+            gap: 24px;
           }
-
-          .register-stage {
-            width: 100%;
-            min-height: 100vh;
-            height: auto;
-            border-radius: 0;
+          .register-left-content {
+            text-align: center;
           }
-
-          .register-left,
-          .register-right {
-            position: relative;
-            left: auto;
-            top: auto;
-            width: 100%;
-            height: auto;
-          }
-
-          .register-left {
-            min-height: 430px;
-            padding: 34px 26px 36px;
-          }
-
-          .register-left::before { content: none; }
-
-          .register-heading,
-          .register-subtitle,
-          .register-underline,
-          .register-feature,
-          .register-quote {
-            position: relative;
-            left: auto !important;
-            top: auto;
-          }
-
-          .register-heading {
-            width: min(100%, 380px);
-            font-size: 30px;
-            line-height: 37px;
-          }
-
-          .register-subtitle {
-            margin-top: 18px;
-          }
-
-          .register-underline {
-            margin-top: 13px;
-          }
-
-          .register-feature {
-            display: inline-block;
-            margin-top: 24px;
-            margin-right: 38px;
-            vertical-align: top;
-          }
-
-          .register-quote {
-            margin-top: 38px;
-          }
-
-          .register-right {
-            display: flex;
+          .register-features-row {
             justify-content: center;
-            padding: 24px 16px 32px;
-          }
-
-          .register-card {
-            position: relative;
-            left: auto;
-            top: auto;
-            width: min(100%, 414px);
-            max-width: 414px;
-          }
-        }
-
-        @media (max-width: 768px) {
-          .register-left {
-            min-height: 440px;
-            padding: 28px 20px 32px;
-          }
-
-          .register-heading {
-            font-size: 28px;
-            line-height: 35px;
-          }
-
-          .register-subtitle {
-            font-size: 16px;
-          }
-
-          .register-feature {
-            margin-right: 26px;
-          }
-
-          .register-quote-text {
-            font-size: 15px;
-            line-height: 28px;
-          }
-
-          .register-right {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 20px 0;
-          }
-
-          .register-card {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 90% !important;
-            max-width: 380px !important;
-            height: auto !important;
-            min-height: unset !important;
-            margin: 20px auto !important;
-            transform: translateY(-40px) !important;
-            padding: 32px 24px 24px !important;
-            display: flex !important;
-            flex-direction: column !important;
-          }
-
-          .register-title {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 10px 0 !important;
-            font-size: 34px !important;
-            text-align: center !important;
-          }
-
-          .register-card-subtitle {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 12px 0 !important;
-            text-align: center !important;
-            font-size: 13px !important;
-            line-height: 1.4 !important;
-          }
-
-          .register-divider {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 40px !important;
-            height: 2px !important;
-            margin: 0 auto 20px auto !important;
-            transform: none !important;
-          }
-
-          .role-switch {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 16px 0 !important;
-            box-sizing: border-box !important;
-            border-radius: 12px !important;
-          }
-
-          .register-label {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 6px 0 !important;
-          }
-
-          .register-input-wrap {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 16px 0 !important;
-            box-sizing: border-box !important;
-          }
-
-          .register-submit {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 10px 0 20px 0 !important;
-            border-radius: 12px !important;
-          }
-
-          .register-login-link {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 10px 0 !important;
-            text-align: center !important;
-          }
-
-          .verify-email-btn,
-          .verify-mobile-btn {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: fit-content !important;
-            margin: 0 0 16px 0 !important;
-          }
-
-          .otp-input-wrapper {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 16px 0 !important;
-            box-sizing: border-box !important;
-            height: 44px !important;
-          }
-
-          .otp-label-container {
-            position: relative !important;
-            left: auto !important;
-            top: auto !important;
-            width: 100% !important;
-            margin: 0 0 6px 0 !important;
-            display: flex !important;
-          }
-
-          .register-input {
-            font-size: 15px;
-          }
-        }
-
-        @media (min-width: 2000px) {
-          .register-left {
-            transform: scale(1.4);
-            transform-origin: left center;
-            left: 4% !important;
-          }
-          .register-right {
-            transform: scale(1.4);
-            transform-origin: right center;
-            right: 4% !important;
-          }
-        }
-
-        @media (min-width: 3200px) {
-          .register-left {
-            transform: scale(2.0);
-            transform-origin: left center;
-            left: 8% !important;
-          }
-          .register-right {
-            transform: scale(2.0);
-            transform-origin: right center;
-            right: 8% !important;
           }
         }
       `}</style>
 
-      <div className="register-stage">
-        <div className="register-bg">
-          <video className="register-bg-video" autoPlay muted loop playsInline preload="auto">
-            <source src={loginVideo} type="video/mp4" />
-          </video>
-        </div>
+      <div className="register-bg">
+        <video className="register-bg-video" autoPlay muted loop playsInline preload="auto">
+          <source src={loginVideo} type="video/mp4" />
+        </video>
+      </div>
 
-        <section className="register-left" aria-label="Vahan Finserv car loan intro">
-          <h2 className="register-heading">
+      <div className="register-container">
+        <div className="register-left-content">
+          <h1 className="register-heading">
             Drive Your Dreams,
             <br />
             <span>Finance Your Journey</span>
-          </h2>
-
+          </h1>
           <p className="register-subtitle">
-            Fast <span className="register-teal">{bullet}</span> Secure{" "}
-            <span className="register-teal">{bullet}</span> Trusted Car Loan
+            Fast {bullet} Secure {bullet} Trusted Car Loan
           </p>
-          <div className="register-underline" />
 
-          {features.map((feature, index) => (
-            <div
-              key={feature.label}
-              className="register-feature"
-              style={{
-                left: `calc(${feature.left}px + var(--auth-left-nudge))`,
-                animationDelay: `${120 + index * 100}ms`,
-              }}
-            >
-              <div className="register-feature-card">{feature.icon}</div>
-              <p className="register-feature-label">{feature.label}</p>
+          <div className="register-features-row">
+            <div className="feature-card-item">
+              <FaCar className="feature-icon-box" />
+              <span>Car Loan</span>
             </div>
-          ))}
-
-          <div className="register-quote">
-            <p className="register-quote-text">
-              <span className="register-quote-mark">{quoteOpen}</span>
-              <span className="register-quote-line">{quoteLine1}</span>
-              <br />
-              <span className="register-quote-line second">{quoteLine2}</span>
-              <span className="register-quote-mark"> {quoteClose}</span>
-            </p>
+            <div className="feature-card-item">
+              <FaShieldAlt className="feature-icon-box" />
+              <span>Quick Approval</span>
+            </div>
+            <div className="feature-card-item">
+              <FaClipboardCheck className="feature-icon-box" />
+              <span>Minimal Docs</span>
+            </div>
           </div>
-        </section>
+        </div>
 
-        <section className="register-right" aria-label="Register form">
-          <form className="register-card" onSubmit={handleSubmit} style={{ height: `${cardHeight}px` }}>
-            <h2 className="register-title">Create Account</h2>
-            <p className="register-card-subtitle">Register to continue</p>
-            <div className="register-divider" />
+        <div className="register-right-card">
+          <h2 className="register-title">Create Account</h2>
+          <p className="register-card-subtitle">Register to continue your application</p>
 
-            <div className="role-switch" role="tablist" aria-label="Select registration role">
-              <button
-                type="button"
-                className={`role-option ${role === "INDIVIDUAL" ? "active" : ""}`}
-                onClick={() => handleRoleChange("INDIVIDUAL")}
-              >
-                User
-              </button>
-              <button
-                type="button"
-                className={`role-option ${role === "DEALER" ? "active" : ""}`}
-                onClick={() => handleRoleChange("DEALER")}
-              >
-                Dealer
-              </button>
-            </div>
-
-            <label className="register-label name" htmlFor="register-full-name">
-              Full Name
-            </label>
-            <div className="register-input-wrap name">
-              <FaUser className="register-input-icon" />
-              <input
-                id="register-full-name"
-                type="text"
-                name="fullName"
-                placeholder="Enter full name"
-                value={form.fullName}
-                onChange={handleChange}
-                required
-                className="register-input"
-              />
-            </div>
-
-            <label className="register-label mobile" htmlFor="register-mobile">
-              Mobile Number
-            </label>
-            <div className="register-input-wrap mobile">
-              <FaPhone className="register-input-icon" />
-              <input
-                id="register-mobile"
-                type="tel"
-                name="mobile"
-                placeholder="Enter mobile number"
-                value={form.mobile}
-                onChange={handleChange}
-                inputMode="numeric"
-                maxLength={10}
-                required
-                readOnly={mobileVerified}
-                className={`register-input ${mobileVerified ? "opacity-75 cursor-not-allowed" : ""}`}
-              />
-            </div>
-
+          <div className="role-switch-container">
             <button
               type="button"
-              onClick={handleSendMobileOtp}
-              disabled={sendingMobileOtp || mobileVerified || !form.mobile || mobileResendTimer > 0}
-              className="verify-mobile-btn"
-              style={{ top: `${verifyMobileBtnTop}px` }}
+              className={`role-switch-btn ${role === "INDIVIDUAL" ? "active" : ""}`}
+              onClick={() => handleRoleChange("INDIVIDUAL")}
             >
-              {sendingMobileOtp ? (
-                "Sending..."
-              ) : mobileVerified ? (
-                "Mobile Verified"
-              ) : mobileResendTimer > 0 ? (
-                `Resend in ${formatTimer(mobileResendTimer)}`
-              ) : mobileOtpSent ? (
-                "Resend OTP"
-              ) : (
-                "Verify Mobile"
-              )}
+              User
             </button>
-
-            {mobileOtpSent && (
-              <>
-                <div
-                  className="otp-label-container"
-                  style={{ top: `${mobileOtpLabelTop}px` }}
-                >
-                  <label
-                    className="register-label"
-                    htmlFor="register-mobile-otp"
-                    style={{ position: "static", margin: 0, padding: 0 }}
-                  >
-                    OTP
-                  </label>
-                  {!mobileVerified && (
-                    <button
-                      type="button"
-                      onClick={handleSendMobileOtp}
-                      disabled={sendingMobileOtp || mobileResendTimer > 0}
-                      className="otp-resend-btn"
-                    >
-                      {mobileResendTimer > 0 ? `Resend in ${formatTimer(mobileResendTimer)}` : "Resend OTP"}
-                    </button>
-                  )}
-                </div>
-                <div
-                  className="otp-input-wrapper"
-                  style={{ top: `${mobileOtpWrapTop}px` }}
-                >
-                  <FaShieldAlt className="otp-icon" />
-                  <input
-                    id="register-mobile-otp"
-                    type="text"
-                    placeholder="Enter OTP"
-                    value={mobileOtp}
-                    onChange={(e) => {
-                      if (mobileVerified) return;
-                      setMobileOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
-                    }}
-                    readOnly={mobileVerified}
-                    className={`otp-input ${mobileVerified ? "otp-readonly" : ""}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={handleVerifyMobileOtp}
-                    disabled={mobileOtpVerifying || mobileVerified}
-                    className={`verify-otp-inside-btn ${mobileVerified ? "verified-btn" : ""}`}
-                  >
-                    {mobileOtpVerifying ? "Verifying..." : mobileVerified ? "Verified" : "Verify OTP"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            <label
-              className="register-label email"
-              htmlFor="register-email"
-              style={{ top: `${emailLabelTop}px` }}
-            >
-              Email
-            </label>
-            <div
-              className="register-input-wrap email"
-              style={{ top: `${emailWrapTop}px` }}
-            >
-              <FaEnvelope className="register-input-icon" />
-              <input
-                id="register-email"
-                type="email"
-                name="email"
-                placeholder="Enter your email"
-                value={form.email}
-                onChange={handleChange}
-                required
-                readOnly={otpVerified}
-                className={`register-input ${otpVerified ? "opacity-75 cursor-not-allowed" : ""}`}
-              />
-            </div>
-
             <button
               type="button"
-              onClick={handleSendOtp}
-              disabled={sendingOtp || otpVerified || !form.email || resendTimer > 0}
-              className="verify-email-btn"
-              style={{ top: `${verifyEmailBtnTop}px` }}
+              className={`role-switch-btn ${role === "DEALER" ? "active" : ""}`}
+              onClick={() => handleRoleChange("DEALER")}
             >
-              {sendingOtp ? (
-                "Sending..."
-              ) : otpVerified ? (
-                "Email Verified"
-              ) : resendTimer > 0 ? (
-                `Resend in ${formatTimer(resendTimer)}`
-              ) : otpSent ? (
-                "Resend OTP"
-              ) : (
-                "Verify Email"
-              )}
+              Dealer
             </button>
+          </div>
 
-            {otpSent && (
-              <>
-                <div
-                  className="otp-label-container"
-                  style={{ top: `${emailOtpLabelTop}px` }}
-                >
-                  <label
-                    className="register-label"
-                    htmlFor="register-otp"
-                    style={{ position: "static", margin: 0, padding: 0 }}
-                  >
-                    OTP
-                  </label>
-                  {!otpVerified && (
-                    <button
-                      type="button"
-                      onClick={handleSendOtp}
-                      disabled={sendingOtp || resendTimer > 0}
-                      className="otp-resend-btn"
-                    >
-                      {resendTimer > 0 ? `Resend in ${formatTimer(resendTimer)}` : "Resend OTP"}
-                    </button>
-                  )}
-                </div>
-                <div
-                  className="otp-input-wrapper"
-                  style={{ top: `${emailOtpWrapTop}px` }}
-                >
-                  <FaShieldAlt className="otp-icon" />
-                  <input
-                    id="register-otp"
-                    type="text"
-                    placeholder="Enter OTP"
-                    value={otp}
-                    onChange={(e) => {
-                      if (otpVerified) return;
-                      setOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
-                    }}
-                    readOnly={otpVerified}
-                    className={`otp-input ${otpVerified ? "otp-readonly" : ""}`}
-                  />
+          <form onSubmit={handleSubmit}>
+            {/* Full Name */}
+            <div className="form-group-block">
+              <label className="form-field-label" htmlFor="register-full-name">
+                Full Name
+              </label>
+              <div className="input-pill-wrapper">
+                <FaUser className="field-icon" />
+                <input
+                  id="register-full-name"
+                  type="text"
+                  name="fullName"
+                  placeholder="Enter full name"
+                  value={form.fullName}
+                  onChange={handleChange}
+                  required
+                  className="field-input"
+                />
+              </div>
+            </div>
+
+            {/* Mobile Number */}
+            <div className="form-group-block">
+              <label className="form-field-label" htmlFor="register-mobile">
+                Mobile Number
+              </label>
+              <div className="input-pill-wrapper">
+                <FaPhone className="field-icon" />
+                <input
+                  id="register-mobile"
+                  type="tel"
+                  name="mobile"
+                  placeholder="Enter 10-digit mobile number"
+                  value={form.mobile}
+                  onChange={handleChange}
+                  inputMode="numeric"
+                  maxLength={10}
+                  required
+                  readOnly={mobileVerified}
+                  className="field-input"
+                />
+                {mobileVerified ? (
+                  <div className="verified-badge">
+                    <FaCheckCircle /> Verified
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={handleVerifyOtp}
-                    disabled={otpVerifying || otpVerified}
-                    className={`verify-otp-inside-btn ${otpVerified ? "verified-btn" : ""}`}
+                    onClick={handleSendMobileOtp}
+                    disabled={sendingMobileOtp || !form.mobile || form.mobile.length !== 10 || mobileResendTimer > 0}
+                    className="inline-action-btn"
                   >
-                    {otpVerifying ? "Verifying..." : otpVerified ? "Verified" : "Verify OTP"}
+                    {sendingMobileOtp
+                      ? "Sending..."
+                      : mobileResendTimer > 0
+                      ? formatTimer(mobileResendTimer)
+                      : mobileOtpSent
+                      ? "Resend OTP"
+                      : "Send OTP"}
                   </button>
-                </div>
-              </>
-            )}
+                )}
+              </div>
 
-            <label
-              className="register-label password"
-              htmlFor="register-password"
-              style={{ top: `${passwordLabelTop}px` }}
-            >
-              Password
-            </label>
-            <div
-              className="register-input-wrap password"
-              style={{ top: `${passwordWrapTop}px` }}
-            >
-              <FaLock className="register-input-icon" />
-              <input
-                id="register-password"
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Enter password"
-                value={form.password}
-                onChange={handleChange}
-                required
-                className="register-input"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="register-password-toggle"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                {showPassword ? <FaEyeSlash /> : <FaEye />}
-              </button>
+              {/* Mobile OTP Inline Container */}
+              {mobileOtpSent && !mobileVerified && (
+                <div className="inline-otp-section">
+                  <div className="form-field-label" style={{ marginBottom: "6px" }}>
+                    <span>Enter Mobile OTP</span>
+                    {mobileResendTimer > 0 && (
+                      <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.6)" }}>
+                        Resend in {formatTimer(mobileResendTimer)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="input-pill-wrapper" style={{ height: "40px" }}>
+                    <FaShieldAlt className="field-icon" />
+                    <input
+                      id="register-mobile-otp"
+                      type="text"
+                      placeholder="6-digit OTP"
+                      value={mobileOtp}
+                      onChange={(e) => setMobileOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      className="field-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyMobileOtp}
+                      disabled={mobileOtpVerifying || mobileOtp.length === 0}
+                      className="inline-action-btn"
+                    >
+                      {mobileOtpVerifying ? "Verifying..." : "Verify OTP"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Email Address */}
+            <div className="form-group-block">
+              <label className="form-field-label" htmlFor="register-email">
+                Email Address
+              </label>
+              <div className="input-pill-wrapper">
+                <FaEnvelope className="field-icon" />
+                <input
+                  id="register-email"
+                  type="email"
+                  name="email"
+                  placeholder="Enter your email"
+                  value={form.email}
+                  onChange={handleChange}
+                  required
+                  readOnly={otpVerified}
+                  className="field-input"
+                />
+                {otpVerified ? (
+                  <div className="verified-badge">
+                    <FaCheckCircle /> Verified
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleSendOtp}
+                    disabled={sendingOtp || !form.email || resendTimer > 0}
+                    className="inline-action-btn"
+                  >
+                    {sendingOtp
+                      ? "Sending..."
+                      : resendTimer > 0
+                      ? formatTimer(resendTimer)
+                      : otpSent
+                      ? "Resend OTP"
+                      : "Send OTP"}
+                  </button>
+                )}
+              </div>
+
+              {/* Email OTP Inline Container */}
+              {otpSent && !otpVerified && (
+                <div className="inline-otp-section">
+                  <div className="form-field-label" style={{ marginBottom: "6px" }}>
+                    <span>Enter Email OTP</span>
+                    {resendTimer > 0 && (
+                      <span style={{ fontSize: "11px", color: "rgba(255, 255, 255, 0.6)" }}>
+                        Resend in {formatTimer(resendTimer)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="input-pill-wrapper" style={{ height: "40px" }}>
+                    <FaShieldAlt className="field-icon" />
+                    <input
+                      id="register-otp"
+                      type="text"
+                      placeholder="6-digit OTP"
+                      value={otp}
+                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                      className="field-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVerifyOtp}
+                      disabled={otpVerifying || otp.length === 0}
+                      className="inline-action-btn"
+                    >
+                      {otpVerifying ? "Verifying..." : "Verify OTP"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Password */}
+            <div className="form-group-block">
+              <label className="form-field-label" htmlFor="register-password">
+                Password
+              </label>
+              <div className="input-pill-wrapper">
+                <FaLock className="field-icon" />
+                <input
+                  id="register-password"
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="Enter password"
+                  value={form.password}
+                  onChange={handleChange}
+                  required
+                  className="field-input"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="password-toggle-btn"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <FaEyeSlash /> : <FaEye />}
+                </button>
+              </div>
             </div>
 
             <button
               type="submit"
               disabled={loading || !otpVerified || !mobileVerified}
-              className="register-submit"
-              style={{ top: `${submitTop}px` }}
+              className="submit-register-btn"
+              title={!mobileVerified ? "Verify mobile number first" : !otpVerified ? "Verify email first" : ""}
             >
               {loading ? "Creating Account..." : `Register ${rightArrow}`}
             </button>
 
-            <p className="register-login-link" style={{ top: `${loginLinkTop}px` }}>
+            <div className="login-footer-text">
               Already have an account?
-              <button type="button" onClick={() => navigate("/login")}>
+              <button
+                type="button"
+                onClick={() => navigate("/login")}
+                className="login-footer-link"
+              >
                 Login
               </button>
-            </p>
+            </div>
           </form>
-        </section>
+        </div>
       </div>
     </div>
   );
