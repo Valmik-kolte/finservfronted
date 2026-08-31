@@ -137,9 +137,13 @@ const formatDealerApplicationId = (userOrId) => {
     : userOrId;
   if (!raw) return "";
   const text = String(raw);
+  // If it's already a backend-generated application ID (e.g. CRY20260001), show as-is
+  if (/^CRY/i.test(text)) return text;
+  // If it already has DLR prefix, show as-is
   if (/^DLR\s+/i.test(text)) return text;
+  // Fallback: format as DLR + zero-padded number
   const numeric = text.match(/\d+/)?.[0] || text;
-  return `DLR ${numeric}`;
+  return `DLR ${String(numeric).padStart(4, "0")}`;
 };
 
 const hasUsableDealerDoc = (docsByType, type) => {
@@ -1362,15 +1366,23 @@ const DealerDashboard = () => {
       } catch (regError) {
         console.warn("Continuing dealer draft application creation despite registration endpoint response:", regError);
         const matchedId = await resolveRegisteredUserId(null);
+        if (!matchedId) {
+          toast.error(regError?.response?.data?.message || "User registration failed. Please try again.");
+          return null;
+        }
         registerData = {
-          userId: matchedId || Date.now(),
+          userId: matchedId,
           fullName: personalForm.fullName,
           email: personalForm.email,
           mobileNumber: personalForm.mobileNumber,
         };
       }
 
-      const newUserId = (await resolveRegisteredUserId(registerData)) || registerData?.userId || Date.now();
+      const newUserId = (await resolveRegisteredUserId(registerData)) || registerData?.userId;
+      if (!newUserId) {
+        toast.error("Could not determine user ID. Please try again.");
+        return null;
+      }
       const draftUser = {
         ...(registerData || {}),
         userId: newUserId,
