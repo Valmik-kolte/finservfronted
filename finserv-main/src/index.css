@@ -109,3 +109,17 @@ table {
 .animate-promo-banner {
   animation: floatSlow 4s ease-in-out infinite, pulseGlow 5s ease-in-out infinite;
 }
+
+@keyframes leftBubbleFloat {
+  0%, 100% {
+    transform: translateY(-50%) translateX(0);
+  }
+  50% {
+    transform: translateY(calc(-50% - 6px)) translateX(2px);
+  }
+}
+
+.animate-left-bubble-float {
+  animation: leftBubbleFloat 3.5s ease-in-out infinite;
+}
+

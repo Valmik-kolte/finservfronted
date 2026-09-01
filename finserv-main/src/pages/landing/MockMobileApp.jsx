@@ -199,7 +199,7 @@ const MockMobileApp = () => {
               {/* User Banner */}
               <div className="bg-gradient-to-r from-[#1ECFC3]/20 to-[#00B4D8]/10 rounded-2xl p-4 border border-[#1ECFC3]/30">
                 <p className="text-xs font-semibold text-slate-500">Welcome Back</p>
-                <h4 className="text-base font-extrabold text-[#112B5A] mt-0.5">Rajesh K. Shinde 👋</h4>
+                <h4 className="text-base font-extrabold text-[#112B5A] mt-0.5"> Pratik Patil 👋</h4>
                 <p className="text-[11px] text-[#112B5A]/80 mt-1">Application Status: <span className="font-bold text-[#112B5A]">In Progress</span></p>
               </div>
 

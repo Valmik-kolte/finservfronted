@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import AppRoutes from "./routes/AppRoutes";
+import OfferBubble from "./components/OfferBubble";
 import { getAuthToken, clearAuthSession } from "./utils/authSession";
 
 function App() {
@@ -86,7 +87,12 @@ function App() {
     }
   }, [location.pathname]);
 
-  return <AppRoutes />;
+  return (
+    <>
+      <AppRoutes />
+      <OfferBubble />
+    </>
+  );
 }
 
 export default App;
