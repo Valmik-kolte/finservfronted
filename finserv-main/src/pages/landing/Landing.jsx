@@ -9,6 +9,7 @@ import MockMobileApp from "./MockMobileApp";
 import PromoBanner from "./PromoBanner";
 import LeadCaptureModal from "./LeadCaptureModal";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/appConfig";
 import heroVideo from "../../assets/hero-car-video.mp4";
 import hdfc from "../../assets/HDFC_Bank_Logo.png";
 import sbi from "../../assets/SBI.png";
@@ -43,7 +44,7 @@ const Landing = () => {
 
     if (mobile) {
       try {
-        const response = await axios.get(`http://localhost:8085/api/v1/whatsapp-leads/check?mobileNumber=${mobile}`);
+        const response = await axios.get(`${API_BASE_URL}/v1/whatsapp-leads/check?mobileNumber=${mobile}`);
         if (response.data && response.data.exists) {
           handleWhatsAppRedirect();
           return;

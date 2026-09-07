@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { FaTimes, FaWhatsapp } from "react-icons/fa";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { API_BASE_URL } from "../../config/appConfig";
 
 const LeadCaptureModal = ({ isOpen, onClose, onSuccess }) => {
   const [name, setName] = useState("");
@@ -32,7 +33,7 @@ const LeadCaptureModal = ({ isOpen, onClose, onSuccess }) => {
     setIsSubmitting(true);
     try {
       // POST lead to Spring Boot API
-      await axios.post("http://localhost:8085/api/v1/whatsapp-leads", {
+      await axios.post(`${API_BASE_URL}/v1/whatsapp-leads`, {
         name: name.trim(),
         mobileNumber: mobileNumber.trim()
       });
