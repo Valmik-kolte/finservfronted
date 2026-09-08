@@ -8,6 +8,7 @@ import {
   FaClipboardList,
   FaCopy,
   FaEdit,
+  FaExternalLinkAlt,
   FaEye,
   FaEyeSlash,
   FaFileAlt,
@@ -19,6 +20,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/dealer/Sidebar";
 import api from "../../services/api";
+import { resolveDocumentUrl, isImageFile, isPdfFile } from "../../services/documentService";
 import axios from "axios";
 import Footer from "../landing/Footer";
 import { deleteDealerAccount, deleteDealerAddedUser } from "../../services/userService";
@@ -435,7 +437,7 @@ const EmptyState = ({ text }) => (
   </div>
 );
 
-const Modal = ({ title, onClose, children, wide = false }) => (
+const Modal = ({ title, onClose, children, wide = false, headerAction = null }) => (
   <div
     className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
     onMouseDown={(event) => {
@@ -449,13 +451,16 @@ const Modal = ({ title, onClose, children, wide = false }) => (
     >
       <div className="flex items-center justify-between gap-4 border-b border-gray-100 px-4 sm:px-6 py-4">
         <h3 className="text-lg sm:text-xl font-bold text-[#0B2A4A] break-words">{title}</h3>
-        <button
-          onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F4F6F9] text-[#0B2A4A]"
-          aria-label="Close"
-        >
-          <FaTimes />
-        </button>
+        <div className="flex items-center gap-2">
+          {headerAction}
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F4F6F9] hover:bg-slate-200 text-[#0B2A4A] transition"
+            aria-label="Close"
+          >
+            <FaTimes />
+          </button>
+        </div>
       </div>
       <div className="max-h-[calc(92vh-74px)] overflow-y-auto p-4 sm:p-6">{children}</div>
     </div>
@@ -977,7 +982,7 @@ const DealerDashboard = () => {
 
   useEffect(() => {
     return () => {
-      if (preview?.url) URL.revokeObjectURL(preview.url);
+      if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
     };
   }, [preview]);
 
@@ -1032,6 +1037,25 @@ const DealerDashboard = () => {
 
 
   const openPreview = async (doc) => {
+    if (!doc) return;
+    const directUrl = resolveDocumentUrl(doc);
+
+    // If fileUrl is present, preview directly without downloading Blob
+    if (doc?.fileUrl && directUrl) {
+      const isImg = isImageFile(doc.fileName || directUrl);
+      const isPdf = isPdfFile(doc.fileName || directUrl);
+      if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
+      setPreview({
+        url: directUrl,
+        title: docLabel(doc.documentType) + (doc.fileName ? ` - ${doc.fileName}` : ""),
+        fileName: doc.fileName || "",
+        isPdf: isPdf,
+        isImage: isImg,
+        isBlob: false,
+      });
+      return;
+    }
+
     if (!doc?.documentId) return;
     if (!token) {
       toast.error("Authorization token missing");
@@ -1044,14 +1068,17 @@ const DealerDashboard = () => {
       });
       if (!res.ok) throw new Error("Preview request failed");
       const blob = await res.blob();
-      if (preview?.url) URL.revokeObjectURL(preview.url);
+      if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
       const fileName = doc.fileName || "";
+      const isImg = blob.type?.startsWith("image/") || isImageFile(fileName);
+      const isPdf = blob.type?.includes("pdf") || isPdfFile(fileName);
       setPreview({
         url: URL.createObjectURL(blob),
-        title: docLabel(doc.documentType),
-        isPdf: blob.type.includes("pdf") || fileName.toLowerCase().endsWith(".pdf"),
-        isImage:
-          blob.type.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(fileName),
+        title: docLabel(doc.documentType) + (fileName ? ` - ${fileName}` : ""),
+        fileName: fileName,
+        isPdf: isPdf,
+        isImage: isImg,
+        isBlob: true,
       });
     } catch (error) {
       showError(error, "Failed to preview document");
@@ -2040,7 +2067,25 @@ const DealerDashboard = () => {
       )}
 
       {preview && (
-        <Modal title={preview.title} onClose={() => setPreview(null)} wide>
+        <Modal
+          title={preview.title}
+          onClose={() => setPreview(null)}
+          wide
+          headerAction={
+            preview.url ? (
+              <a
+                href={preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#F4F6F9] hover:bg-slate-200 text-[#0B2A4A] transition"
+                title="Open in new tab"
+                aria-label="Open in new tab"
+              >
+                <FaExternalLinkAlt size={14} />
+              </a>
+            ) : null
+          }
+        >
           <FilePreviewFrame preview={preview} />
         </Modal>
       )}

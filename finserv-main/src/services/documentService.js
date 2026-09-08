@@ -32,3 +32,41 @@ export const getDocumentPreviewUrl = (documentId) =>
 
 export const getDocumentDownloadUrl = (documentId) =>
   `${api.defaults.baseURL}/documents/download/${documentId}`;
+
+export const getMediaBaseUrl = () => {
+  const base = api.defaults.baseURL || "";
+  return base.replace(/\/api\/?$/, "");
+};
+
+export const isImageFile = (fileNameOrUrl = "") => {
+  const clean = String(fileNameOrUrl).split("?")[0].toLowerCase();
+  return /\.(jpe?g|png|webp|gif|bmp|svg)$/i.test(clean);
+};
+
+export const isPdfFile = (fileNameOrUrl = "") => {
+  const clean = String(fileNameOrUrl).split("?")[0].toLowerCase();
+  return /\.pdf$/i.test(clean);
+};
+
+export const resolveDocumentUrl = (doc) => {
+  if (!doc) return "";
+  if (doc.fileUrl) {
+    if (doc.fileUrl.startsWith("/")) {
+      return `${getMediaBaseUrl()}${doc.fileUrl}`;
+    }
+    try {
+      const parsed = new URL(doc.fileUrl);
+      if (parsed.pathname.startsWith("/media/")) {
+        return `${getMediaBaseUrl()}${parsed.pathname}`;
+      }
+    } catch {
+      // Invalid URL or relative, return as-is
+    }
+    return doc.fileUrl;
+  }
+  if (doc.documentId) {
+    return `${api.defaults.baseURL}/documents/preview/${doc.documentId}`;
+  }
+  return "";
+};
+

@@ -46,6 +46,7 @@ import {
   StatCard,
   unwrap,
 } from "./adminShared";
+import { resolveDocumentUrl, isImageFile, isPdfFile } from "../../services/documentService";
 import Chatbot from "../../components/chatbot/Chatbot";
 
 const emptyBank = {
@@ -1301,7 +1302,29 @@ const Dashboard = () => {
     }
   };
 
-  const openPreview = async (documentId) => {
+  const openPreview = async (docOrId) => {
+    const doc = typeof docOrId === "object" ? docOrId : null;
+    const documentId = doc ? doc.documentId : docOrId;
+    const directUrl = resolveDocumentUrl(doc);
+
+    // If directUrl is available from fileUrl, preview directly without downloading Blob
+    if (doc?.fileUrl && directUrl) {
+      const isImg = isImageFile(doc.fileName || directUrl);
+      const isPdf = isPdfFile(doc.fileName || directUrl);
+      if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
+      setPreview({
+        url: directUrl,
+        fileName: doc.fileName || "Document",
+        isImage: isImg,
+        isPdf: isPdf,
+        type: isImg ? "image/*" : isPdf ? "application/pdf" : "",
+        isBlob: false,
+      });
+      return;
+    }
+
+    if (!documentId) return;
+
     try {
       const token = getAuthToken();
       const response = await fetch(`${api.defaults.baseURL}/documents/preview/${documentId}`, {
@@ -1309,14 +1332,24 @@ const Dashboard = () => {
       });
       if (!response.ok) throw new Error("Preview failed");
       const blob = await response.blob();
-      setPreview({ url: URL.createObjectURL(blob), type: blob.type });
+      if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
+      const isImg = blob.type?.startsWith("image/") || isImageFile(doc?.fileName || "");
+      const isPdf = blob.type?.includes("pdf") || isPdfFile(doc?.fileName || "");
+      setPreview({
+        url: URL.createObjectURL(blob),
+        fileName: doc?.fileName || "Document",
+        type: blob.type,
+        isImage: isImg,
+        isPdf: isPdf,
+        isBlob: true,
+      });
     } catch {
       toast.error("Unable to preview document.");
     }
   };
 
   const closePreview = () => {
-    if (preview?.url) URL.revokeObjectURL(preview.url);
+    if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
     setPreview(null);
   };
 

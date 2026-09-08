@@ -1,7 +1,8 @@
 import React from "react";
-import { FaTimes } from "react-icons/fa";
+import { FaTimes, FaExternalLinkAlt } from "react-icons/fa";
 import { jwtDecode } from "jwt-decode";
 import { getAuthToken } from "../../utils/authSession";
+import { isImageFile } from "../../services/documentService";
 
 export const DOCUMENT_LABELS = {
   AADHAAR_1: "Aadhaar Front Side",
@@ -222,32 +223,55 @@ export const ListOverlay = ({ title, items, emptyText = "No data found.", onClos
   </Modal>
 );
 
-export const PreviewModal = ({ preview, closePreview }) => (
-  <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
-    <div className="bg-white rounded-3xl w-full max-w-5xl h-[78vh] sm:h-[85vh] p-4 flex flex-col">
-      <div className="flex items-center justify-between gap-4 mb-4">
-        <h2 className="text-lg sm:text-xl font-bold text-[#0B2A4A]">Document Preview</h2>
-        <button
-          onClick={closePreview}
-          className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center"
-          aria-label="Close preview"
-        >
-          <FaTimes />
-        </button>
+export const PreviewModal = ({ preview, closePreview }) => {
+  const isImage = preview.isImage || preview.type?.startsWith("image/") || isImageFile(preview.fileName || preview.url);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 p-4 flex items-center justify-center">
+      <div className="bg-white rounded-3xl w-full max-w-5xl h-[78vh] sm:h-[85vh] p-4 flex flex-col">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="min-w-0">
+            <h2 className="text-lg sm:text-xl font-bold text-[#0B2A4A]">Document Preview</h2>
+            {preview.fileName && (
+              <p className="text-xs text-slate-500 truncate mt-0.5">{preview.fileName}</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {preview.url && (
+              <a
+                href={preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-slate-200 text-[#0B2A4A] flex items-center justify-center transition"
+                title="Open in new tab"
+                aria-label="Open in new tab"
+              >
+                <FaExternalLinkAlt size={14} />
+              </a>
+            )}
+            <button
+              onClick={closePreview}
+              className="w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-slate-200 text-[#0B2A4A] flex items-center justify-center transition"
+              aria-label="Close preview"
+            >
+              <FaTimes />
+            </button>
+          </div>
+        </div>
+        {isImage ? (
+          <img
+            src={preview.url}
+            alt={preview.fileName || "Document preview"}
+            className="flex-1 min-h-0 object-contain bg-slate-50 rounded-2xl"
+          />
+        ) : (
+          <iframe
+            src={preview.url}
+            title={preview.fileName || "Document preview"}
+            className="flex-1 min-h-0 rounded-2xl bg-slate-50"
+          />
+        )}
       </div>
-      {preview.type?.startsWith("image/") ? (
-        <img
-          src={preview.url}
-          alt="Document preview"
-          className="flex-1 min-h-0 object-contain bg-slate-50 rounded-2xl"
-        />
-      ) : (
-        <iframe
-          src={preview.url}
-          title="Document preview"
-          className="flex-1 min-h-0 rounded-2xl bg-slate-50"
-        />
-      )}
     </div>
-  </div>
-);
+  );
+};

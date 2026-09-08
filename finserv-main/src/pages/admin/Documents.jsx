@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
-import { FaEye, FaChevronDown, FaChevronUp, FaSearch } from "react-icons/fa";
+import { FaEye, FaChevronDown, FaChevronUp, FaSearch, FaExternalLinkAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { DOCUMENT_LABELS, formatDate, StatusBadge } from "./adminShared";
+import { resolveDocumentUrl } from "../../services/documentService";
 
 const FILTER_TABS = ["All", "Pending", "Approved", "Rejected"];
 
@@ -382,11 +383,23 @@ const DocumentCard = ({ doc, remark, setRemark, updateDocumentStatus, saveRemark
       {/* Action Buttons */}
       <div className="mt-3 flex flex-wrap gap-2 items-center">
         <button
-          onClick={() => openPreview(doc.documentId)}
-          className="px-3 py-2 rounded-2xl bg-white border border-slate-200 text-[#0B2A4A] font-bold text-xs flex items-center gap-1"
+          onClick={() => openPreview(doc)}
+          className="px-3 py-2 rounded-2xl bg-white border border-slate-200 text-[#0B2A4A] font-bold text-xs flex items-center gap-1 hover:bg-slate-50 transition"
         >
           <FaEye /> Preview
         </button>
+
+        {doc.fileUrl && (
+          <a
+            href={resolveDocumentUrl(doc)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-2 rounded-2xl bg-white border border-slate-200 text-slate-600 font-bold text-xs flex items-center gap-1 hover:bg-slate-50 transition"
+            title="Open in new tab"
+          >
+            <FaExternalLinkAlt size={11} /> Open
+          </a>
+        )}
         
         {canAction && !showRejectInput && (
           <>

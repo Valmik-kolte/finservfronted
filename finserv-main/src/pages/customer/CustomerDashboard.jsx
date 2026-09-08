@@ -10,6 +10,7 @@ import {
   FaDownload,
   FaEye,
   FaEyeSlash,
+  FaExternalLinkAlt,
   FaFileAlt,
   FaLock,
   FaPaperPlane,
@@ -21,6 +22,7 @@ import {
 } from "react-icons/fa";
 import Sidebar from "../../components/customer/Sidebar";
 import api from "../../services/api";
+import { resolveDocumentUrl, isImageFile, isPdfFile } from "../../services/documentService";
 import Footer from "../landing/Footer";
 import { deleteUserAccount, changeUserPassword } from "../../services/userService";
 import { clearAuthSession, getAuthToken } from "../../utils/authSession";
@@ -1334,7 +1336,25 @@ const CustomerDashboard = () => {
   };
 
   const openPreview = async (document) => {
-    const documentId = typeof document === "object" ? document?.documentId : document;
+    const doc = typeof document === "object" ? document : null;
+    const documentId = doc?.documentId || document;
+    const directUrl = resolveDocumentUrl(doc);
+
+    // If fileUrl is present, preview directly without downloading Blob
+    if (doc?.fileUrl && directUrl) {
+      const isImg = isImageFile(doc.fileName || directUrl);
+      const isPdf = isPdfFile(doc.fileName || directUrl);
+      if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
+      setPreview({
+        url: directUrl,
+        fileName: doc.fileName || "",
+        isImage: isImg,
+        isPdf: isPdf,
+        isBlob: false,
+      });
+      return;
+    }
+
     if (!documentId) return;
 
     try {
@@ -1348,19 +1368,19 @@ const CustomerDashboard = () => {
       if (!response.ok) throw new Error("Preview failed");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
-      const fileName = typeof document === "object" ? document?.fileName || "" : "";
+      const fileName = doc?.fileName || "";
       const contentType = blob.type || response.headers.get("content-type") || "";
-      const lowerFileName = fileName.toLowerCase();
-      const isImage =
-        contentType.startsWith("image/") || /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(lowerFileName);
-      const isPdf = contentType.includes("pdf") || lowerFileName.endsWith(".pdf");
+      const isImg =
+        contentType.startsWith("image/") || isImageFile(fileName);
+      const isPdf = contentType.includes("pdf") || isPdfFile(fileName);
 
-      if (preview?.url) URL.revokeObjectURL(preview.url);
+      if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
       setPreview({
         url,
         fileName,
-        isImage,
-        isPdf,
+        isImage: isImg,
+        isPdf: isPdf,
+        isBlob: true,
       });
     } catch {
       toast.error("Unable to preview this document.");
@@ -1368,7 +1388,7 @@ const CustomerDashboard = () => {
   };
 
   const closePreview = () => {
-    if (preview?.url) URL.revokeObjectURL(preview.url);
+    if (preview?.isBlob && preview?.url) URL.revokeObjectURL(preview.url);
     setPreview(null);
   };
 
@@ -1782,13 +1802,27 @@ const CustomerDashboard = () => {
                   <p className="text-xs text-slate-500 truncate">{preview.fileName}</p>
                 )}
               </div>
-              <button
-                onClick={closePreview}
-                className="w-10 h-10 rounded-full bg-[#F4F6F9] flex items-center justify-center"
-                aria-label="Close preview"
-              >
-                <FaTimes />
-              </button>
+              <div className="flex items-center gap-2">
+                {preview.url && (
+                  <a
+                    href={preview.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-slate-200 text-[#0B2A4A] flex items-center justify-center transition"
+                    title="Open in new tab"
+                    aria-label="Open in new tab"
+                  >
+                    <FaExternalLinkAlt size={14} />
+                  </a>
+                )}
+                <button
+                  onClick={closePreview}
+                  className="w-10 h-10 rounded-full bg-[#F4F6F9] hover:bg-slate-200 text-[#0B2A4A] flex items-center justify-center transition"
+                  aria-label="Close preview"
+                >
+                  <FaTimes />
+                </button>
+              </div>
             </div>
             {preview.isImage ? (
               <img

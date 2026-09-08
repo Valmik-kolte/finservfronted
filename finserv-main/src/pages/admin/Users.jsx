@@ -1,5 +1,5 @@
 import React from "react";
-import { FaEye, FaSearch, FaTrash } from "react-icons/fa";
+import { FaEye, FaSearch, FaTrash, FaExternalLinkAlt } from "react-icons/fa";
 import {
   DOCUMENT_LABELS,
   formatDate,
@@ -8,6 +8,7 @@ import {
   Modal,
   StatusBadge,
 } from "./adminShared";
+import { resolveDocumentUrl } from "../../services/documentService";
 
 const getAssignedBankId = (user) =>
   user.bankId ||
@@ -217,9 +218,24 @@ const Users = ({
                 </div>
                 <div className="flex items-center gap-2 self-start sm:self-auto">
                   <StatusBadge status={doc.status} />
-                  <button onClick={() => openPreview(doc.documentId)} className="text-[#0B2A4A]">
+                  <button
+                    onClick={() => openPreview(doc)}
+                    className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-[#0B2A4A] transition"
+                    title="Preview document"
+                  >
                     <FaEye />
                   </button>
+                  {doc.fileUrl && (
+                    <a
+                      href={resolveDocumentUrl(doc)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+                      title="Open in new tab"
+                    >
+                      <FaExternalLinkAlt size={12} />
+                    </a>
+                  )}
                 </div>
               </div>
             ))}
