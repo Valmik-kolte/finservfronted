@@ -22,7 +22,7 @@ const Landing = () => {
   const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
 
   const handleWhatsAppRedirect = () => {
-    window.open("https://wa.me/917887334123?text=Hi%2C%20I'm%20interested%20in%20applying%20for%20a%20vehicle%20loan.", "_blank");
+    window.open("https://wa.me/917083252124?text=Hi%2C%20I'm%20interested%20in%20applying%20for%20a%20vehicle%20loan.", "_blank");
   };
 
   const handleWhatsAppClick = async () => {
