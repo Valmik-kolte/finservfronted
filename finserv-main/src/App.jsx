@@ -87,6 +87,15 @@ function App() {
     }
   }, [location.pathname]);
 
+  // GA4 Page View Tracking
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("config", "G-27CKHRMC33", {
+        page_path: location.pathname + location.search,
+      });
+    }
+  }, [location]);
+
   return (
     <>
       <AppRoutes />
